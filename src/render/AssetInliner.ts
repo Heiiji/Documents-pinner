@@ -19,6 +19,7 @@
 
 import { MODULE_ID } from "../const";
 import { g, onIdle } from "../fvtt";
+import { serialiseXml } from "./enrich";
 
 /** 2 MB per asset: past this, a card is carrying a file, not an illustration. */
 export const MAX_ASSET_BYTES = 2 * 1024 * 1024;
@@ -119,6 +120,10 @@ function blobToDataUri(blob: Blob): Promise<string | null> {
  * Images that cannot be inlined are REMOVED rather than left broken: inside the SVG
  * they would render as nothing anyway, and an `<img>` with no picture still takes up
  * its layout box and pushes the text that matters off the card.
+ *
+ * Serialised as XML, not as HTML, for the same reason `sanitise` is: this is the path
+ * that GUARANTEES an `<img>` is present, and an unclosed one makes the SVG this string
+ * ends up inside ill-formed, so the prop draws nothing at all.
  */
 export async function inlineImages(html: string): Promise<string> {
   const Parser = (globalThis as any).DOMParser;
@@ -126,7 +131,7 @@ export async function inlineImages(html: string): Promise<string> {
 
   const doc = new Parser().parseFromString(`<body>${html}</body>`, "text/html");
   const images = [...doc.body.querySelectorAll("img")] as HTMLImageElement[];
-  if (!images.length) return html;
+  if (!images.length) return serialiseXml(doc.body);
 
   await Promise.all(
     images.map(async (img) => {
@@ -137,7 +142,7 @@ export async function inlineImages(html: string): Promise<string> {
     })
   );
 
-  return doc.body.innerHTML;
+  return serialiseXml(doc.body);
 }
 
 // ---------------------------------------------------------------------------

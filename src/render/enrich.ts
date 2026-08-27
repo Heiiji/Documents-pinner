@@ -123,6 +123,31 @@ export function scrub(root: ParentNode): void {
   }
 }
 
+/**
+ * Serialise a parsed body's children as XML rather than as HTML.
+ *
+ * This is load-bearing, and it is the reason nothing ever rendered. The card ends up
+ * inside an SVG `foreignObject` that is parsed by the XML parser: `body.innerHTML`
+ * leaves `<br>` and `<img>` unclosed and turns U+00A0 into `&nbsp;`, and every one of
+ * those makes the whole SVG ill-formed. XML serialisation self-closes void elements and
+ * emits the character rather than an entity XML has never heard of.
+ *
+ * The BODY is serialised and its own tags sliced off, rather than each child being
+ * serialised separately: a per-child serialisation stamps `xmlns` onto every top-level
+ * node, and re-parsing that as HTML turns the declaration into a plain attribute, so
+ * the next pass emits it twice and the "well-formed" output is not.
+ */
+export function serialiseXml(body: ParentNode & { firstChild: ChildNode | null }): string {
+  const Serializer = (globalThis as any).XMLSerializer;
+  if (!Serializer || !body.firstChild) return "";
+
+  const xml: string = new Serializer().serializeToString(body);
+  const open = xml.indexOf(">");
+  const close = xml.lastIndexOf("</");
+  if (open < 0 || close <= open) return "";
+  return xml.slice(open + 1, close);
+}
+
 /** Remove GM secret sections. Applied whenever the viewer is not an owner. */
 export function stripSecrets(root: ParentNode): void {
   for (const secret of [...root.querySelectorAll("section.secret, .secret")]) secret.remove();
@@ -186,7 +211,7 @@ export function sanitise(html: string, isOwner: boolean): string {
     if (!isOwner) stripSecrets(body);
     scrub(body);
 
-    const next = body.innerHTML;
+    const next = serialiseXml(body);
     if (next === current) return next;
     current = next;
   }

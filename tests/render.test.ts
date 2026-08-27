@@ -89,8 +89,20 @@ describe("svgDocument", () => {
 
   it("inlines the stylesheet rather than linking it", () => {
     const svg = svgDocument("", ".dp-card{color:red}", 10, 10);
-    expect(svg).toContain("<style>.dp-card{color:red}</style>");
+    expect(svg).toContain(".dp-card{color:red}");
     expect(svg).not.toContain("<link");
+  });
+
+  // XML gives <style> no implicit CDATA, so a bare `&` — every line of native CSS
+  // nesting in card.css — would otherwise make the whole document ill-formed.
+  it("wraps the stylesheet in CDATA", () => {
+    expect(svgDocument("", "a &b", 10, 10)).toContain("<style><![CDATA[a &b]]></style>");
+  });
+
+  it("splits a literal ]]> so a stylesheet cannot end its own CDATA section", () => {
+    const svg = svgDocument("", `.x{content:"]]>"}`, 10, 10);
+    expect(svg).not.toContain(`"]]>"}`);
+    expect(svg).toContain("]]]]><![CDATA[>");
   });
 });
 

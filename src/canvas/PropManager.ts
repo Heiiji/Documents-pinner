@@ -57,6 +57,12 @@ import { inlineFonts, inlineImages } from "../render/AssetInliner";
 import { TextureCache, cacheKey } from "../render/TextureCache";
 import { currentLevel, sampleFrame } from "../effects/level";
 import { getCorePreset } from "../effects/presets/core-presets";
+import {
+  clearDomTier,
+  setDomPropAlpha,
+  syncDomTier,
+  type DomPropEntry,
+} from "./DomPropTier";
 
 interface PropRecord {
   id: string;
@@ -80,13 +86,36 @@ class Manager {
   #idleHandle = 0;
   #perf: PerfState = initialPerf();
   #queue: { id: string; priority: number }[] = [];
+  /**
+   * Cache keys that could not be drawn.
+   *
+   * Without this a card that cannot rasterise is re-enriched, re-parsed, re-built and
+   * re-failed on EVERY LOD pass — which is after every pan, for as long as the scene is
+   * open. The key is content-addressed, so an edit, a resize or a preset change produces
+   * a different key and the retry happens on its own; nothing has to expire this.
+   */
+  #failedKeys = new Set<string>();
   #working = false;
+  /** Whether the "no mesh to bind to" fault has already been reported this session. */
+  #warnedNoMesh = false;
   #clock = 0;
   #focusedId: string | null = null;
   /** Alt-peek: every prop drops towards transparent so the map can be read. */
   #peeking = false;
   /** Uniform amount every prop is demoted by, after the perf guard fires. */
   #globalDemotions = 0;
+
+  /**
+   * Whether props are drawn into the scene or over it.
+   *
+   * Two independent reasons to fall back: the client cannot rasterise at all (WebKit
+   * taints a `foreignObject` canvas), or the GM chose the compatibility path. Either
+   * way `DomPropTier` takes over — it is never "no props at all", which is what this
+   * used to mean.
+   */
+  #domMode(): boolean {
+    return rasterisationAvailable() === false || settings.get("rendering") === "dom";
+  }
 
   // -------------------------------------------------------------------------
   // Lifecycle
@@ -119,6 +148,8 @@ class Manager {
     this.#records.clear();
     this.#cache.clear();
     this.#queue = [];
+    this.#failedKeys.clear();
+    clearDomTier();
     this.#perf = initialPerf();
     this.#globalDemotions = 0;
   }
@@ -158,6 +189,10 @@ class Manager {
   /** Drop a document's textures after an edit, so the next frame redraws it. */
   invalidate(uuid: string): void {
     this.#cache.invalidate(uuid);
+    // A card that failed to draw deserves another go once its content has changed.
+    for (const key of [...this.#failedKeys]) {
+      if (key.startsWith(`${uuid}|`)) this.#failedKeys.delete(key);
+    }
     for (const record of this.#records.values()) record.boundKey = null;
     this.#scheduleLod(DEFAULTS.editDebounce);
   }
@@ -186,23 +221,31 @@ class Manager {
     const canvas = cv();
     if (!canvas?.ready) return;
 
-    const tokens = (canvas.tokens?.placeables ?? []).filter((token: any) => token.visible);
+    const tokens = visibleTokens();
+    const dom = this.#domMode();
 
     for (const record of this.#records.values()) {
       const tile = canvas.tiles?.get(record.id);
       const pin = tile ? readPin(tile.document) : null;
-      if (!tile?.mesh || !pin) continue;
-
-      let alpha = tile.document.alpha ?? 1;
-      if (pin.display.fadeUnderTokens && tokens.some((token: any) => overlaps(tile, token))) {
-        alpha = Math.min(alpha, pin.display.fadeUnderTokensAlpha);
-      }
-      if (this.#peeking) alpha = Math.min(alpha, 0.15);
+      if (!tile || !pin) continue;
 
       // The reader dims its own prop; leaving that alone keeps the two from fighting.
       if (this.#focusedId === record.id) continue;
-      tile.mesh.alpha = alpha;
+
+      const alpha = this.#alphaFor(tile, pin, tokens);
+      if (dom) setDomPropAlpha(record.id, alpha);
+      else if (tile.mesh) tile.mesh.alpha = alpha;
     }
+  }
+
+  /** The alpha a prop should be drawn at, whichever tier is drawing it. */
+  #alphaFor(tile: any, pin: any, tokens: any[]): number {
+    let alpha = tile.document.alpha ?? 1;
+    if (pin.display.fadeUnderTokens && tokens.some((token: any) => overlaps(tile, token))) {
+      alpha = Math.min(alpha, pin.display.fadeUnderTokensAlpha);
+    }
+    if (this.#peeking) alpha = Math.min(alpha, 0.15);
+    return alpha;
   }
 
   setFocused(id: string | null): void {
@@ -264,6 +307,9 @@ class Manager {
     const centre = { x: viewport.x + viewport.width / 2, y: viewport.y + viewport.height / 2 };
     const resolution = rendererResolution();
     const queue: { id: string; priority: number }[] = [];
+    const dom = this.#domMode();
+    const domEntries: DomPropEntry[] = [];
+    const tokens = dom ? visibleTokens() : [];
 
     for (const record of this.#records.values()) {
       const tile = canvas.tiles?.get(record.id);
@@ -290,6 +336,21 @@ class Manager {
       record.tier = tier;
       record.lastSeen = ++this.#clock;
 
+      if (dom) {
+        // No mesh work at all on this path: the card is a DOM element over the canvas,
+        // and the tile's own texture stays exactly as core left it.
+        this.#unbind(record, tile);
+        domEntries.push({
+          id: record.id,
+          doc: tile.document,
+          pin,
+          tier,
+          focused: this.#focusedId === record.id,
+          alpha: this.#alphaFor(tile, pin, tokens),
+        });
+        continue;
+      }
+
       if (tier === "L0" || tier === "L1") {
         this.#unbind(record, tile);
         continue;
@@ -305,11 +366,12 @@ class Manager {
       const cached = this.#cache.get(key);
       if (cached) {
         this.#bind(record, tile, cached, key);
-      } else if (!record.generating) {
+      } else if (!record.generating && !this.#failedKeys.has(key)) {
         queue.push({ id: record.id, priority: priorityOf(bounds, centre) });
       }
     }
 
+    if (dom) syncDomTier(domEntries);
     this.#queue = queue.sort((a, b) => a.priority - b.priority);
     this.applyAlpha();
     this.#trim();
@@ -374,7 +436,8 @@ class Manager {
    */
   #pump(): void {
     if (this.#working || !this.#queue.length) return;
-    if (rasterisationAvailable() === false || settings.get("rendering") === "dom") return;
+    // Nothing to rasterise on the DOM path; `DomPropTier` has already drawn these.
+    if (this.#domMode()) return;
 
     // Drain stale entries in a loop rather than by recursing: a queue built just before
     // a dozen tiles were deleted would otherwise recurse once per dead entry.
@@ -427,7 +490,10 @@ class Manager {
 
     const svg = svgDocument(body, `${fonts}\n${css}`, size.width, size.height);
     const result = await rasterise(svg, size.width, size.height, longEdge);
-    if (!result) return;
+    if (!result) {
+      this.#failedKeys.add(key);
+      return;
+    }
 
     this.#cache.set(key, result.texture, result.bytes);
     this.#bind(record, tile, result.texture, key);
@@ -447,7 +513,19 @@ class Manager {
   #bind(record: PropRecord, tile: any, texture: any, key: string): void {
     if (!texture || record.boundKey === key) return;
     const mesh = tile.mesh;
-    if (!mesh) return;
+    if (!mesh) {
+      // Indistinguishable from "still loading" if it stays quiet, and it is the exact
+      // symptom of an anchor written with no valid texture: core never adds such a tile
+      // to `canvas.primary`, so there is no mesh and the whole canvas tier is a no-op.
+      if (!this.#warnedNoMesh) {
+        this.#warnedNoMesh = true;
+        console.warn(
+          `${MODULE_ID} | tile ${tile.id} has no mesh; its texture may be missing, ` +
+            `so the prop cannot be drawn into the scene`
+        );
+      }
+      return;
+    }
 
     if (record.originalTexture === null) record.originalTexture = mesh.texture;
     mesh.texture = texture;
@@ -506,6 +584,11 @@ export function propManager(): Manager {
 /** Release everything. Called on `canvasTearDown` and when the module is disabled. */
 export function teardownProps(): void {
   manager?.stop();
+}
+
+/** Every token a player can currently see, which is what a prop fades underneath. */
+function visibleTokens(): any[] {
+  return (cv()?.tokens?.placeables ?? []).filter((token: any) => token.visible);
 }
 
 /** Bounding-box overlap in scene space. Rotation is ignored deliberately: the fade is

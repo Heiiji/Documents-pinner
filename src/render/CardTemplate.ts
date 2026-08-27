@@ -120,6 +120,14 @@ export function cardHtml(options: CardOptions): string {
  *
  * The XHTML namespace on the inner div is equally load-bearing: without it the content
  * is parsed as SVG, where a `<div>` means nothing and draws nothing.
+ *
+ * The stylesheet is wrapped in CDATA, and that is not a nicety. This document is loaded
+ * through `Blob -> img.src`, which parses it with the **XML** parser, and XML gives
+ * `<style>` no implicit CDATA the way HTML does. A single bare `&` — which is every
+ * line of native CSS nesting in `card.css` — makes the whole document ill-formed, the
+ * decode rejects it, and every prop on every client silently fails to draw. CDATA is
+ * used rather than de-nesting the stylesheet because it also covers whatever CSS is
+ * written next year by someone who has never read this comment.
  */
 export function svgDocument(card: string, css: string, width: number, height: number): string {
   return (
@@ -127,7 +135,18 @@ export function svgDocument(card: string, css: string, width: number, height: nu
     `viewBox="0 0 ${width} ${height}">` +
     `<foreignObject x="0" y="0" width="${width}" height="${height}">` +
     `<div xmlns="http://www.w3.org/1999/xhtml" class="dp-card-root">` +
-    `<style>${css}</style>${card}` +
+    `<style>${cdata(css)}</style>${card}` +
     `</div></foreignObject></svg>`
   );
+}
+
+/**
+ * Wrap text in a CDATA section it cannot escape from.
+ *
+ * A literal `]]>` inside the text would end the section early and hand the rest of the
+ * stylesheet to the XML parser as markup, so the one sequence that matters is split
+ * across a section boundary rather than removed — the CSS still says what it said.
+ */
+function cdata(text: string): string {
+  return `<![CDATA[${String(text ?? "").replace(/]]>/g, "]]]]><![CDATA[>")}]]>`;
 }

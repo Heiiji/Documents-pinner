@@ -1,0 +1,42 @@
+/*
+ * The DOM prop tier.
+ *
+ * One card per visible prop, mounted inside the scene-transformed overlay, for clients
+ * that cannot rasterise (WebKit taints a `foreignObject` canvas) or that chose the
+ * compatibility path deliberately.
+ *
+ * What this tier gives up is a property of being drawn OVER the canvas rather than into
+ * it: no darkness tint, no per-light illumination, no fog mask, no roof occlusion, and
+ * no z-order against tokens. The README says so in both languages. What it keeps is
+ * position, size, rotation, the effect and the fades — so a prop still reads as an
+ * object lying on the map, just a flatter one.
+ */
+
+.dp-prop {
+  position: absolute;
+  transform-origin: 50% 50%;
+  overflow: hidden;
+  /* `PropHitLayer` owns interaction on every tier. A card that captured its own clicks
+     would give DOM-mode clients a second, subtly different interaction path — and would
+     swallow the drag-to-pan gesture that starts with a pointerdown on the board. */
+  pointer-events: none;
+  /* Lets the browser skip layout and paint entirely for an off-screen card. */
+  content-visibility: auto;
+  /* The token fade and the peek arrive as an opacity write from PropManager. */
+  transition: opacity 120ms linear;
+}
+
+/*
+ * A prop is not the reader: its text is decoration at this size, and letting a drag
+ * select it would make panning across a scene full of props feel broken.
+ */
+.dp-prop .dp-card,
+.dp-prop .dp-card__body {
+  user-select: none;
+}
+
+/* Peek: hold the key and every prop fades so the map underneath can be read. */
+.dp-peeking .dp-prop {
+  opacity: 0.15 !important;
+  transition: opacity 90ms linear;
+}

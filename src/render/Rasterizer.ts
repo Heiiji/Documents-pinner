@@ -41,6 +41,18 @@ let canRasterise: boolean | null = null;
 let cardCss: string | null = null;
 
 /**
+ * Consecutive failures, and the point at which we stop trying.
+ *
+ * The error text is not a reliable signal. WebKit says "The operation is insecure",
+ * but an ill-formed SVG, a missing 2d context and a decode that never resolves all
+ * report something else entirely — and the failure that actually shipped reported none
+ * of the three. So the latch counts failures instead of reading them: if this many
+ * different cards in a row cannot be drawn, the problem is the client, not the cards.
+ */
+export const FAILURE_LATCH = 5;
+let consecutiveFailures = 0;
+
+/**
  * Probe the pipeline once, on this client.
  *
  * Draws a tiny card and counts painted pixels. Cached, because the answer is a
@@ -83,6 +95,12 @@ export function rasterisationAvailable(): boolean | null {
 /** Force the answer. Used by the setting and by tests. */
 export function setRasterisationAvailable(value: boolean | null): void {
   canRasterise = value;
+  consecutiveFailures = 0;
+}
+
+/** For the Pinboard's diagnostics and for tests. */
+export function rasterisationFailures(): number {
+  return consecutiveFailures;
 }
 
 /**
@@ -169,6 +187,7 @@ export async function rasterise(
       scaleMode: PIXI.SCALE_MODES?.LINEAR,
     });
 
+    consecutiveFailures = 0;
     return {
       texture,
       width: pixelWidth,
@@ -177,9 +196,16 @@ export async function rasterise(
     };
   } catch (error) {
     console.warn(`${MODULE_ID} | rasterisation failed:`, error);
-    // One failure is a bad card; a systematic one means the client cannot rasterise.
-    if (String(error).includes("insecure") || String(error).includes("Tainted")) {
+    // One failure is a bad card; a run of them means the client cannot rasterise, and
+    // the run is counted rather than read out of the error text — see FAILURE_LATCH.
+    consecutiveFailures += 1;
+    if (
+      consecutiveFailures >= FAILURE_LATCH ||
+      String(error).includes("insecure") ||
+      String(error).includes("Tainted")
+    ) {
       canRasterise = false;
+      console.warn(`${MODULE_ID} | canvas rendering disabled after repeated failures`);
     }
     return null;
   }

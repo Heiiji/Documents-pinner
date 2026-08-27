@@ -13,7 +13,7 @@
  * the pin appear can already open it.
  */
 
-import { MODULE_ID } from "./const";
+import { MODULE_ID, PLACEHOLDER_TEXTURE } from "./const";
 import { cv, g, isGM, notify, playerIds, resolveUuid, resolveUuidSync } from "./fvtt";
 import * as audience from "./data/audience";
 import * as store from "./data/PinStore";
@@ -166,7 +166,7 @@ export async function pinAt(scene: any, source: DpSource, at: PinPlacement): Pro
     rotation: at.rotation ?? 0,
     elevation: at.elevation ?? 0,
     sort: nextSort(scene),
-    texture: mode === "pin" ? pinTexture(source) : (source.src ?? null) || undefined,
+    texture: anchorTexture(source),
   });
 
   if (anchor) {
@@ -182,9 +182,16 @@ function nextSort(scene: any): number {
   return existing.length ? (existing[existing.length - 1].sort ?? 0) + 10 : 0;
 }
 
-/** The icon a pin shows. An image source shows itself; a document shows a book. */
-function pinTexture(source: DpSource): string {
-  return source.kind === "image" && source.src ? source.src : "icons/svg/book.svg";
+/**
+ * The texture an anchor is created with, in BOTH modes.
+ *
+ * An image source shows itself; anything else shows the placeholder. Never null and
+ * never undefined: a tile with no valid texture gets no `PrimarySpriteMesh`, and with
+ * no mesh the rasteriser has nothing to bind to, so the prop tier is a silent no-op.
+ * That is indistinguishable from "still loading", which is why it survived review.
+ */
+function anchorTexture(source: DpSource): string {
+  return source.kind === "image" && source.src ? source.src : PLACEHOLDER_TEXTURE;
 }
 
 // ---------------------------------------------------------------------------

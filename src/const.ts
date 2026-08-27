@@ -62,6 +62,17 @@ export const LOD = {
 /** Texture resolution tiers, snapped to powers of two so a slow zoom cannot thrash. */
 export const RES_TIERS = [256, 512, 1024, 2048] as const;
 
+/**
+ * The texture EVERY anchor is created with, whatever its mode.
+ *
+ * Not cosmetic. Core does not add a tile with no valid texture to `canvas.primary`, so
+ * an anchor written with `texture: { src: null }` has no `mesh` — and with no mesh
+ * there is nothing for the rasteriser to bind its result to, which is a prop that
+ * silently never appears no matter how well the rest of the pipeline works. A pin shows
+ * this as its icon; a prop shows it for the moment before its own texture is drawn.
+ */
+export const PLACEHOLDER_TEXTURE = "icons/svg/book.svg";
+
 export const DEFAULTS = {
   /** GPU texture budget in bytes before the LRU starts demoting props. */
   vramBudget: 256 * 1024 * 1024,
