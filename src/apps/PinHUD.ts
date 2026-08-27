@@ -34,6 +34,7 @@ import { escapeAttr, escapeHtml } from "../html";
 import * as api from "../api";
 import { readPin } from "../data/PinData";
 import { allPresets } from "../effects/preset-library";
+import { swatchStyle } from "../effects/preset-css";
 import { chipsMarkup, describeChips, type ChipUser } from "./chips";
 import type { DpPinFlags } from "../types/dp";
 
@@ -113,13 +114,21 @@ function audiencePaletteMarkup(anchorDoc: any, pin: DpPinFlags): string {
 function effectsPaletteMarkup(pin: DpPinFlags): string {
   // The whole library. A gallery that offered only the shipped ten made the Preset
   // Studio a producer with no consumer.
-  const swatches = allPresets().map(
-    (preset) =>
-      `<button type="button" class="dp-hud__swatch" data-action="setEffect"` +
-      ` data-dp-preset="${escapeAttr(preset.id)}" aria-pressed="${pin.effect.id === preset.id}"` +
-      ` title="${escapeAttr(t(preset.label))}" data-dp-fx="${escapeAttr(preset.id)}">` +
-      `<span class="dp-hud__swatch-label">${escapeHtml(t(preset.label))}</span></button>`
-  ).join("");
+  // The preset's OWN variables, so a GM can tell Glitch from Torn Edges without applying
+  // it. Every swatch used to be the same beige rectangle: the markup carried a preset id
+  // and nothing anywhere styled from it, so the gallery was name-only in both live
+  // surfaces while `presetToCssVars` sat one import away.
+  const swatches = allPresets()
+    .map(
+      (preset) =>
+        `<button type="button" class="dp-hud__swatch" data-action="setEffect"` +
+        ` data-dp-preset="${escapeAttr(preset.id)}" aria-pressed="${pin.effect.id === preset.id}"` +
+        ` title="${escapeAttr(t(preset.label))}" data-dp-fx="${escapeAttr(preset.id)}">` +
+        `<span class="dp-hud__swatch-preview dp-card" aria-hidden="true"` +
+        ` style="${escapeAttr(swatchStyle(preset))}"></span>` +
+        `<span class="dp-hud__swatch-label">${escapeHtml(t(preset.label))}</span></button>`
+    )
+    .join("");
 
   return (
     `<div class="dp-hud__palette" id="dp-hud-effects" data-dp-palette="effects" hidden>` +

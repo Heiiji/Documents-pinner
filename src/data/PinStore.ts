@@ -236,10 +236,7 @@ function derivedSize(mode: DpMode): { width: number; height: number } {
  * The Pinboard's bulk actions are the reason this exists: "reveal to all" over a dozen
  * pins must land as one change on every client, not a dozen staggered ones.
  */
-export function batchUpdate(
-  scene: any,
-  entries: { doc: any; patch: PinPatch }[]
-): Promise<any[]> {
+export function batchUpdate(scene: any, entries: { doc: any; patch: PinPatch }[]): Promise<any[]> {
   // Through the queue, like every other writer. The payloads are read INSIDE it, so a
   // bulk reveal landing on top of an in-flight chip toggle sees that toggle's result
   // rather than the payload as it was before.

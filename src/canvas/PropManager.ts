@@ -21,7 +21,7 @@
  */
 
 import { DEFAULTS, MODULE_ID } from "../const";
-import { cancelIdle, cv, g, notify, ns, onIdle, rendererResolution } from "../fvtt";
+import { cancelIdle, cv, g, notify, ns, nsAny, onIdle, rendererResolution } from "../fvtt";
 import * as settings from "../settings";
 import { readPin } from "../data/PinData";
 import * as api from "../api";
@@ -57,12 +57,7 @@ import { inlineFonts, inlineImages } from "../render/AssetInliner";
 import { TextureCache, cacheKey } from "../render/TextureCache";
 import { currentLevel, sampleFrame, sampledFps } from "../effects/level";
 import { findPreset } from "../effects/preset-library";
-import {
-  clearDomTier,
-  setDomPropAlpha,
-  syncDomTier,
-  type DomPropEntry,
-} from "./DomPropTier";
+import { clearDomTier, setDomPropAlpha, syncDomTier, type DomPropEntry } from "./DomPropTier";
 
 /**
  * The frame time above which the scene counts as struggling.
@@ -510,12 +505,21 @@ class Manager {
     const CanvasAnimation = ns("canvas.animation.CanvasAnimation");
     mesh.alpha = 0;
 
+    playRevealSound(preset?.reveal.sound ?? null);
+
     if (!CanvasAnimation?.animate) {
       mesh.alpha = target;
       return;
     }
     void CanvasAnimation.animate([{ parent: mesh, attribute: "alpha", to: target }], {
       duration,
+      // `materialise` and `fade` were the same linear alpha ramp, so half the shipped
+      // presets declared an animation that behaved identically to the other half. The
+      // alpha channel is the ONLY one this may touch — the mesh's position, size,
+      // rotation and anchor belong to core — so the two are distinguished by their
+      // curve: a fade arrives at a constant rate, a materialise eases in and out and
+      // reads as something resolving rather than something being turned up.
+      easing: animation === "materialise" ? CanvasAnimation.easeInOutCosine : undefined,
       name: `${MODULE_ID}.reveal.${tile.id}`,
     });
   }
@@ -755,6 +759,28 @@ export function propManager(): Manager {
 /** Release everything. Called on `canvasTearDown` and when the module is disabled. */
 export function teardownProps(): void {
   manager?.stop();
+}
+
+/**
+ * Play a preset's reveal sound, locally.
+ *
+ * `reveal.sound` was validated and stored and never read by anything. It is played on
+ * THIS client only — the module has no socket, and a reveal is already seen by everyone
+ * in the audience because every client runs this for itself.
+ *
+ * The path is checked before it reaches the audio helper: a preset is meant to be
+ * exported and pasted in from a stranger, so the same rule `safeUrl` applies to a texture
+ * path applies here — same-origin relative paths only, nothing that could reach out.
+ */
+function playRevealSound(src: string | null): void {
+  if (!src || /^[a-z][a-z0-9+.-]*:/i.test(src) || src.startsWith("//")) return;
+
+  const AudioHelper = nsAny("audio.AudioHelper", "helpers.AudioHelper");
+  try {
+    AudioHelper?.play?.({ src, volume: 0.6, autoplay: true, loop: false }, false);
+  } catch (error) {
+    console.warn(`${MODULE_ID} | could not play reveal sound ${src}`, error);
+  }
 }
 
 /** Every token a player can currently see, which is what a prop fades underneath. */

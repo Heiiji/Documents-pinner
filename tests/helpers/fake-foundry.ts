@@ -272,7 +272,10 @@ export function installWorld(world: FakeWorld = {}): InstalledWorld {
     if (!saved.has(name)) saved.set(name, (globalThis as any)[name]);
   }
 
-  const players = world.players ?? [{ id: "ali", name: "Ali" }, { id: "ben", name: "Ben" }];
+  const players = world.players ?? [
+    { id: "ali", name: "Ali" },
+    { id: "ben", name: "Ben" },
+  ];
   const userId = world.userId ?? (world.isGM ? "gm" : players[0]?.id) ?? "gm";
   const users = [
     { id: "gm", name: "GM", isGM: true, active: true, color: "#ffffff", avatar: null },

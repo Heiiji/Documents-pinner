@@ -55,15 +55,39 @@ jobs:
             console.log(`stamped ${m.id} ${m.version}`);
           '
 
+      # The changelog's top heading says "unreleased" in the repository, which is honest
+      # while the work is in progress and wrong the moment a tag exists. Stamped from the
+      # same single source of truth as the manifest.
+      - name: Stamp CHANGELOG.md
+        env:
+          VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          node -e '
+            const fs = require("fs");
+            const { VERSION } = process.env;
+            const date = new Date().toISOString().slice(0, 10);
+            // Only a VERSION heading awaiting a date: `## [Unreleased]` is left alone.
+            const text = fs.readFileSync("CHANGELOG.md", "utf8").replace(
+              /^## \[\d[^\]]*\][ \t]*[—-][ \t]*unreleased[ \t]*$/im,
+              `## [${VERSION}] — ${date}`
+            );
+            fs.writeFileSync("CHANGELOG.md", text);
+            console.log(`changelog stamped ${VERSION} (${date})`);
+          '
+
       - name: Package
         run: |
           # No templates or assets directory: markup is built in TypeScript and every
           # texture is generated procedurally as a data: URI, so the module ships no
           # binary assets at all. Listing an empty directory here would fail the build.
+          #
+          # The .map IS shipped. The bundle carries a sourceMappingURL and vite.config.ts
+          # states the reason — user bug reports quoting real file names and line numbers
+          # — so excluding it only meant a 404 in every user's devtools.
           zip -r module.zip \
             module.json dist styles lang \
             README.md CHANGELOG.md LICENSE \
-            -x "*.DS_Store" "*.map"
+            -x "*.DS_Store"
 
       - name: GitHub release
         uses: softprops/action-gh-release@v2

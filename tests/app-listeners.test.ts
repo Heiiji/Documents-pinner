@@ -33,7 +33,11 @@ function pinnedTile(id = "t1") {
   const tile = fakeTile({ id, uuid: `Scene.s1.Tile.${id}` });
   tile.flags = {
     "documents-pinner": {
-      pin: { ...defaultPin(), mode: "prop", audience: { ...defaultPin().audience, kind: "everyone" } },
+      pin: {
+        ...defaultPin(),
+        mode: "prop",
+        audience: { ...defaultPin().audience, kind: "everyone" },
+      },
     },
   };
   return tile;

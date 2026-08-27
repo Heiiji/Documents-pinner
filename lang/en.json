@@ -67,7 +67,7 @@
   "DP.ghost.placedVisible": "Pinned \"{name}\" — visible to players.",
   "DP.hud.audience": "Who can see this",
   "DP.hud.audienceAll": "All",
-  "DP.hud.audienceNone": "None",
+  "DP.hud.audienceNone": "Hidden",
   "DP.hud.audienceSome": "Some",
   "DP.hud.configure": "Open Pin Studio",
   "DP.hud.effects": "Effect",

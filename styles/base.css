@@ -19,33 +19,12 @@
   z-index: 90;
 }
 
-.dp-pin {
-  position: absolute;
-  transform-origin: 50% 50%;
-  /* Lets the browser skip layout and paint entirely for off-screen cards. */
-  content-visibility: auto;
-
-  &[data-dp-interactive="true"] {
-    pointer-events: auto;
-    cursor: pointer;
-  }
-}
-
-.dp-surface,
-.dp-frame,
-.dp-fx {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-}
-
-.dp-fx {
-  /* Purely decorative: never announced, never focusable. */
-  content: "";
-}
-
-.dp-content {
-  position: absolute;
-  inset: 0;
-  overflow: hidden;
-}
+/*
+ * `.dp-pin`, `.dp-surface`, `.dp-frame`, `.dp-fx` and `.dp-content` used to live here and
+ * were removed: no source file in the module emits any of them. The effect layers are
+ * pseudo-elements on `.dp-card` (see fx/effects.css), and the two things that are
+ * actually positioned in scene space are `.dp-prop` and `.dp-reader`, which carry their
+ * own rules. Rules for elements that do not exist are worse than no rules — they make a
+ * reviewer believe a mechanism is in place, which is exactly what happened to the
+ * reduced-motion guard in fx/_props.css.
+ */

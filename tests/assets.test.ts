@@ -5,6 +5,16 @@ import { describe, expect, it } from "vitest";
 const ROOT = join(import.meta.dirname, "..");
 const manifest = JSON.parse(readFileSync(join(ROOT, "module.json"), "utf8"));
 
+/** Every TypeScript source file, which is where all of this module's markup lives. */
+function sourceFiles(dir: string, out: string[] = []): string[] {
+  for (const entry of readdirSync(dir)) {
+    const full = join(dir, entry);
+    if (statSync(full).isDirectory()) sourceFiles(full, out);
+    else if (entry.endsWith(".ts") && !entry.endsWith(".d.ts")) out.push(full);
+  }
+  return out;
+}
+
 function cssFiles(dir: string, out: string[] = []): string[] {
   for (const entry of readdirSync(dir)) {
     const full = join(dir, entry);
@@ -107,5 +117,58 @@ describe("stylesheets", () => {
       }
     }
     expect(offenders, `un-prefixed keyframes:\n${offenders.join("\n")}`).toEqual([]);
+  });
+});
+
+/**
+ * Rules for elements that do not exist.
+ *
+ * `[data-dp-fx="reduced"] .dp-pin` could never match — `data-dp-fx` holds a preset id,
+ * the level lives in `data-dp-level`, and `.dp-pin` was emitted by no source file — so
+ * the pure-CSS accessibility guard its own comment described was absent, and the whole
+ * `dp.theme` layer resolved to nothing. Nobody noticed because the JS path was carrying
+ * `reduced` on its own.
+ *
+ * Dead CSS is worse than missing CSS: it makes a reviewer believe a mechanism is in place.
+ */
+describe("CSS selectors match markup the module actually emits", () => {
+  const CSS_FILES = cssFiles(join(ROOT, "styles"));
+
+  /** Every `.dp-*` class name any stylesheet targets. */
+  function styledClasses(): Map<string, string> {
+    const found = new Map<string, string>();
+    for (const file of CSS_FILES) {
+      const css = readFileSync(file, "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+      for (const m of css.matchAll(/\.(dp-[a-z0-9_-]+)/gi)) {
+        if (!found.has(m[1])) found.set(m[1], file.slice(ROOT.length + 1));
+      }
+    }
+    return found;
+  }
+
+  it("emits every class the stylesheets style", () => {
+    const source = sourceFiles(join(ROOT, "src"))
+      .map((file) => readFileSync(file, "utf8"))
+      .join("\n");
+
+    const dead: string[] = [];
+    for (const [className, file] of styledClasses()) {
+      // The class has to appear literally somewhere in the source; every surface in this
+      // module builds its markup as string literals, so anything absent is unreachable.
+      if (!source.includes(className)) dead.push(`${file}: .${className}`);
+    }
+    expect(dead, `styled but never emitted:\n${dead.join("\n")}`).toEqual([]);
+  });
+
+  it("keys the reduced-motion guard off the attribute that carries the level", () => {
+    // Comments stripped: the file explains the old selector, and quoting it in prose
+    // must not read as still using it.
+    const props = readFileSync(join(ROOT, "styles", "fx", "_props.css"), "utf8").replace(
+      /\/\*[\s\S]*?\*\//g,
+      ""
+    );
+    expect(props).toContain('[data-dp-level="reduced"]');
+    // `data-dp-fx` carries a preset ID, so a level value can never appear in it.
+    expect(props).not.toContain('[data-dp-fx="reduced"]');
   });
 });

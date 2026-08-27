@@ -30,6 +30,7 @@ import { openPresetStudio } from "./apps/PresetStudio";
 import { alignToBoard, destroyOverlay, syncTransform } from "./apps/OverlayRoot";
 import { closeReader, openReader, repositionReader } from "./apps/ReaderOverlay";
 import { disarm } from "./apps/PlacementGhost";
+import { hidePropTooltip, setPropHover } from "./apps/PropTooltip";
 import { onGetSceneControlButtons } from "./ui/controls";
 import { registerKeybindings } from "./ui/keybindings";
 import {
@@ -93,6 +94,7 @@ Hooks.on("canvasReady", () => {
 
 Hooks.on("canvasTearDown", () => {
   disarm();
+  hidePropTooltip();
   closeReader();
   teardownProps();
   destroyOverlay();
@@ -111,6 +113,11 @@ for (const [hook, busy] of POINTER_BUSY_HOOKS) Hooks.on(hook, () => suspendHits(
 // binding we recorded belongs to a mesh that no longer exists. `PinnedTile` has fired this
 // since it was written; nothing listened.
 Hooks.on(`${MODULE_ID}.tileDrawn`, (tile: any) => propManager().onTileDrawn(tile));
+
+// `interaction.tooltip` was offered by the Pin Studio, validated, stored — and read by
+// nothing, while `PropHitLayer` fired this hook into a void. A player hovering a pin got
+// no feedback at all beyond the cursor.
+Hooks.on(`${MODULE_ID}.propHover`, (doc: any, hovering: boolean) => setPropHover(doc, hovering));
 
 // --- Entry points -----------------------------------------------------------
 

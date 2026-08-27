@@ -44,7 +44,11 @@ beforeEach(() => {
       pin: {
         ...defaultPin(),
         mode: "prop",
-        audience: { ...defaultPin().audience, kind: "everyone", ownershipSync: { enabled: false, level: 2 } },
+        audience: {
+          ...defaultPin().audience,
+          kind: "everyone",
+          ownershipSync: { enabled: false, level: 2 },
+        },
       },
     },
   };

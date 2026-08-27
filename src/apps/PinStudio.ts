@@ -25,6 +25,7 @@ import * as api from "../api";
 import { readPin } from "../data/PinData";
 import { PAPERS } from "../render/CardTemplate";
 import { allPresets } from "../effects/preset-library";
+import { swatchStyle } from "../effects/preset-css";
 import { chipsMarkup, describeChips } from "./chips";
 import { chipUsersFor } from "./PinHUD";
 import type { DpPinFlags } from "../types/dp";
@@ -123,16 +124,23 @@ function contentTab(pin: DpPinFlags): string {
 
 function appearanceTab(pin: DpPinFlags): string {
   // The whole library, so a preset a GM authored can actually be assigned to a pin.
-  const swatches = allPresets().map(
-    (preset) =>
-      `<button type="button" class="dp-studio__swatch" data-action="setEffect"` +
-      ` data-dp-preset="${escapeAttr(preset.id)}" aria-pressed="${pin.effect.id === preset.id}">` +
-      `<span class="dp-studio__swatch-preview" data-dp-fx="${escapeAttr(preset.id)}"></span>` +
-      `<span>${escapeHtml(t(preset.label))}</span>` +
-      `<span class="dp-studio__cost" data-dp-cost="${escapeAttr(preset.cost)}">` +
-      `${escapeHtml(t(`DP.cost.${preset.cost}`))}</span>` +
-      `</button>`
-  ).join("");
+  // The preset's OWN variables, so a GM can tell Glitch from Torn Edges without applying
+  // it. Every swatch used to be the same beige rectangle: the markup carried a preset id
+  // and nothing anywhere styled from it, so the gallery was name-only in both live
+  // surfaces while `presetToCssVars` sat one import away.
+  const swatches = allPresets()
+    .map(
+      (preset) =>
+        `<button type="button" class="dp-studio__swatch" data-action="setEffect"` +
+        ` data-dp-preset="${escapeAttr(preset.id)}" aria-pressed="${pin.effect.id === preset.id}">` +
+        `<span class="dp-studio__swatch-preview dp-card" data-dp-fx="${escapeAttr(preset.id)}"` +
+        ` aria-hidden="true" style="${escapeAttr(swatchStyle(preset))}"></span>` +
+        `<span>${escapeHtml(t(preset.label))}</span>` +
+        `<span class="dp-studio__cost" data-dp-cost="${escapeAttr(preset.cost)}">` +
+        `${escapeHtml(t(`DP.cost.${preset.cost}`))}</span>` +
+        `</button>`
+    )
+    .join("");
 
   return (
     `<section class="dp-studio__tab" data-dp-tab="appearance">` +

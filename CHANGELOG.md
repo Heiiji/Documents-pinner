@@ -14,10 +14,36 @@ Nothing yet.
 First release. Pin any journal, page or image onto the map as a small icon or as a
 full-size readable prop, with per-pin visibility the GM controls in one click.
 
-> Feature-complete and covered by 400+ unit tests, but not yet verified in a live
-> session. The canvas behaviours in particular — lighting, fog, occlusion, frame rate
-> under load — are argued for in `docs/DESIGN.md` and tested where a test can reach them,
-> but have not been watched working on a real scene.
+> Feature-complete and covered by 500+ tests, but not yet verified in a live session. The
+> canvas behaviours in particular — lighting, fog, occlusion, frame rate under load — are
+> argued for in `docs/DESIGN.md` and tested where a test can reach them, but have not been
+> watched working on a real scene.
+
+### Pre-release hardening
+
+A review pass before this release found that several headline features had never
+executed, because the 403 tests behind them covered pure functions and markup strings and
+never the integration seams. Everything below was found, reproduced with a failing test,
+and fixed; see `docs/DESIGN.md` amendment A9 for the full account.
+
+- **No prop had ever rendered on any client.** The SVG the rasteriser builds is parsed by
+  the XML parser, and three producers were emitting HTML into it — the natively-nested
+  stylesheet, the sanitiser's `innerHTML`, and the asset inliner's. Anchors were also
+  created with no texture, so core built no mesh to bind a result to.
+- **`rendering: "dom"` and the WebKit fallback drew nothing at all.** There was no DOM
+  prop renderer on the other side of either. There is now.
+- **Players could not click a pin**, the Pinboard's bulk and global reveal buttons were
+  dead, every window re-attached its listeners on every render, the HUD's audience palette
+  closed itself after every chip click, the Pinboard could never receive a keystroke, and
+  user-authored presets could never render.
+- **A `<noscript>` mutation-XSS bypassed both the sanitiser and the secret filter.**
+- **The ownership ledger could never remove a key**, so flipping a pin's audience left a
+  phantom holder that made every later release report an override that never happened;
+  deleting a pin from the Tiles layer orphaned its grant entirely; and a manual permission
+  raise was reverted — or deleted outright — by the next release.
+- Async rasterisation gained a liveness check, `invalidate` stopped destroying textures
+  still bound to live meshes, the cache key gained a content signal, and the tile-update
+  fan-out was coalesced.
 
 ### Added
 
@@ -36,7 +62,7 @@ full-size readable prop, with per-pin visibility the GM controls in one click.
 
 #### Visibility
 
-- **Per-pin audiences** — hidden, everyone, specific players, or revealed on discovery —
+- **Per-pin audiences** — hidden, everyone, or specific players —
   deliberately decoupled from document ownership, because core ties map-note visibility
   to journal *permissions*, which is the wrong coupling for "reveal it when they find it".
 - **Avatar chips**, identical in the HUD, the Pinboard and Pin Studio: filled means they

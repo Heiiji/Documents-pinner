@@ -145,3 +145,23 @@ export function reduceCssVars(vars: CssVars): CssVars {
 export function disabledCssVars(): CssVars {
   return { "--dp-i": "0", "--dp-motion": "0" };
 }
+
+/**
+ * The style attribute for a gallery swatch.
+ *
+ * PURE, and the reason both galleries were name-only: the swatch markup carried a preset
+ * id and nothing anywhere styled from it, so every swatch in the HUD and the Pin Studio
+ * was the same beige rectangle and a GM could not tell Glitch from Torn Edges without
+ * applying it to a real pin and looking at the map.
+ *
+ * Motion is frozen. A grid of ten swatches all animating at once is a photosensitivity
+ * hazard and a distraction from the one question a swatch answers — what does this
+ * preset LOOK like — so the static rendition is exactly what is shown, which is also the
+ * rendition a `reduced` client would get.
+ */
+export function swatchStyle(preset: DpPreset): string {
+  const vars = reduceCssVars(presetToCssVars(preset, 1));
+  return Object.entries(vars)
+    .map(([key, value]) => `${key}:${value}`)
+    .join(";");
+}

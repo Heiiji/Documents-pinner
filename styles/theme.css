@@ -6,8 +6,13 @@
  * is no `.theme-dark` block to keep in sync because nothing here hardcodes a palette.
  */
 
-.dp-pin,
-.dp-panel {
+/*
+ * `.dp-pin` and `.dp-panel` are not emitted anywhere in the module — the classes the
+ * surfaces actually use are `.dp-card` for a prop and `.dp-scope` for every window — so
+ * this whole layer resolved to nothing.
+ */
+.dp-scope,
+.dp-card-root {
   --dp-paper: var(--color-bg-option, #1b1b23);
   --dp-ink: var(--color-text-primary, #eeeeee);
   --dp-edge: var(--color-border-light-1, #7a7971);

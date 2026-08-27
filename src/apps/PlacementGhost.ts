@@ -19,13 +19,14 @@
 
 import { cv, isGM } from "../fvtt";
 import { t } from "../i18n";
-import { escapeHtml } from "../html";
+import { escapeAttr, escapeHtml } from "../html";
 import * as api from "../api";
 import * as settings from "../settings";
 import { readPin } from "../data/PinData";
 import { naturalSize } from "../data/pin-schema";
 import { scaleOf, screenToScene, stageMatrix } from "../canvas/transform";
 import { CORE_PRESETS } from "../effects/presets/core-presets";
+import { swatchStyle } from "../effects/preset-css";
 import { mount, syncTransform, write } from "./OverlayRoot";
 import type { DpMode, DpSource } from "../types/dp";
 
@@ -177,6 +178,12 @@ function legendMarkup(current: GhostState): string {
     : "";
 
   return (
+    // The effect, actually drawn. DESIGN §5.2's entire justification for a ghost over a
+    // modal is "does the effect read against THIS map" — and the ghost was a dashed
+    // rectangle: `dataset.dpFx` was set and nothing styled `.dp-ghost[data-dp-fx]`, so
+    // the one question the ghost exists to answer was the one it could not.
+    `<div class="dp-ghost__body dp-card" aria-hidden="true"` +
+    ` style="${escapeAttr(swatchStyle(preset))}"></div>` +
     `<div class="dp-ghost__chip">` +
     `<span class="dp-ghost__name">${escapeHtml(name)}</span>` +
     `<span class="dp-ghost__meta">${escapeHtml(t(preset.label))} · ` +

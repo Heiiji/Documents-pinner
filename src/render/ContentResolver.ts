@@ -89,10 +89,10 @@ export async function resolveCard(
   size: { width: number; height: number },
   options: ResolveOptions = {}
 ): Promise<ResolvedCard> {
-// The library, not just the shipped ten. `getCorePreset` searches CORE_PRESETS only,
-// so a pin assigned a user preset got no effect at all, a raw id where its label should
-// be, and no reveal animation — the entire Preset Studio produced artefacts the module
-// could not use, while the README promised "author, export and share your own".
+  // The library, not just the shipped ten. `getCorePreset` searches CORE_PRESETS only,
+  // so a pin assigned a user preset got no effect at all, a raw id where its label should
+  // be, and no reveal animation — the entire Preset Studio produced artefacts the module
+  // could not use, while the README promised "author, export and share your own".
   const preset = findPreset(pin.effect.id);
   const dressed = preset
     ? dressing({

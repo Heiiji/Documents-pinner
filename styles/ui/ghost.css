@@ -77,3 +77,24 @@
 .dp-ghost[data-dp-mode="pin"] {
   border-radius: 50%;
 }
+
+/*
+ * The effect preview.
+ *
+ * A real `.dp-card` filling the ghost, painted by the same rules the rasterised prop is,
+ * because DESIGN §5.2 chose a ghost over a modal precisely so a GM could see whether the
+ * effect reads against THIS map before committing. The ghost used to be a dashed
+ * rectangle with a `data-dp-fx` attribute nothing styled.
+ *
+ * The static rendition is shown deliberately: it is exactly what a baked prop will look
+ * like, and a grid of animating presets during placement is a distraction from the
+ * question being asked.
+ */
+.dp-ghost__body {
+  position: absolute;
+  inset: 0;
+  border-radius: 0.15rem;
+  overflow: hidden;
+  opacity: 0.9;
+  pointer-events: none;
+}

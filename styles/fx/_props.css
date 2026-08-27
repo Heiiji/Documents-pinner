@@ -53,13 +53,21 @@
   :root { --dp-motion: 0; }
 }
 
-[data-dp-fx="reduced"] .dp-pin,
-[data-dp-fx="reduced"] .dp-pin * {
+/*
+ * These used to read `[data-dp-fx="reduced"] .dp-pin`, which can never match: `data-dp-fx`
+ * holds a PRESET ID, the level lives in `data-dp-level`, and `.dp-pin` is not emitted by
+ * any source file in the module. So the safety net this comment describes did not exist —
+ * the JS path was carrying `reduced` on its own, which is why nothing looked broken.
+ *
+ * `.dp-card` is the element every tier actually renders, in the SVG and in the DOM alike.
+ */
+[data-dp-level="reduced"] .dp-card,
+[data-dp-level="reduced"] .dp-card * {
   animation: none !important;
   transition: none !important;
 }
 
-[data-dp-fx="off"] .dp-pin .dp-fx,
-[data-dp-fx="off"] .dp-pin .dp-surface {
+[data-dp-level="off"] .dp-card::before,
+[data-dp-level="off"] .dp-card::after {
   display: none;
 }
