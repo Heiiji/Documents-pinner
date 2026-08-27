@@ -221,7 +221,9 @@ describe("the Note config section", () => {
     expect(created).toHaveLength(1);
     const pin = created[0]["flags.documents-pinner.pin"] as any;
     expect(pin.source.uuid).toBe("JournalEntry.a");
-    expect(pin.mode).toBe("pin");
+    // The world's default mode, not a hardcoded "pin". Converting a note and getting
+    // another small icon gave a GM no sign that anything had happened.
+    expect(pin.mode).toBe("prop");
     // Centred on the note's own position, which is where the marker actually stood.
     expect(created[0].x).toBe(400 - (created[0].width as number) / 2);
     expect(created[0].y).toBe(300 - (created[0].height as number) / 2);

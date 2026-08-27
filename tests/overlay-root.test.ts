@@ -121,3 +121,44 @@ describe("the overlay on canvasReady", () => {
     expect(element?.style.width ?? "").toBe("");
   });
 });
+
+/**
+ * `requestAnimationFrame` does not fire while the document is hidden, and a Foundry client
+ * in a background tab is completely ordinary — a GM prepping in another window, a second
+ * monitor, a laptop lid. Without a floor under the rAF, the first frame's worth of writes
+ * is queued and never applied: the overlay is never sized and no prop is ever positioned,
+ * so the whole DOM tier stays invisible.
+ *
+ * Measured in a live world with `document.hidden === true`: rAF silent, every queued write
+ * lost, `.dp-prop` carrying no inline style at all.
+ */
+describe("when the tab is hidden and rAF never fires", () => {
+  it("still applies queued writes, on a timeout floor", async () => {
+    const raf = globalThis.requestAnimationFrame;
+    // A rAF that never calls back, which is exactly what a hidden document provides.
+    globalThis.requestAnimationFrame = (() => 1) as typeof globalThis.requestAnimationFrame;
+
+    try {
+      const element = document.createElement("div");
+      overlayRoot.write(element, () => {
+        element.style.width = "123px";
+      });
+
+      expect(element.style.width).toBe("");
+      await new Promise((resolve) => setTimeout(resolve, 400));
+      expect(element.style.width).toBe("123px");
+    } finally {
+      globalThis.requestAnimationFrame = raf;
+    }
+  });
+
+  it("applies each write only once when both schedulers are armed", async () => {
+    const element = document.createElement("div");
+    let runs = 0;
+    overlayRoot.write(element, () => runs++);
+
+    await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    expect(runs).toBe(1);
+  });
+});

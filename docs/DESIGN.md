@@ -683,3 +683,48 @@ markup strings, none over the seams. A10 says the same thing one level out. **Th
 tests were right and still could not have found any of this**, because the questions here
 were "what does this browser actually permit" and "what is the computed size of that
 element" — and there is no substitute for putting the thing on a screen.
+
+### A11 — Three more that only a live world shows (2026-08-27)
+
+A10 said there is no substitute for putting the thing on a screen. A second live session,
+prompted by "still just an icon and I can't even move or resize them", found three more.
+
+**A pin could not be selected.** `showPinHUD` assigned `hudInstance.object = tile`, and
+`BasePlaceableHUD#object` is a **getter with no setter** — `bind()` is what sets it. The
+assignment threw from inside `PlaceableObject#control()`, which sets `_controlled` and only
+*afterwards* sets the render flag that draws the selection frame and the resize handles. So
+the pin ended up flagged as controlled, with no frame, no handles and no HUD:
+
+```
+TypeError: Cannot set property object of #<BasePlaceableHUD> which has only a getter
+    at showPinHUD -> PinnedTile._onControl -> PlaceableObject.control
+```
+
+The line predates this pass. Every HUD test passed over it because the test double let
+`object` be assigned — **a fake that is more permissive than the real thing tests nothing
+at the point where it differs.** The double now models the getter, and `_onControl` can no
+longer let module code break core's control flow.
+
+**Adoption ignored the default mode.** `adoptNote` hardcoded `mode: "pin"` and `adoptTile`
+inferred it from width, so a GM whose default is "prop" converted a note and got a small
+icon with nothing to say anything had happened. That was the whole of "I try to have the
+actual document displayed": the pins were *correctly* rendering as pins, because adoption
+had made them pins.
+
+**The write queue died in a background tab.** `requestAnimationFrame` does not fire while
+the document is hidden — measured, with PIXI's own ticker still reporting 60 fps beside it —
+so a client that loaded a scene while not in front queued the overlay's size and every
+prop's geometry and applied none of it, permanently. A Foundry window on a second monitor
+or behind another app is completely ordinary. There is now a timeout floor under the frame.
+
+#### On PDFs, since it came up
+
+Foundry ships pdf.js (`scripts/pdfjs/build/pdf.mjs`, confirmed 200, and it opened a
+32-page document from this world). That matters more than it looks: **pdf.js paints with
+Canvas2D primitives, not `foreignObject`** — so unlike an HTML journal page, a PDF page
+rendered by pdf.js should produce an origin-clean canvas that CAN be uploaded to WebGL.
+
+If so, a pinned PDF could be the one prop type that genuinely *is* lit, fogged, occluded
+and correctly z-ordered, by the exact route A10 ruled out for everything else. The upload
+itself was not verified — the hidden test tab stalled pdf.js mid-render — so it stays a
+strong lead rather than a finding, and it is the first thing to check before building it.

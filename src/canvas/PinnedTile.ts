@@ -150,14 +150,31 @@ export function definePinnedTile(): boolean {
      * and what does it look like", which is the whole product. Falling through to
      * `super` for an ordinary tile keeps the Tiles layer working exactly as before.
      */
+    /**
+     * A pin gets OUR HUD, and core's own flow must survive it failing.
+     *
+     * `control()` sets `_controlled`, calls this, and only THEN sets the render flag that
+     * draws the selection frame and the resize handles. Anything thrown in here therefore
+     * leaves a placeable that is selected but has no frame and cannot be dragged or
+     * resized — which is exactly what a getter-only `BasePlaceableHUD#object` did. Module
+     * code has no business breaking core's control flow, so it cannot.
+     */
     _onControl(options?: any) {
       const result = super._onControl?.(options);
-      if (this.pin) showPinHUD(this);
+      try {
+        if (this.pin) showPinHUD(this);
+      } catch (error) {
+        console.warn(`${MODULE_ID} | pin HUD failed to open`, error);
+      }
       return result;
     }
 
     _onRelease(options?: any) {
-      if (this.pin) hidePinHUD();
+      try {
+        if (this.pin) hidePinHUD();
+      } catch (error) {
+        console.warn(`${MODULE_ID} | pin HUD failed to close`, error);
+      }
       return super._onRelease?.(options);
     }
 

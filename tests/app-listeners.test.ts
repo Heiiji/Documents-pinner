@@ -145,7 +145,7 @@ describe("PinHUD", () => {
 
     const { definePinHUD } = await import("../src/apps/PinHUD");
     const hud = new (definePinHUD())();
-    hud.object = tile.object;
+    await hud.bind(tile.object);
     await afterRepeatedRenders(hud);
 
     const sync = contentOf(hud).querySelector<HTMLInputElement>('[data-action="toggleSync"]')!;

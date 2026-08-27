@@ -417,7 +417,13 @@ export async function adoptTile(tileDoc: any, source: DpSource): Promise<void> {
   if (!isGM() || !tileDoc) return;
   const pin: DpPinFlags = {
     ...defaultPin(),
-    mode: tileDoc.width > (tileDoc.parent?.grid?.size ?? 100) * 1.5 ? "prop" : "pin",
+    // A tile big enough to read is obviously a prop; anything smaller takes the world's
+    // default rather than being forced to "pin", which used to make adoption the one path
+    // that ignored the setting.
+    mode:
+      tileDoc.width > (tileDoc.parent?.grid?.size ?? 100) * 1.5
+        ? "prop"
+        : settings.get("defaultMode"),
     source,
     audience: audience.makeAudience({ kind: tileDoc.hidden ? "hidden" : "everyone" }),
   };
@@ -461,7 +467,11 @@ export async function adoptNote(noteDoc: any, source?: DpSource | null): Promise
     x: noteDoc.x ?? 0,
     y: noteDoc.y ?? 0,
     centred: true,
-    mode: "pin",
+    // The world's default, NOT a hardcoded "pin". A note looks like a marker, so pin felt
+    // like the faithful conversion — but the readable prop is the whole reason to use
+    // this module over a plain map note, and a GM whose default is "prop" converting a
+    // note and getting another small icon has no way to tell that anything happened.
+    mode: settings.get("defaultMode"),
   });
   if (!anchor) return null;
 

@@ -9,6 +9,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Nothing yet.
 
+## [0.1.3] — unreleased
+
+### Fixed
+
+- **A pin could not be selected, moved or resized.** `showPinHUD` assigned
+  `hudInstance.object`, and `BasePlaceableHUD#object` is a getter with no setter — so
+  clicking a pin threw `TypeError: Cannot set property object` from inside
+  `PlaceableObject#control()`. Core sets `_controlled` and only *then* sets the render flag
+  that draws the selection frame and the resize handles, so the throw left the pin selected
+  with neither. `bind()` now owns the object, and `_onControl`/`_onRelease` can no longer
+  let module code break core's control flow at all.
+- **Adopting a note or a tile always produced a pin**, ignoring the world's default mode.
+  A GM whose default is "prop" converted a map note and got another small icon, with
+  nothing to indicate anything had happened. Both adopt paths honour the setting now.
+- **Queued style writes were lost whenever the tab was hidden.** The write queue was
+  scheduled on `requestAnimationFrame`, which does not fire in a background tab, so a
+  client that loaded a scene while not in front never sized its overlay or positioned a
+  single prop — and never recovered. There is now a timeout floor under the frame.
+
 ## [0.1.2] — unreleased
 
 First release tested in a live Foundry world. Four defects that only a running world could
@@ -199,7 +218,8 @@ occluded. The module detects this at startup rather than failing visibly.
 
 The full list is in the README and in `docs/DESIGN.md` §10.
 
-[Unreleased]: https://github.com/Heiiji/Documents-pinner/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/Heiiji/Documents-pinner/compare/v0.1.3...HEAD
+[0.1.3]: https://github.com/Heiiji/Documents-pinner/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/Heiiji/Documents-pinner/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/Heiiji/Documents-pinner/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/Heiiji/Documents-pinner/releases/tag/v0.1.0

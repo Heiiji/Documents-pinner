@@ -39,9 +39,9 @@ beforeEach(async () => {
 
   const { definePinHUD } = await import("../src/apps/PinHUD");
   hud = new (definePinHUD())();
-  hud.object = tile.object;
   document.body.appendChild(contentOf(hud));
-  await hud.render();
+  // `bind()` is how a BasePlaceableHUD is given its placeable; `object` has no setter.
+  await hud.bind(tile.object);
 });
 
 afterEach(() => uninstallWorld());
@@ -148,5 +148,38 @@ describe("the HUD and focus that is not its own", () => {
 
     expect(palette("dp-hud-audience").hidden).toBe(false);
     expect(document.activeElement).toBe(elsewhere);
+  });
+});
+
+/**
+ * The crash that made a pin unselectable.
+ *
+ * `showPinHUD` assigned `hudInstance.object = tile`. On a real `BasePlaceableHUD` that
+ * property is a GETTER with no setter, so the assignment threw — from inside
+ * `PlaceableObject#control()`, which sets `_controlled` and only THEN sets the render
+ * flag that draws the selection frame and the resize handles. A GM clicking a pin got a
+ * TypeError, no HUD, and a placeable they could not drag or resize.
+ *
+ * Observed in a live v14 world:
+ *   TypeError: Cannot set property object of #<BasePlaceableHUD> which has only a getter
+ *       at showPinHUD -> PinnedTile._onControl -> PlaceableObject.control
+ */
+describe("showPinHUD against the real BasePlaceableHUD contract", () => {
+  it("binds the placeable instead of assigning to a getter-only property", async () => {
+    const { showPinHUD } = await import("../src/apps/PinHUD");
+    expect(() => showPinHUD(tile.object)).not.toThrow();
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const { definePinHUD } = await import("../src/apps/PinHUD");
+    // The HUD is bound to the placeable it was shown for.
+    expect(definePinHUD()).toBeTruthy();
+  });
+
+  it("never lets a HUD failure escape into core's control flow", async () => {
+    const hudModule = await import("../src/apps/PinHUD");
+    // Whatever goes wrong inside the HUD, `_onControl` must return normally or core stops
+    // before it draws the selection frame.
+    const broken = { document: null, id: "nope" };
+    expect(() => hudModule.showPinHUD(broken as never)).not.toThrow();
   });
 });

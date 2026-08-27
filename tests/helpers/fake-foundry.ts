@@ -262,6 +262,38 @@ export function fakeApplicationV2(): any {
   };
 }
 
+/**
+ * `BasePlaceableHUD`, with the one property that matters modelled correctly.
+ *
+ * **`object` is a GETTER with no setter**, and `bind()` is what sets it. Assigning to it
+ * throws `TypeError: Cannot set property object`, and because `PlaceableObject#control()`
+ * calls `_onControl` BEFORE setting the render flag that draws the selection frame, that
+ * throw left a pin selected with no frame and no resize handles.
+ *
+ * The previous fake let `object` be assigned, so every HUD test passed over code that
+ * threw the moment a GM clicked a pin in a real world.
+ */
+export function fakeBasePlaceableHUD(): any {
+  const ApplicationV2 = fakeApplicationV2();
+  return class BasePlaceableHUD extends ApplicationV2 {
+    #object: any = null;
+
+    get object() {
+      return this.#object;
+    }
+
+    async bind(object: any) {
+      this.#object = object;
+      return this.render(true);
+    }
+
+    clear() {
+      this.#object = null;
+      this.rendered = false;
+    }
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Installation
 // ---------------------------------------------------------------------------
@@ -413,7 +445,7 @@ export function installWorld(world: FakeWorld = {}): InstalledWorld {
         // Every confirmation in the module goes through this; tests set the answer.
         DialogV2: { confirm: async () => dialogAnswer },
       },
-      hud: {},
+      hud: { BasePlaceableHUD: fakeBasePlaceableHUD() },
       ux: {},
     },
     abstract: {},

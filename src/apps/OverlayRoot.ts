@@ -33,6 +33,8 @@ const ROOT_ID = "documents-pinner-overlay";
 let root: HTMLElement | null = null;
 let lastMatrix: Mat = { ...IDENTITY };
 let frame = 0;
+/** A timeout floor under the rAF, because rAF never fires in a hidden tab. */
+let timer = 0;
 /**
  * Style writes queued for the next frame, in order, per element.
  *
@@ -92,7 +94,9 @@ export function destroyOverlay(): void {
   root = null;
   pending.clear();
   if (frame) cancelAnimationFrame(frame);
+  if (timer) window.clearTimeout(timer);
   frame = 0;
+  timer = 0;
 }
 
 /**
@@ -152,14 +156,29 @@ export function write(element: HTMLElement, apply: () => void): void {
   if (queued) queued.push(apply);
   else pending.set(element, [apply]);
 
-  if (frame) return;
+  if (frame || timer) return;
 
-  frame = requestAnimationFrame(() => {
-    frame = 0;
-    const work = [...pending.values()];
-    pending.clear();
-    for (const applies of work) for (const apply of applies) apply();
-  });
+  frame = requestAnimationFrame(flush);
+  // `requestAnimationFrame` does not fire at all while the document is hidden, and a
+  // Foundry client sitting in a background tab is completely ordinary — a GM prepping in
+  // another window, a second monitor, a laptop lid. Without this floor the first frame's
+  // worth of writes is queued and never applied: the overlay is never sized, no prop is
+  // ever positioned, and the whole DOM tier stays invisible until something happens to
+  // schedule another write AFTER the tab is visible again. Measured with
+  // `document.hidden === true`: rAF silent, every queued write lost.
+  timer = window.setTimeout(flush, 250);
+}
+
+/** Apply everything queued, exactly once, whichever of the two schedulers got here first. */
+function flush(): void {
+  if (frame) cancelAnimationFrame(frame);
+  if (timer) window.clearTimeout(timer);
+  frame = 0;
+  timer = 0;
+
+  const work = [...pending.values()];
+  pending.clear();
+  for (const applies of work) for (const apply of applies) apply();
 }
 
 /** Add a card to the overlay. The caller owns the element and its removal. */

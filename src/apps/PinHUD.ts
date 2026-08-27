@@ -29,6 +29,7 @@
 
 import { MODULE_ID } from "../const";
 import { g, ns, playerIds } from "../fvtt";
+import { logger } from "../log";
 import { t, tn } from "../i18n";
 import { escapeAttr, escapeHtml } from "../html";
 import * as api from "../api";
@@ -37,6 +38,8 @@ import { allPresets } from "../effects/preset-library";
 import { swatchStyle } from "../effects/preset-css";
 import { chipsMarkup, describeChips, type ChipUser } from "./chips";
 import type { DpPinFlags } from "../types/dp";
+
+const log = logger("hud");
 
 let PinHUDClass: any = null;
 
@@ -395,14 +398,30 @@ export function showPinHUD(tile: any): void {
     hudInstance.openPaletteId = null;
     hudInstance.focusedSelector = null;
   }
-  hudInstance.object = tile;
 
-  const shown = hudInstance.bind ? hudInstance.bind(tile) : hudInstance.render(true);
-  void Promise.resolve(shown).then(() => {
-    const hud = document.getElementById("hud");
-    const element = hudInstance?.element;
-    if (hud && element && element.parentElement !== hud) hud.appendChild(element);
-  });
+  // `BasePlaceableHUD#object` is a GETTER, with no setter, and `bind()` is what owns it.
+  // Assigning to it threw `TypeError: Cannot set property object` from inside
+  // `PlaceableObject#control()` — which sets `_controlled` and then never reaches its own
+  // `renderFlags.set({ refreshState: true })`, so a selected pin got no frame and no
+  // resize handles. "I can't even move or resize them" was this one line.
+  //
+  // The assignment stays only on the ApplicationV2 fallback path, where `object` is our
+  // own plain property and there is no `bind` to do it for us.
+  let shown;
+  if (typeof hudInstance.bind === "function") {
+    shown = hudInstance.bind(tile);
+  } else {
+    hudInstance.object = tile;
+    shown = hudInstance.render(true);
+  }
+
+  void Promise.resolve(shown)
+    .then(() => {
+      const hud = document.getElementById("hud");
+      const element = hudInstance?.element;
+      if (hud && element && element.parentElement !== hud) hud.appendChild(element);
+    })
+    .catch((error) => log.warn("could not show the pin HUD", error));
 }
 
 export function hidePinHUD(): void {
