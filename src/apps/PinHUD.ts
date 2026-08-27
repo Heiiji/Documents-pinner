@@ -265,7 +265,12 @@ export function definePinHUD(): any {
 
     _replaceHTML(result: HTMLElement, content: HTMLElement) {
       // Read before the DOM is thrown away; re-applied after the new one is in place.
-      this.focusedSelector = focusSelectorIn(content) ?? this.focusedSelector;
+      //
+      // Only when the focus is CURRENTLY inside the HUD. Keeping the last selector when
+      // it is not meant that any later render yanked focus back — a GM who clicked a chip
+      // and then started typing in chat had the caret pulled out from under them by the
+      // next tile update. The Pinboard guards the same way with `hadRowFocus`.
+      this.focusedSelector = focusSelectorIn(content);
 
       content.replaceChildren(result);
       // Wired to `result`, the NEW subtree, not to `content`. ApplicationV2 hands back
@@ -382,6 +387,14 @@ export function showPinHUD(tile: any): void {
   if (!HUD || !tile) return;
 
   hudInstance ??= new HUD();
+
+  // One HUD instance serves every pin, so its remembered disclosure and focus belong to
+  // the anchor it was showing. Carrying them to a different pin would open a palette the
+  // GM never opened on THIS one, and pull focus into it.
+  if (hudInstance.anchorDoc?.id !== tile.document?.id) {
+    hudInstance.openPaletteId = null;
+    hudInstance.focusedSelector = null;
+  }
   hudInstance.object = tile;
 
   const shown = hudInstance.bind ? hudInstance.bind(tile) : hudInstance.render(true);

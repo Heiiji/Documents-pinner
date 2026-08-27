@@ -76,16 +76,23 @@ export async function openReader(tileDoc: any): Promise<void> {
   const card = await resolveCard(pin, size, { tier: "L3", baked: false });
   if (token !== openToken) return;
 
-  // NOT gated on permission. With ownership sync off — a documented setting, and the
-  // whole point of DESIGN §3.1 — a player can see a prop without holding OBSERVER on the
-  // journal behind it, and refusing here gave them a cursor that said "clickable" and a
-  // click that did nothing at all: no reader, no sheet, no notification. That is exactly
-  // the "I can see it but nothing happens" failure the key glyph exists to warn about.
+  // NOT gated on permission, deliberately. With ownership sync off — a documented
+  // setting, and the whole point of DESIGN §3.1 — a player can be in a pin's audience
+  // without holding OBSERVER on the journal behind it, and refusing here gave them a
+  // cursor that said "clickable" and a click that did nothing at all: no reader, no
+  // sheet, no notification. That is acceptance criterion 17 verbatim, and exactly the
+  // "I can see it but nothing happens" failure the key glyph exists to warn about.
   //
-  // There is nothing to protect at this point either: the card has already been built
-  // and already had its secrets stripped FOR THIS USER by `enrichFor`, so the module is
-  // refusing to show content it is already holding. The refusal belongs to a source that
-  // is genuinely gone, and that one says so.
+  // Be clear about what this is and is not. It is NOT that permission was checked
+  // somewhere else: `enrichFor` strips `.secret` sections, it does not gate on read
+  // permission, and Foundry ships world-document data to every client anyway — which is
+  // the same fact that lets `Journal.show(doc, { force })` display a document regardless
+  // of permission. It IS the module's stated position that the pin's own audience is the
+  // authority over who reads a pinned document, and ownership sync is a convenience on
+  // top of that rather than the gate. A GM who wants the gate leaves ownership sync on,
+  // and the ⚿ glyph tells them when presence and access disagree.
+  //
+  // The refusal belongs to a source that is genuinely gone, and that one says so.
   if (card.missing) {
     notify({ key: "DP.notice.sourceMissing" }, "warn");
     return;

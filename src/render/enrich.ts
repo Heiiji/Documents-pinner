@@ -140,6 +140,13 @@ export function scrub(root: ParentNode): void {
     }
     for (const attr of [...element.attributes]) {
       if (isDangerousAttr(attr.name, attr.value)) element.removeAttribute(attr.name);
+      // A namespace declaration the page wrote itself. Meaningless in journal HTML, and
+      // fatal downstream: `serialiseXml` emits its own declaration for foreign content,
+      // so an inner `<div xmlns="…">` inside an `<svg>` comes out with the attribute
+      // twice — `duplicate attribute: xmlns`, which fails the whole card.
+      else if (attr.name === "xmlns" || attr.name.startsWith("xmlns:")) {
+        element.removeAttribute(attr.name);
+      }
     }
     // `querySelectorAll` does not cross into a template's DocumentFragment, so
     // `<template><script>...</script></template>` survived the scrub byte-for-byte.
@@ -148,6 +155,23 @@ export function scrub(root: ParentNode): void {
     const content = (element as HTMLTemplateElement).content;
     if (content) scrub(content);
   }
+}
+
+/**
+ * Characters XML 1.0 does not permit at all, even escaped.
+ *
+ * A vertical tab or a form feed pasted into a journal is invisible in the editor and
+ * fatal in the rasteriser: `disallowed character`, so the SVG never parses. With the
+ * failure latch remembering the key and the mesh held at alpha 0, that turns one stray
+ * character into a prop that never appears again for the rest of the session — so they
+ * are removed rather than escaped. Tab, newline and carriage return are the three
+ * control characters XML does allow, and they are kept.
+ */
+// eslint-disable-next-line no-control-regex
+const XML_ILLEGAL = /[^\u0009\u000A\u000D\u0020-\uD7FF\uE000-\uFFFD\u{10000}-\u{10FFFF}]/gu;
+
+export function stripIllegalXmlChars(text: string): string {
+  return String(text ?? "").replace(XML_ILLEGAL, "");
 }
 
 /**
@@ -239,7 +263,7 @@ export function sanitise(html: string, isOwner: boolean): string {
   // string. Mutation XSS works precisely by surviving one such round trip: markup that
   // scrubs clean re-parses into something that does not. Repeat until it settles, with
   // a hard bound so a pathological input cannot spin here.
-  let current = html ?? "";
+  let current = stripIllegalXmlChars(html ?? "");
   for (let pass = 0; pass < 3; pass++) {
     const doc = new Parser().parseFromString(`<body>${current}</body>`, "text/html");
     const body = doc.body;

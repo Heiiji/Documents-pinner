@@ -461,7 +461,7 @@ class Manager {
       for (let i = 0; i < this.#globalDemotions; i++) tier = demote(tier);
 
       const visible = tile.isVisible === true;
-      if (visible && !record.wasVisible) this.#playReveal(tile, pin);
+      if (visible && !record.wasVisible) this.#playReveal(tile, pin, record, dom);
       record.wasVisible = visible;
 
       record.tier = tier;
@@ -521,7 +521,7 @@ class Manager {
    * the module exists for. Driven by core's own animation so it shares the ticker and
    * is cancelled correctly when the scene is torn down mid-animation.
    */
-  #playReveal(tile: any, pin: any): void {
+  #playReveal(tile: any, pin: any, record: PropRecord, dom: boolean): void {
     const mesh = tile.mesh;
     if (!mesh) return;
 
@@ -529,6 +529,19 @@ class Manager {
     const preset = findPreset(pin.effect.id);
     const animation = preset?.reveal.animation ?? "fade";
     const target = tile.document.alpha ?? 1;
+
+    // The sound belongs to the reveal whichever tier draws it, and plays either way.
+    playRevealSound(preset?.reveal.sound ?? null);
+
+    // The MESH does not, and this decision comes FIRST — before the level check, which
+    // also writes alpha. At the moment a reveal fires the prop's own texture has by
+    // definition not been drawn yet, so touching the mesh here puts the PLACEHOLDER on
+    // screen — a book icon stretched across a letter — and leaves it there, overriding
+    // the hold in `#meshAlphaFor`. On the DOM path it would sit under the card as well.
+    // The arrival is somebody else's job either way: `#fadeIn` when the texture lands,
+    // and the `.dp-prop--in` transition on the DOM card.
+    if (dom || record.boundKey === null) return;
+
     if (animation === "none" || this.#level !== "full") {
       mesh.alpha = target;
       return;
@@ -537,8 +550,6 @@ class Manager {
     const duration = Math.max(0, preset?.reveal.durationMs ?? 400);
     const CanvasAnimation = ns("canvas.animation.CanvasAnimation");
     mesh.alpha = 0;
-
-    playRevealSound(preset?.reveal.sound ?? null);
 
     if (!CanvasAnimation?.animate) {
       mesh.alpha = target;
@@ -816,6 +827,12 @@ class Manager {
     for (const record of this.#records.values()) {
       if (record.boundKey && evicted.includes(record.boundKey)) this.#restore(record);
     }
+
+    // And the alpha has to follow. `#recomputeLod` and `#generate` both apply alpha
+    // BEFORE trimming, so without this an evicted prop sat at full alpha showing the
+    // restored placeholder icon — stretched across a letter — until the next pan, edit or
+    // zoom triggered another pass. That is precisely what `#meshAlphaFor` exists to stop.
+    this.applyAlpha();
   }
 
   stats(): { props: number; textures: number; bytes: number; degraded: boolean } {

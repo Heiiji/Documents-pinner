@@ -82,3 +82,50 @@ describe("the rasteriser's SVG is well-formed XML", () => {
     expect(out).toMatch(/<img[^>]*\/>/);
   });
 });
+
+/**
+ * Two inputs that still produced ill-formed XML after the first pass.
+ *
+ * Both are rare, and both were worse than "one bad card": the failure latch remembers the
+ * key until the content changes, and the mesh is held at alpha 0 while a prop is being
+ * drawn — so a single stray character turned into a prop that never appeared again for
+ * the rest of the session, with nothing on screen to explain it.
+ */
+describe("inputs that are legal HTML and illegal XML", () => {
+  const parse = (body: string) => parseErrorIn(svgDocument(body, "", 100, 100));
+
+  it("drops a namespace declaration the page wrote itself", () => {
+    // `serialiseXml` emits its own for foreign content, so the page's literal attribute
+    // came out ALONGSIDE it on the same element: `duplicate attribute: xmlns`, which
+    // fails the whole card. One declaration per element is correct and expected — an
+    // `<svg>` and an XHTML `<div>` inside it are genuinely in different namespaces.
+    const nested =
+      '<svg><foreignObject><div xmlns="http://www.w3.org/1999/xhtml">hi</div></foreignObject></svg>';
+    const clean = sanitise(nested, true);
+
+    for (const tag of clean.match(/<[a-z][^>]*>/gi) ?? []) {
+      expect((tag.match(/\bxmlns\s*=/g) ?? []).length, tag).toBeLessThanOrEqual(1);
+    }
+    expect(parse(clean)).toBeNull();
+  });
+
+  it("removes control characters XML does not permit even escaped", () => {
+    for (const code of [0x0b, 0x0c, 0x01, 0x1f]) {
+      const body = `<p>a${String.fromCharCode(code)}b</p>`;
+      expect(parse(sanitise(body, true)), `U+${code.toString(16)}`).toBeNull();
+    }
+  });
+
+  it("keeps the three control characters XML does allow", () => {
+    const clean = sanitise("<pre>a\tb\nc\rd</pre>", true);
+    expect(clean).toContain("\t");
+    expect(clean).toContain("\n");
+  });
+
+  it("keeps astral characters, which are perfectly legal XML", () => {
+    const clean = sanitise("<p>\u{1F5DD}\u{FE0F} and \u{1D11E}</p>", true);
+    expect(clean).toContain("\u{1F5DD}");
+    expect(clean).toContain("\u{1D11E}");
+    expect(parse(clean)).toBeNull();
+  });
+});

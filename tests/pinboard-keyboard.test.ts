@@ -142,3 +142,51 @@ describe("the Pinboard's keyboard surface", () => {
     expect(after.selectionStart).toBe(6);
   });
 });
+
+/**
+ * The narrowing case, which is exactly the one the ArrowDown-out-of-search branch exists
+ * for. `focusedId` was re-seeded only when it was NULL, so a search that excluded the
+ * focused row left no row tabbable at all — and the branch then had nothing to land on.
+ */
+describe("keyboard operation while searching", () => {
+  it("keeps a visible row focusable when the search excludes the focused one", async () => {
+    const search = contentOf(board).querySelector<HTMLInputElement>(".dp-board__search")!;
+    expect(board.focusedId).toBe("t1");
+
+    search.focus();
+    search.value = "Pin t3";
+    search.dispatchEvent(new Event("input", { bubbles: true }));
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(board.focusedId).toBe("t3");
+    expect(rows()).toHaveLength(1);
+    expect(rows()[0].tabIndex).toBe(0);
+  });
+
+  it("lets ArrowDown reach the narrowed list — the case the branch is for", async () => {
+    const search = contentOf(board).querySelector<HTMLInputElement>(".dp-board__search")!;
+    search.focus();
+    search.value = "Pin t3";
+    search.dispatchEvent(new Event("input", { bubbles: true }));
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const after = contentOf(board).querySelector<HTMLInputElement>(".dp-board__search")!;
+    await press("ArrowDown", after);
+
+    expect(document.activeElement?.classList.contains("dp-row")).toBe(true);
+  });
+
+  it("survives a search that matches nothing", async () => {
+    const search = contentOf(board).querySelector<HTMLInputElement>(".dp-board__search")!;
+    search.focus();
+    search.value = "no such pin";
+    search.dispatchEvent(new Event("input", { bubbles: true }));
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(board.focusedId).toBeNull();
+    expect(rows()).toHaveLength(0);
+  });
+});

@@ -16,6 +16,28 @@
 const GLOBALS = ["game", "canvas", "CONFIG", "foundry", "ui", "PIXI", "Hooks"] as const;
 const saved = new Map<string, unknown>();
 
+/** Every animation scheduled since the world was installed, newest last. */
+export interface ScheduledAnimation {
+  name: string;
+  attributes: { attribute: string; to: number }[];
+}
+let animations: ScheduledAnimation[] = [];
+
+export function scheduledAnimations(): ScheduledAnimation[] {
+  return animations;
+}
+
+const canvasAnimation = {
+  easeInOutCosine: () => 0,
+  animate: async (attributes: any[], options: any = {}) => {
+    animations.push({
+      name: String(options.name ?? ""),
+      attributes: attributes.map((a) => ({ attribute: a.attribute, to: a.to })),
+    });
+    for (const a of attributes) a.parent[a.attribute] = a.to;
+  },
+};
+
 /** What `DialogV2.confirm` resolves to. Set per test; reset by `installWorld`. */
 let dialogAnswer = true;
 
@@ -294,6 +316,7 @@ export function installWorld(world: FakeWorld = {}): InstalledWorld {
   const notifications: { type: string; message: string }[] = [];
   const settings = { ...(world.settings ?? {}) };
   dialogAnswer = true;
+  animations = [];
 
   const scene: any = {
     name: "Test Scene",
@@ -369,7 +392,13 @@ export function installWorld(world: FakeWorld = {}): InstalledWorld {
     callAll: (name: string, ...args: unknown[]) => hooks.push({ name, args }),
   };
   (globalThis as any).foundry = {
-    canvas: { layers: { CanvasLayer: class CanvasLayer {} } },
+    canvas: {
+      layers: { CanvasLayer: class CanvasLayer {} },
+      // Records what was scheduled and resolves to the end state. The RECORD is what
+      // matters for assertions: a real animation runs over its duration, so "did this
+      // touch the mesh at all" cannot be read off the final value.
+      animation: { CanvasAnimation: canvasAnimation },
+    },
     utils: {
       fromUuidSync: () => null,
       fromUuid: async () => null,

@@ -7,7 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Nothing yet.
+### Fixed
+
+Six defects an adversarial re-read of the hardening diff turned up, each reproduced with a
+failing test first.
+
+- **Searching the Pinboard stranded the keyboard.** `focusedId` was re-seeded only when it
+  was null, so a search that excluded the focused row left no row tabbable — and ArrowDown
+  out of the search box, the branch written for exactly that case, had nothing to land on.
+- **The Pin HUD stole focus back.** It kept the last focused selector even when the focus
+  had moved outside, so a GM who clicked a chip and then typed in chat had the caret pulled
+  out from under them by the next tile update. Its remembered palette also carried across
+  to a different pin, since one HUD instance serves them all.
+- **A VRAM eviction showed the placeholder at full alpha** — a book icon stretched across a
+  letter — because `applyAlpha` ran before `#trim`, and nothing re-applied it afterwards.
+- **The reveal animated the placeholder in.** At the moment a reveal fires the prop's own
+  texture has by definition not been drawn, so the animation faded the placeholder up and
+  left it there, overriding the hold that exists to prevent exactly that. On the DOM path
+  it appeared under the card.
+- **Two inputs still produced ill-formed XML**: a namespace declaration written by the page
+  itself came out twice on one element, and a vertical tab or form feed is a character XML
+  forbids outright. Either made the prop permanently invisible, because the failure latch
+  remembers the key until the content changes.
+
+Also documents plainly, at the call site, that the focus reader opening without OBSERVER
+is the module's deliberate position rather than an oversight — the pin's audience is the
+authority, and ownership sync is a convenience on top of it.
 
 ## [0.1.0] — unreleased
 

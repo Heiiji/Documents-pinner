@@ -284,9 +284,17 @@ export function definePinboard(): any {
 
     async _renderHTML() {
       // Without this no row is ever tabbable — `rowMarkup` emits `tabindex="0"` only for
-      // `focusedId`, which started null — so `P` opened the board with nothing focused
-      // and every one of the ten advertised shortcuts was unreachable.
-      if (!this.focusedId) this.focusedId = this.visibleRows[0]?.id ?? null;
+      // `focusedId` — so `P` opened the board with nothing focused and every one of the
+      // ten advertised shortcuts was unreachable.
+      //
+      // Re-seeded whenever the focused row is not among the VISIBLE ones, not merely when
+      // it is null: a search that excludes it leaves no row tabbable at all, and then
+      // ArrowDown out of the search box has nothing to land on — which is exactly the
+      // case that branch exists for.
+      const visible = this.visibleRows;
+      if (!this.focusedId || !visible.some((row) => row.id === this.focusedId)) {
+        this.focusedId = visible[0]?.id ?? null;
+      }
 
       const wrapper = document.createElement("div");
       wrapper.innerHTML = boardMarkup(

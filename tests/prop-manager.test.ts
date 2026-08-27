@@ -8,7 +8,12 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { defaultPin } from "../src/data/pin-schema";
-import { fakeTile, installWorld, uninstallWorld } from "./helpers/fake-foundry";
+import {
+  fakeTile,
+  installWorld,
+  scheduledAnimations,
+  uninstallWorld,
+} from "./helpers/fake-foundry";
 
 const resolved = { hash: "h1" };
 
@@ -72,7 +77,13 @@ beforeEach(async () => {
   vi.resetModules();
   resolved.hash = "h1";
   tiles = [propTile("t1")];
-  installWorld({ isGM: true, tiles, settings: { rendering: "canvas", autoDegrade: false } });
+  installWorld({
+    isGM: true,
+    tiles,
+    // `full` and a resolving CanvasAnimation, so the reveal path is really exercised
+    // rather than skipped by an unrelated guard.
+    settings: { rendering: "canvas", autoDegrade: false, effectsLevel: "full" },
+  });
 
   const { propManager } = await import("../src/canvas/PropManager");
   manager = propManager();
@@ -203,5 +214,56 @@ describe("switching the rendering setting mid-session", () => {
     manager.refresh();
     await settle();
     expect(domPropCount()).toBe(0);
+  });
+});
+
+/**
+ * Two paths that overrode the "hold the mesh at zero" rule and put the placeholder icon
+ * on screen anyway — a book stretched across a letter, which is the artefact that rule
+ * exists to prevent.
+ */
+describe("the placeholder never gets shown", () => {
+  it("re-applies alpha after a VRAM eviction restores it", async () => {
+    const mesh = tiles[0].object.mesh;
+    expect(mesh.alpha).toBe(1);
+
+    // A budget of nothing evicts on the next trim, which restores core's texture.
+    await (globalThis as any).game.settings.set("documents-pinner", "vramBudgetMb", 0);
+    manager.refresh();
+    await settle();
+
+    expect(mesh.texture.id).toBe("core-texture");
+    // `applyAlpha` used to run BEFORE `#trim`, so the restored placeholder sat at full
+    // alpha until the next pan, edit or zoom.
+    expect(mesh.alpha).toBe(0);
+  });
+
+  it("does not fade the placeholder in when a pin is revealed before it is drawn", async () => {
+    const { rasterise } = await import("../src/render/Rasterizer");
+    const object = tiles[0].object;
+
+    // A rasterisation that never lands, which is the state every reveal fires in: the
+    // prop's own texture has by definition not been drawn yet.
+    vi.mocked(rasterise).mockImplementation(() => new Promise(() => {}));
+
+    // Unbind, then hide: the record has to already exist and have been seen as invisible,
+    // because the reveal fires on the false -> true transition.
+    manager.invalidate("JournalEntry.j");
+    object.isVisible = false;
+    manager.refresh();
+    await settle();
+
+    // ...and now revealed, with nothing bound.
+    object.isVisible = true;
+    manager.refresh();
+    await settle();
+
+    // The reveal must not animate the MESH at all: a real animation runs over its
+    // duration and would land on full alpha with only the placeholder bound, so the
+    // absence of the animation is what has to be asserted, not the value it left behind.
+    // The arrival belongs to `#fadeIn`, once the texture is actually there.
+    const reveals = scheduledAnimations().filter((a) => a.name.includes(".reveal."));
+    expect(reveals).toEqual([]);
+    expect(object.mesh.alpha).toBe(0);
   });
 });

@@ -115,3 +115,38 @@ describe("the HUD audience palette", () => {
     expect(palette("dp-hud-effects").hidden).toBe(false);
   });
 });
+
+/**
+ * The other half of remembering focus: NOT re-taking it.
+ *
+ * The selector was kept whenever the focus was outside the HUD, so any later render
+ * yanked it back — a GM who clicked a chip and then started typing in chat had the caret
+ * pulled out from under them by the next tile update.
+ */
+describe("the HUD and focus that is not its own", () => {
+  it("does not steal focus back from another element", async () => {
+    const chip = contentOf(hud).querySelector<HTMLElement>(".dp-chip")!;
+    chip.focus();
+    await hud.render();
+
+    const elsewhere = document.createElement("input");
+    document.body.appendChild(elsewhere);
+    elsewhere.focus();
+    expect(document.activeElement).toBe(elsewhere);
+
+    await hud.render();
+    expect(document.activeElement).toBe(elsewhere);
+  });
+
+  it("still keeps the palette open even when focus has moved away", async () => {
+    await openAudiencePalette();
+
+    const elsewhere = document.createElement("input");
+    document.body.appendChild(elsewhere);
+    elsewhere.focus();
+    await hud.render();
+
+    expect(palette("dp-hud-audience").hidden).toBe(false);
+    expect(document.activeElement).toBe(elsewhere);
+  });
+});
