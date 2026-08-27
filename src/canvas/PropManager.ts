@@ -79,6 +79,8 @@ class Manager {
   #working = false;
   #clock = 0;
   #focusedId: string | null = null;
+  /** Alt-peek: every prop drops towards transparent so the map can be read. */
+  #peeking = false;
   /** Uniform amount every prop is demoted by, after the perf guard fires. */
   #globalDemotions = 0;
 
@@ -152,6 +154,49 @@ class Manager {
     this.#cache.invalidate(uuid);
     for (const record of this.#records.values()) record.boundKey = null;
     this.#scheduleLod(DEFAULTS.editDebounce);
+  }
+
+  /**
+   * Peek.
+   *
+   * The one control players get, and the reason a GM can lay a letter across a
+   * corridor without making the corridor unusable. One alpha write per prop, and only
+   * when the state actually changes.
+   */
+  setPeeking(active: boolean): void {
+    if (this.#peeking === active) return;
+    this.#peeking = active;
+    this.applyAlpha();
+  }
+
+  /**
+   * Fade a prop that a token is standing on, and apply the peek.
+   *
+   * Recomputed on token movement and on the debounced LOD pass rather than per frame:
+   * it is an O(props x tokens) overlap test, and at fifty props it has no business
+   * running sixty times a second for a state that changes when someone drags a token.
+   */
+  applyAlpha(): void {
+    const canvas = cv();
+    if (!canvas?.ready) return;
+
+    const tokens = (canvas.tokens?.placeables ?? []).filter((token: any) => token.visible);
+
+    for (const record of this.#records.values()) {
+      const tile = canvas.tiles?.get(record.id);
+      const pin = tile ? readPin(tile.document) : null;
+      if (!tile?.mesh || !pin) continue;
+
+      let alpha = tile.document.alpha ?? 1;
+      if (pin.display.fadeUnderTokens && tokens.some((token: any) => overlaps(tile, token))) {
+        alpha = Math.min(alpha, pin.display.fadeUnderTokensAlpha);
+      }
+      if (this.#peeking) alpha = Math.min(alpha, 0.15);
+
+      // The reader dims its own prop; leaving that alone keeps the two from fighting.
+      if (this.#focusedId === record.id) continue;
+      tile.mesh.alpha = alpha;
+    }
   }
 
   setFocused(id: string | null): void {
@@ -256,6 +301,7 @@ class Manager {
     }
 
     this.#queue = queue.sort((a, b) => a.priority - b.priority);
+    this.applyAlpha();
     this.#trim();
     this.#pump();
   }
@@ -411,6 +457,20 @@ export function propManager(): Manager {
 /** Release everything. Called on `canvasTearDown` and when the module is disabled. */
 export function teardownProps(): void {
   manager?.stop();
+}
+
+/** Bounding-box overlap in scene space. Rotation is ignored deliberately: the fade is
+ * a gameplay courtesy, not a hit test, and a token near the corner of a tilted letter
+ * should still reveal it. */
+function overlaps(tile: any, token: any): boolean {
+  const a = rotatedBounds(tile.document);
+  const b = {
+    x: token.document.x,
+    y: token.document.y,
+    width: token.w ?? token.document.width * (cv()?.grid?.size ?? 100),
+    height: token.h ?? token.document.height * (cv()?.grid?.size ?? 100),
+  };
+  return rectsIntersect(a, b);
 }
 
 /** Exposed for the Pinboard's diagnostics and for the smoke test. */

@@ -1,0 +1,179 @@
+/*
+ * Pin Studio.
+ *
+ * A form with no Save button, so the layout has to make it obvious that every control
+ * has already taken effect. Labels sit above their controls in one column, hints sit
+ * below in a quieter weight, and the placement strip stays pinned to the bottom on
+ * every tab — geometry is the question a GM asks *while* judging an effect, and making
+ * them leave the effect to answer it would defeat the live preview entirely.
+ */
+
+.dp-studio {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  block-size: 100%;
+  color: var(--color-text-primary, #eee);
+}
+
+.dp-studio__tabs {
+  display: flex;
+  gap: 0.25rem;
+  border-block-end: 1px solid color-mix(in oklab, var(--color-border-light-1, #7a7971) 60%, transparent);
+}
+
+.dp-studio__tabbtn {
+  flex: 1;
+  padding: 0.35rem 0.5rem;
+  border: none;
+  border-block-end: 2px solid transparent;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: 0.9em;
+
+  &[aria-selected="true"] {
+    border-block-end-color: var(--color-warm-1, #c9ad6a);
+    color: var(--color-warm-1, #c9ad6a);
+  }
+}
+
+.dp-studio__tab {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  flex: 1;
+  overflow-y: auto;
+  padding-inline-end: 0.25rem;
+}
+
+.dp-studio__source {
+  margin: 0;
+  padding: 0.3rem 0.5rem;
+  border-radius: 0.3rem;
+  background: color-mix(in oklab, var(--color-bg-option, #1b1b23) 70%, transparent);
+  font-size: 0.9em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dp-studio__field {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 0.25rem 0.6rem;
+  cursor: pointer;
+}
+
+.dp-studio__label {
+  grid-column: 1;
+}
+
+/* The hint spans both columns so a long explanation never squeezes its control. */
+.dp-studio__hint {
+  grid-column: 1 / -1;
+  font-size: 0.78em;
+  opacity: 0.65;
+  line-height: 1.35;
+}
+
+.dp-studio__field > input[type="range"] {
+  inline-size: 9rem;
+}
+
+.dp-studio__field > output {
+  min-inline-size: 3ch;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.75;
+  text-align: end;
+}
+
+.dp-studio__swatches {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(8rem, 1fr));
+  gap: 0.35rem;
+}
+
+.dp-studio__swatch {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-areas:
+    "preview name"
+    "preview cost";
+  align-items: center;
+  gap: 0 0.4rem;
+  padding: 0.3rem;
+  border: 1px solid var(--color-border-light-1, #7a7971);
+  border-radius: 0.3rem;
+  background: transparent;
+  color: inherit;
+  font-size: 0.8em;
+  text-align: start;
+  cursor: pointer;
+
+  &[aria-pressed="true"] {
+    border-color: var(--color-warm-1, #c9ad6a);
+    background: color-mix(in oklab, var(--color-warm-1, #c9ad6a) 16%, transparent);
+  }
+}
+
+.dp-studio__swatch-preview {
+  grid-area: preview;
+  inline-size: 1.8rem;
+  block-size: 2.4rem;
+  border-radius: 0.15rem;
+  background: linear-gradient(160deg, #e8dcc0, #c9b58d);
+}
+
+/* A cost meter that lies about what is expensive is worse than no meter, so the tier
+   is shown as a word and a colour rather than an unlabelled bar. */
+.dp-studio__cost {
+  grid-area: cost;
+  font-size: 0.85em;
+  opacity: 0.7;
+
+  &[data-dp-cost="medium"] {
+    color: var(--color-warm-1, #c9ad6a);
+  }
+  &[data-dp-cost="high"] {
+    color: #e08a72;
+  }
+}
+
+.dp-studio__status {
+  margin: 0;
+  font-size: 0.82em;
+  opacity: 0.8;
+}
+
+.dp-studio__strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  padding-block-start: 0.5rem;
+  border-block-start: 1px solid color-mix(in oklab, var(--color-border-light-1, #7a7971) 60%, transparent);
+
+  & label {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 0.85em;
+  }
+
+  & input[type="number"] {
+    inline-size: 4.5rem;
+  }
+
+  & > button:last-child {
+    margin-inline-start: auto;
+  }
+}
+
+.dp-studio__gone {
+  padding: 2rem;
+  text-align: center;
+  font-style: italic;
+  opacity: 0.7;
+}

@@ -22,6 +22,7 @@
 @import url("./ui/board.css") layer(dp.ui);
 @import url("./ui/picker.css") layer(dp.ui);
 @import url("./ui/ghost.css") layer(dp.ui);
+@import url("./ui/studio.css") layer(dp.ui);
 @import url("./ui/reader.css") layer(dp.ui);
 @import url("./ui/config.css") layer(dp.ui);
 @import url("./theme.css") layer(dp.theme);

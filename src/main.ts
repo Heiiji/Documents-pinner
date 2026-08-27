@@ -22,7 +22,8 @@ import { registerPropHitLayer, suspendHits, syncHitLayer } from "./canvas/PropHi
 import { propManager, teardownProps } from "./canvas/PropManager";
 import { probeRasterisation } from "./render/Rasterizer";
 import { warmFontCache } from "./render/AssetInliner";
-import { definePinHUD } from "./apps/PinHUD";
+import { definePinHUD, refreshPinHUD } from "./apps/PinHUD";
+import { openStudio, refreshStudios } from "./apps/PinStudio";
 import { openPinboard, refreshPinboard } from "./apps/Pinboard";
 import { openPicker } from "./apps/DocumentPicker";
 import { alignToBoard, destroyOverlay, syncTransform } from "./apps/OverlayRoot";
@@ -118,16 +119,26 @@ for (const hook of CONTEXT_HOOKS) {
 Hooks.on(`${MODULE_ID}.openPicker`, () => openPicker());
 Hooks.on(`${MODULE_ID}.openBoard`, () => openPinboard());
 Hooks.on(`${MODULE_ID}.openReader`, (doc: any) => void openReader(doc));
+Hooks.on(`${MODULE_ID}.openStudio`, (doc: any, tab?: any) => openStudio(doc, tab));
+Hooks.on(`${MODULE_ID}.peek`, (active: boolean) => propManager().setPeeking(active));
 
 // --- Keeping surfaces in step with the world --------------------------------
 
 for (const hook of ["createTile", "updateTile", "deleteTile"]) {
-  Hooks.on(hook, () => {
+  Hooks.on(hook, (doc: any) => {
     propManager().refresh();
     syncHitLayer();
     repositionReader();
+    refreshPinHUD(doc);
+    refreshStudios();
     refreshPinboard();
   });
+}
+
+// A token moving is what makes a prop underneath it fade, so props never obscure the
+// thing the fade exists to protect.
+for (const hook of ["updateToken", "createToken", "deleteToken"]) {
+  Hooks.on(hook, () => propManager().applyAlpha());
 }
 
 for (const type of ["JournalEntry", "JournalEntryPage"]) {

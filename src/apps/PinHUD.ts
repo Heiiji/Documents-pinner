@@ -27,6 +27,7 @@
  * case.
  */
 
+import { MODULE_ID } from "../const";
 import { g, ns, playerIds } from "../fvtt";
 import { t, tn } from "../i18n";
 import { escapeAttr, escapeHtml } from "../html";
@@ -300,6 +301,43 @@ export function definePinHUD(): any {
   return PinHUDClass;
 }
 
+let hudInstance: any = null;
+
+/**
+ * Show the HUD over a pin.
+ *
+ * The element is moved into `#hud` after rendering when that container exists: core's
+ * own HUDs live there, and sharing the container means sharing its stacking context
+ * and its coordinate origin rather than guessing at both from `body`.
+ */
+export function showPinHUD(tile: any): void {
+  const HUD = definePinHUD();
+  if (!HUD || !tile) return;
+
+  hudInstance ??= new HUD();
+  hudInstance.object = tile;
+
+  const shown = hudInstance.bind ? hudInstance.bind(tile) : hudInstance.render(true);
+  void Promise.resolve(shown).then(() => {
+    const hud = document.getElementById("hud");
+    const element = hudInstance?.element;
+    if (hud && element && element.parentElement !== hud) hud.appendChild(element);
+  });
+}
+
+export function hidePinHUD(): void {
+  if (!hudInstance) return;
+  if (hudInstance.clear) hudInstance.clear();
+  else hudInstance.close();
+}
+
+/** Re-render the HUD if it is showing this anchor. Wired to the tile hooks. */
+export function refreshPinHUD(doc: any): void {
+  if (!hudInstance?.rendered) return;
+  if (doc && hudInstance.anchorDoc?.id !== doc.id) return;
+  hudInstance.render();
+}
+
 // ---------------------------------------------------------------------------
 // Action handlers. `this` is the application instance.
 // ---------------------------------------------------------------------------
@@ -351,7 +389,7 @@ function onFlash(this: any) {
 }
 
 function onConfigure(this: any) {
-  Hooks.call("documents-pinner.openStudio", this.anchorDoc);
+  Hooks.call(`${MODULE_ID}.openStudio`, this.anchorDoc);
 }
 
 function onSetAudienceKind(this: any, _event: Event, target: HTMLElement) {

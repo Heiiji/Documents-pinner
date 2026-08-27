@@ -27,6 +27,7 @@ import { cfg, cv, g } from "../fvtt";
 import { canSee } from "../data/audience";
 import { readPin } from "../data/PinData";
 import * as api from "../api";
+import { hidePinHUD, showPinHUD } from "../apps/PinHUD";
 import type { DpPinFlags } from "../types/dp";
 
 let installed = false;
@@ -140,6 +141,24 @@ export function definePinnedTile(): boolean {
         return;
       }
       return super._onClickLeft?.(event);
+    }
+
+    /**
+     * A pin gets OUR HUD, not core's TileHUD.
+     *
+     * Core's answers "where and how big is this tile"; ours answers "who can see this
+     * and what does it look like", which is the whole product. Falling through to
+     * `super` for an ordinary tile keeps the Tiles layer working exactly as before.
+     */
+    _onControl(options?: any) {
+      const result = super._onControl?.(options);
+      if (this.pin) showPinHUD(this);
+      return result;
+    }
+
+    _onRelease(options?: any) {
+      if (this.pin) hidePinHUD();
+      return super._onRelease?.(options);
     }
 
     async _draw(options?: any) {
