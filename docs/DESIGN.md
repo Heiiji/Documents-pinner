@@ -357,3 +357,119 @@ templates/  lang/  assets/  tests/  docs/  .github/workflows/
 
 `styles/card.css` is both loaded normally (for the focus reader) and fetched and inlined
 into the SVG by the rasteriser, so the two rendering tiers cannot drift.
+
+---
+
+## 13. Amendments
+
+Appended rather than folded into the sections above, so the reasoning that led to a
+decision stays readable next to the observation that changed it.
+
+### A1 — Spike 0 results (2026-08-27)
+
+Run on 14.365. The three facts that mattered most all came back favourable:
+
+| # | Assumed | Found |
+|---|---|---|
+| 1 | PIXI 7 | **7.4.3.** GLSL stays ES 1.0; no shader rewrite. |
+| 2 | `setShaderClass` usable — highest project risk | **Present**, with `PrimaryBaseSamplerShader` and `renderDepthData`. The risk is retired. |
+| — | — | `CONFIG.Canvas.layers` already carried a third-party `knight` layer, so §9's claim is confirmed in the field, not just in the docs. |
+| — | — | `MAX_TEXTURE_SIZE` 16384, so the 2048 top rung has ample headroom. |
+| — | — | `core.photosensitiveMode`, `_stats.compendiumSource`, both font APIs, `Journal.show`/`_showEntry`, `BasePlaceableHUD`, `detachWindow` and `testVisibility` all present. |
+
+**Two findings changed the plan.**
+
+**`pixi-filters` is NOT bundled** — `GlowFilter`, `OutlineFilter`, `DropShadowFilter` and
+`AdjustmentFilter` are all absent. §7's "baked > shader > CSS" preference becomes a
+requirement for glow, outline and drop-shadow: there is no filter to fall back to.
+
+**`PIXI.Filter.defaultResolution` is `null` and the renderer runs at `resolution: 1`**
+even on a Retina display, because Foundry exposes its own pixel-ratio setting. §6.1's
+`min(2048, nextPow2(px·dpr))` is therefore **amended to use
+`canvas.app.renderer.resolution`, not `window.devicePixelRatio`** — sizing from the
+display's ratio would allocate four times the VRAM for pixels Foundry never draws.
+Implemented as `fvtt.rendererResolution()`.
+
+### A2 — The probe was run in Safari, and that turned out to be useful
+
+`requestIdleCallback: false`, `deviceMemory: n/a` and the error text *"The operation is
+insecure."* are all WebKit signatures. So the run doubles as the WebKit compatibility
+baseline, and three things follow:
+
+- **`foreignObject` rasterisation taints the canvas there**, exactly as §10.3 predicted.
+  Both the readback and the WebGL upload fail. `Rasterizer.probeRasterisation` detects it
+  at `ready` by counting painted pixels and the client falls back to DOM rendering.
+- **`requestIdleCallback` does not exist**, so `fvtt.onIdle` shims it with a timeout.
+- **`navigator.deviceMemory` does not exist**, so `resolveAutoLevel` must treat an absent
+  signal as "capable" rather than "small" — assuming the worst would permanently reduce
+  effects for every Safari user.
+
+Two probe verdicts were **not** real failures and must not be read as such:
+
+- Probe 4 reported `mesh.visible undefined -> undefined` because the probe created its
+  test tile with `{ render: false }`, so no placeable was ever drawn. Fixed in the probe;
+  **still unresolved**, and `PinnedTile` therefore hides the mesh explicitly in
+  `_refreshVisibility` *as well as* through `isVisible`. The safeguard only ever hides,
+  never shows, so it cannot fight core's own occlusion and culling.
+- Probe 3 (`dropCanvasData` cancellation) is **still unresolved**. The drop handler both
+  returns `false` and sweeps away any Note created from the same drop within 250 ms. If
+  cancellation works the sweep finds nothing and costs nothing.
+
+Probe 13 was inconclusive — `#board`'s parent carries no id — so `OverlayRoot` derives its
+mount point by reference rather than by name, falling back to `#interface` and `body`.
+
+### A3 — "Baked" means rasterised CSS, not a shader
+
+A prop's pixels are produced by drawing HTML, so tint, grain, stains, edge shape, frame,
+shadow and static scanlines are simply CSS applied at rasterisation time. That costs
+nothing per frame, needs no shader at all, and survives a future PIXI major untouched —
+which is exactly what §7 asked "baked" to mean, arrived at by a route the design did not
+anticipate. With `pixi-filters` absent (A1) this is now the primary path rather than the
+preferred one.
+
+Only genuine motion needs anything else, and only the one focused reader ever runs it.
+GLSL under `src/effects/shaders/` is therefore **not shipped in v1**: it could not be
+verified without a live world, and shipping unverifiable shader code would have been
+worse than shipping none. The `setShaderClass` finding in A1 means the door is open.
+
+### A4 — Shipped presets no longer reference texture files
+
+Three presets pointed at `papers/*.webp`, which the module does not ship. Worse than
+missing: a real file would load in the DOM reader and draw *nothing* in the rasteriser,
+because an SVG rendered as an image cannot fetch — the two tiers would have disagreed
+about what a prop looks like, silently. `effects/textures.ts` generates grain, stains and
+edge masks from static `feTurbulence` as `data:` URIs instead: deterministic from the
+pin's stored seed, identical in both tiers, and no binary assets in the repository.
+
+### A5 — `DpGeometry` added to the payload
+
+Lossless pin↔prop switching (§2) needs each mode's size remembered, or switching back
+silently resizes a prop the GM had sized by hand. One group added to `DpPinFlags`;
+`naturalSize` in `pin-schema.ts` is the single definition both the store and the
+placement ghost use, so a pin cannot change size depending on which code path made it.
+
+### A6 — The sanitiser had an mXSS hole, found by its own tests
+
+Testing the scrub against a real parser rather than through its own string output caught
+it: `<scr<script>` parses into an element whose tag *name* contains `<script`, which
+survives a name-based deny-list and re-parses into a live script the next time the string
+meets a parser. Two fixes, both in `render/enrich.ts`: any tag name a well-formed parse
+could not have produced is removed on sight, and the scrub round-trips until the
+serialised output stops changing. §3's claim about secrets was already sound; this was
+the other half of the same call site.
+
+### A7 — Rendering mode is a real setting, not just a fallback
+
+§8 treats DOM rendering as a compatibility path. A2 makes it the *only* path on WebKit,
+so it is exposed as a client setting (`Prop rendering: Canvas / DOM`) rather than left
+implicit, and the README says plainly what is lost: on the DOM path props are not lit,
+fogged or occluded, because that is a property of being drawn *into* the scene.
+
+### A8 — What is still unverified
+
+Everything in §11's acceptance table marked "manual" remains manual, and none of it has
+been watched working on a real scene. Specifically: darkness and torch lighting on a prop,
+fog and roof occlusion, token z-order, the live audience toggle, secret absence in a
+player's own texture, the ownership round-trip with a manual edit in between, mode
+switching, fifty props at 60 fps, and one-handed Pinboard operation. The README says so
+too.

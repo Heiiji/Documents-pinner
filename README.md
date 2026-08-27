@@ -4,9 +4,12 @@ Pin any journal, document or image onto the map — as a small icon players clic
 full-size **readable prop lying on the scene**. Per-pin visibility the GM controls in one
 click, and subtle, immersive effects.
 
-> **Status: early development.** The pure core (visibility model, ownership ledger,
-> transform maths, effect presets) is implemented and unit-tested. The Foundry-facing
-> canvas and UI layers are in progress. Not yet installable as a working module.
+> **Status: feature-complete, not yet verified in a live world.** Every layer described
+> below is implemented, and the logic behind it is covered by 400+ unit tests running
+> under Node. What has *not* happened yet is a session at a real table: the lighting,
+> fog and occlusion behaviour, the frame rate under fifty props, and the ownership
+> round-trip are all argued for below and tested where a test can reach them, but they
+> have not been watched working on a real scene. Treat it as a beta and keep a backup.
 
 *Version française plus bas.*
 
@@ -55,9 +58,72 @@ grey box, so nobody has to switch the setting off to keep the game readable.
 
 ---
 
+## Getting a document onto the map
+
+Six ways in, none of which changes what dragging a journal onto the canvas already does
+— that gesture still makes an ordinary map note, because other modules build on it.
+
+| | |
+|---|---|
+| **Alt-drag** a journal or page from the sidebar | the primary gesture; the modifier is configurable |
+| **Pin to scene** in a journal sheet's header | |
+| **Pin a document** / **Pinboard** in the Notes controls | |
+| Right-click a journal or page in the sidebar | |
+| `Shift+P` | place the last document you used, with the last effect, no dialogs |
+| `/pin <name>` in chat | |
+
+### While placing
+
+A ghost of the real prop at real size follows the cursor, so you can see how big it is
+*here* and whether the effect reads against *this* map before committing.
+
+| | |
+|---|---|
+| wheel | rotate 15° · `Shift` for 1° · `Alt` to scale |
+| `Space` | switch between pin and prop |
+| `E` / `V` | cycle effect / audience |
+| `R` | reset rotation |
+| `Ctrl` | suspend grid snapping |
+| click | place · `Shift+click` places and stays armed |
+| `Esc`, right-click | cancel |
+
+### Once placed
+
+| | |
+|---|---|
+| `P` | open the Pinboard |
+| `Alt+Shift+V` | cycle the selected pins' audience |
+| `Alt+M` | switch the selected pins between pin and prop |
+| hold `Alt` | **peek** — every prop fades so the map underneath can be read. Players get this too |
+
+In the Pinboard: `↑↓` move, `Space` reveals, `Enter` opens Pin Studio, `L` finds it on the
+map, `O` opens it for you alone, `F` flashes it on every screen, `M` switches shape, `/`
+searches, `Esc` clears. Shift-select a range, then reveal the lot in one gesture.
+
+## Settings
+
+Anything about your machine is per-client; anything about how the table plays is
+per-world.
+
+| Setting | Scope | |
+|---|---|---|
+| Prop rendering | client | Canvas (lit, fogged, occluded) or DOM (compatibility) |
+| Effect level | client | Automatic, full, reduced or off |
+| Texture memory budget | client | Past it, the props you have not looked at longest drop to low detail |
+| Reduce detail automatically | client | Lowers every detail level one step if pins start costing too much per frame, once, with a notification |
+| Drag-to-pin modifier | client | Alt, Ctrl, Shift, or none |
+| Default shape / visibility | world | What a newly placed document becomes |
+| Grant document access on reveal | world | Whether revealing also raises ownership |
+
 ## Requirements
 
-Foundry VTT **v14** or later. No dependencies, no libWrapper, no sockets.
+Foundry VTT **v14** or later. No dependencies, no libWrapper, no sockets, no monkey-patching.
+
+Rendering props into the scene needs the browser to rasterise HTML through an SVG
+`foreignObject`. Chromium — which the Foundry desktop app uses — does this. **WebKit
+(Safari) refuses**, tainting the canvas. The module probes for this at startup and falls
+back to DOM rendering on its own; props still work there, but they are not lit, fogged or
+occluded, because that is a property of being drawn into the scene rather than over it.
 
 ## Visibility and privacy — read this
 
@@ -72,6 +138,23 @@ output for anyone who is not an owner. They never reach a player's browser.
 If you need real secrecy, keep the document out of the world until you want it seen.
 
 ---
+
+## Known limitations
+
+1. Prop text is a rasterised picture: not selectable, not readable by a screen reader,
+   and its links are not clickable. Clicking the prop opens the focus reader, which
+   restores all three, and the document sheet is always one more click away.
+2. Rasterisation inlines fonts and images. Anything the SVG context cannot resolve
+   renders as a fallback, so exotic CSS inside journal HTML will not survive.
+3. Video renders as a single frame. Animated content inside a prop is out of scope.
+4. Source edits are coalesced over about a quarter of a second, not applied per keystroke.
+5. The focus reader is deliberately never lit or occluded — at the moment you are reading
+   it, it is a UI surface rather than a scene object.
+6. Deleting a pinned document leaves the pin showing a placeholder. It is never deleted
+   automatically; that would be destructive and unrecoverable.
+7. Compendium ownership is role-based and pack-wide, so there is no per-user grant for a
+   pin whose source lives in a compendium. The pin still reveals its content.
+8. Pins are real Tiles and appear in `scene.tiles` to other modules, by design.
 
 ## Development
 
@@ -98,9 +181,12 @@ in [`docs/DESIGN.md`](docs/DESIGN.md).
 icône sur laquelle les joueurs cliquent, ou d'un **accessoire lisible posé à même la
 scène**. Une visibilité que le MJ contrôle en un clic, et des effets discrets et immersifs.
 
-> **État : développement précoce.** Le cœur pur (modèle de visibilité, registre de
-> permissions, calculs de transformation, préréglages d'effets) est implémenté et testé.
-> Les couches canvas et interface sont en cours. Pas encore installable.
+> **État : fonctionnellement complet, pas encore vérifié en conditions réelles.** Toutes
+> les couches décrites ci-dessous sont implémentées et couvertes par plus de 400 tests
+> unitaires. Ce qui n'a pas encore eu lieu, c'est une vraie séance : l'éclairage, le
+> brouillard, l'occultation, la fluidité à cinquante accessoires et l'aller-retour des
+> permissions sont argumentés et testés là où un test peut aller, mais n'ont pas été
+> observés sur une scène réelle. Considérez-le comme une bêta et gardez une sauvegarde.
 
 ## Ce que ça fait
 
@@ -142,7 +228,13 @@ teinte, cadre, texture, forme des bords — et ne coupe que le mouvement.
 
 ## Prérequis
 
-Foundry VTT **v14** ou supérieur. Aucune dépendance.
+Foundry VTT **v14** ou supérieur. Aucune dépendance, aucun socket.
+
+Le rendu des accessoires dans la scène nécessite que le navigateur rastérise du HTML via
+un `foreignObject` SVG. Chromium — utilisé par l'application de bureau Foundry — le fait.
+**WebKit (Safari) refuse.** Le module le détecte au démarrage et bascule seul sur le rendu
+DOM : les accessoires fonctionnent toujours, mais ne sont ni éclairés, ni masqués par le
+brouillard, ni occultés.
 
 ## Visibilité et confidentialité
 
