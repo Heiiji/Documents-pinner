@@ -1,0 +1,234 @@
+/*
+ * The Pinboard.
+ *
+ * A dense list, because a GM scanning it mid-session is looking for one row among
+ * twelve and every pixel of vertical padding is a row that fell off the screen. The
+ * accents are carried on the leading edge of a row rather than as a background wash,
+ * so the state of a row survives being read out of the corner of an eye.
+ */
+
+.dp-board {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  block-size: 100%;
+  color: var(--color-text-primary, #eee);
+}
+
+.dp-board__head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.dp-board__scene {
+  margin: 0;
+  font-size: 1em;
+  font-variant: small-caps;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dp-board__search {
+  flex: 1;
+  min-inline-size: 8rem;
+}
+
+.dp-board__filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  align-items: center;
+}
+
+.dp-board__filter {
+  padding: 0.1rem 0.55rem;
+  border: 1px solid var(--color-border-light-1, #7a7971);
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  font-size: 0.85em;
+  cursor: pointer;
+
+  &[aria-pressed="true"] {
+    background: var(--color-warm-1, #c9ad6a);
+    color: #1b1b23;
+    border-color: transparent;
+  }
+}
+
+.dp-board__count {
+  opacity: 0.7;
+  font-variant-numeric: tabular-nums;
+}
+
+.dp-board__level {
+  margin-inline-start: auto;
+}
+
+.dp-board__list {
+  flex: 1;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow-y: auto;
+  border: 1px solid color-mix(in oklab, var(--color-border-light-1, #7a7971) 60%, transparent);
+  border-radius: 0.35rem;
+}
+
+.dp-board__empty {
+  padding: 1.5rem;
+  text-align: center;
+  opacity: 0.7;
+  font-style: italic;
+}
+
+.dp-row {
+  display: grid;
+  grid-template-columns: auto auto 1fr auto auto auto auto auto;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.25rem 0.5rem;
+  border-inline-start: 3px solid transparent;
+  border-block-end: 1px solid color-mix(in oklab, var(--color-border-light-1, #7a7971) 30%, transparent);
+  cursor: default;
+
+  /* Off-screen rows in a long list skip layout and paint entirely. */
+  content-visibility: auto;
+  contain-intrinsic-size: auto 2.25rem;
+
+  &:hover {
+    background: color-mix(in oklab, var(--color-warm-1, #c9ad6a) 10%, transparent);
+  }
+
+  &[aria-selected="true"] {
+    border-inline-start-color: var(--color-warm-1, #c9ad6a);
+    background: color-mix(in oklab, var(--color-warm-1, #c9ad6a) 16%, transparent);
+  }
+
+  &[data-dp-visible="false"] .dp-row__name {
+    opacity: 0.6;
+    font-style: italic;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--color-warm-1, #c9ad6a);
+    outline-offset: -2px;
+  }
+}
+
+.dp-row__grip {
+  cursor: grab;
+  opacity: 0.4;
+  letter-spacing: -0.15em;
+
+  &:hover {
+    opacity: 0.9;
+  }
+}
+
+.dp-row__thumb {
+  inline-size: 1.6rem;
+  block-size: 1.6rem;
+  border-radius: 0.2rem;
+  object-fit: cover;
+  background: color-mix(in oklab, var(--color-bg-option, #1b1b23) 70%, transparent);
+
+  &--missing {
+    display: grid;
+    place-items: center;
+    font-size: 0.8em;
+    opacity: 0.5;
+  }
+}
+
+.dp-row__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dp-row__mode {
+  font-size: 0.7em;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  opacity: 0.65;
+}
+
+.dp-row__fx {
+  max-inline-size: 8ch;
+  padding: 0.05rem 0.4rem;
+  border: 1px solid color-mix(in oklab, var(--color-border-light-1, #7a7971) 70%, transparent);
+  border-radius: 0.25rem;
+  background: transparent;
+  color: inherit;
+  font-size: 0.75em;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dp-row__icon {
+  inline-size: 1.6rem;
+  block-size: 1.6rem;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: none;
+  border-radius: 0.25rem;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  opacity: 0.7;
+
+  &:hover,
+  &:focus-visible {
+    opacity: 1;
+    background: color-mix(in oklab, var(--color-warm-1, #c9ad6a) 20%, transparent);
+  }
+}
+
+.dp-board__bulk,
+.dp-board__foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.dp-board__bulk {
+  padding: 0.35rem 0.5rem;
+  border-radius: 0.35rem;
+  background: color-mix(in oklab, var(--color-warm-1, #c9ad6a) 14%, transparent);
+}
+
+.dp-board__selected {
+  font-weight: 600;
+}
+
+.dp-board__totals {
+  margin-inline-start: auto;
+  font-size: 0.85em;
+  opacity: 0.8;
+  font-variant-numeric: tabular-nums;
+}
+
+.dp-board__warn {
+  color: var(--color-warm-1, #c9ad6a);
+  font-weight: 700;
+}
+
+.dp-board__help {
+  margin: 0;
+  font-size: 0.75em;
+  opacity: 0.6;
+  text-align: center;
+}
+
+.dp-danger {
+  border-color: color-mix(in oklab, #b03a2e 70%, transparent);
+  color: color-mix(in oklab, #e8907f 85%, var(--color-text-primary, #eee));
+}

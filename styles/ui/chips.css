@@ -1,0 +1,92 @@
+/*
+ * Avatar chips.
+ *
+ * The chip carries two facts at once, so it needs two visual channels that cannot be
+ * confused with each other: FILL answers "can they see it", and the KEY BADGE answers
+ * "does their access disagree". Colour alone would fail for a GM who cannot separate
+ * the ring hues, so filled/hollow is also a difference in shape weight and opacity,
+ * and the mismatch state adds a glyph rather than only a colour.
+ */
+
+.dp-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+.dp-chips__empty {
+  font-size: 0.8em;
+  opacity: 0.65;
+  font-style: italic;
+}
+
+.dp-chip {
+  --dp-chip-color: var(--color-border-light-1, #7a7971);
+  --dp-chip-size: 1.75rem;
+
+  position: relative;
+  inline-size: var(--dp-chip-size);
+  block-size: var(--dp-chip-size);
+  padding: 0;
+  border: 2px solid var(--dp-chip-color);
+  border-radius: 50%;
+  background: color-mix(in oklab, var(--dp-chip-color) 70%, transparent);
+  color: var(--color-text-primary, #eee);
+  display: grid;
+  place-items: center;
+  overflow: visible;
+  cursor: pointer;
+  transition:
+    background-color 120ms ease,
+    opacity 120ms ease,
+    transform 120ms ease;
+
+  &:hover,
+  &:focus-visible {
+    transform: scale(1.12);
+    outline: none;
+    box-shadow: 0 0 0 2px color-mix(in oklab, var(--dp-chip-color) 60%, transparent);
+  }
+
+  /* Hollow: no fill, a dashed ring and dimmed content, so the difference survives
+     both a colourblind reader and a projector with poor contrast. */
+  &[aria-checked="false"] {
+    background: transparent;
+    border-style: dashed;
+    opacity: 0.55;
+  }
+}
+
+.dp-chip__avatar {
+  inline-size: 100%;
+  block-size: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.dp-chip__initial {
+  font-size: 0.7em;
+  font-weight: 700;
+  line-height: 1;
+  text-shadow: 0 1px 2px rgb(0 0 0 / 60%);
+}
+
+/* The mismatch badge. Amber rather than red: this is "check this", not "this failed". */
+.dp-chip__key {
+  position: absolute;
+  inset-block-end: -0.15rem;
+  inset-inline-end: -0.25rem;
+  font-size: 0.6em;
+  line-height: 1;
+  padding: 0.1em 0.15em;
+  border-radius: 0.35em;
+  background: var(--color-warm-1, #c9ad6a);
+  color: #1b1b23;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 50%);
+}
+
+.dp-chips[data-dp-size="sm"] .dp-chip {
+  --dp-chip-size: 1.25rem;
+  border-width: 1.5px;
+}

@@ -1,0 +1,177 @@
+/*
+ * The Pin HUD.
+ *
+ * Two columns of icons flanking the pin's name, with palettes that open BELOW rather
+ * than over — the thing being configured is the thing on the map, and a palette that
+ * covered it would make "does this read against this map?" unanswerable at exactly the
+ * moment it is being asked.
+ */
+
+.dp-hud {
+  display: grid;
+  grid-template-areas:
+    "left name right"
+    "palette palette palette";
+  grid-template-columns: auto 1fr auto;
+  align-items: start;
+  gap: 0.35rem;
+  font-size: var(--font-size-14, 0.875rem);
+  color: var(--color-text-primary, #eee);
+  pointer-events: auto;
+}
+
+.dp-hud__col {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+
+  &--left {
+    grid-area: left;
+  }
+  &--right {
+    grid-area: right;
+  }
+}
+
+.dp-hud__name {
+  grid-area: name;
+  align-self: start;
+  justify-self: center;
+  max-inline-size: 14ch;
+  padding: 0.2rem 0.5rem;
+  border-radius: 0.35rem;
+  background: color-mix(in oklab, var(--color-bg-option, #1b1b23) 82%, transparent);
+  text-align: center;
+  font-variant: small-caps;
+  letter-spacing: 0.03em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dp-hud__btn {
+  inline-size: 2rem;
+  block-size: 2rem;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid var(--color-border-light-1, #7a7971);
+  border-radius: 0.35rem;
+  background: color-mix(in oklab, var(--color-bg-option, #1b1b23) 85%, transparent);
+  color: inherit;
+  cursor: pointer;
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease;
+
+  &:hover,
+  &:focus-visible {
+    border-color: var(--color-warm-1, #c9ad6a);
+    background: color-mix(in oklab, var(--color-warm-1, #c9ad6a) 22%, var(--color-bg-option, #1b1b23));
+    outline: none;
+  }
+
+  &[aria-pressed="true"] {
+    border-color: var(--color-warm-1, #c9ad6a);
+    box-shadow: inset 0 0 0 1px var(--color-warm-1, #c9ad6a);
+  }
+}
+
+.dp-hud__palette {
+  grid-area: palette;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  min-inline-size: 18rem;
+  margin-block-start: 0.25rem;
+  padding: 0.5rem;
+  border: 1px solid var(--color-border-light-1, #7a7971);
+  border-radius: 0.45rem;
+  /* A solid ground, never backdrop-filter: over a WebGL canvas that forces a per-frame
+     readback of the composited backdrop and costs more than every effect combined. */
+  background: color-mix(in oklab, var(--color-bg-option, #1b1b23) 94%, transparent);
+  box-shadow: 0 6px 18px rgb(0 0 0 / 45%);
+
+  &[hidden] {
+    display: none;
+  }
+}
+
+.dp-hud__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.dp-hud__quick {
+  padding: 0.15rem 0.5rem;
+  border: 1px solid var(--color-border-light-1, #7a7971);
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+
+  &[aria-pressed="true"] {
+    background: var(--color-warm-1, #c9ad6a);
+    color: #1b1b23;
+    border-color: transparent;
+  }
+}
+
+.dp-hud__sync {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin-inline-start: auto;
+  font-size: 0.85em;
+  cursor: pointer;
+}
+
+.dp-hud__status {
+  margin: 0;
+  font-size: 0.8em;
+  opacity: 0.8;
+}
+
+.dp-hud__swatches {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(5.5rem, 1fr));
+  gap: 0.3rem;
+  max-block-size: 12rem;
+  overflow-y: auto;
+}
+
+.dp-hud__swatch {
+  padding: 0.3rem;
+  border: 1px solid var(--color-border-light-1, #7a7971);
+  border-radius: 0.3rem;
+  background: color-mix(in oklab, var(--color-bg-option, #1b1b23) 60%, transparent);
+  color: inherit;
+  font-size: 0.75em;
+  cursor: pointer;
+  text-align: start;
+
+  &[aria-pressed="true"] {
+    border-color: var(--color-warm-1, #c9ad6a);
+    background: color-mix(in oklab, var(--color-warm-1, #c9ad6a) 18%, transparent);
+  }
+}
+
+.dp-hud__swatch-label {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dp-hud__slider {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85em;
+
+  & input {
+    flex: 1;
+  }
+}

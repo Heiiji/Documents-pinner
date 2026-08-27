@@ -1,0 +1,79 @@
+/*
+ * The placement ghost.
+ *
+ * Positioned in SCENE space inside the overlay root, which already carries the stage
+ * matrix — so the body scales with the map and stays honest about how big the prop
+ * will actually be, while the legend counter-scales through `--dp-ghost-zoom` and
+ * stays readable at any zoom. Showing the legend at scene scale would make it
+ * illegible zoomed out and enormous zoomed in, which is the whole reason for the
+ * separate channel.
+ */
+
+.dp-ghost {
+  position: absolute;
+  /* Centred on the cursor: the pointer marks where the middle of the prop lands, not
+     its corner, because that is what a GM is aiming with. */
+  translate: -50% -50%;
+  transform-origin: 50% 50%;
+  border: 2px dashed var(--color-warm-1, #c9ad6a);
+  border-radius: 0.25rem;
+  background: color-mix(in oklab, var(--color-warm-1, #c9ad6a) 12%, transparent);
+  opacity: 0.65;
+  pointer-events: none;
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+}
+
+.dp-ghost__chip,
+.dp-ghost__legend {
+  position: absolute;
+  inset-block-start: 100%;
+  inset-inline-start: 50%;
+  scale: var(--dp-ghost-zoom, 1);
+  transform-origin: 0 0;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.dp-ghost__chip {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  margin-block-start: 0.4rem;
+  padding: 0.3rem 0.6rem;
+  border: 1px solid var(--color-border-light-1, #7a7971);
+  border-radius: 0.35rem;
+  background: color-mix(in oklab, var(--color-bg-option, #1b1b23) 92%, transparent);
+  color: var(--color-text-primary, #eee);
+  box-shadow: 0 4px 14px rgb(0 0 0 / 50%);
+}
+
+.dp-ghost__name {
+  font-variant: small-caps;
+  letter-spacing: 0.04em;
+}
+
+.dp-ghost__meta {
+  font-size: 0.78em;
+  opacity: 0.75;
+}
+
+/* The self-teaching half: nobody reads documentation mid-prep, so the gesture
+   vocabulary is printed beside the thing it operates on. */
+.dp-ghost__legend {
+  display: flex;
+  flex-direction: column;
+  gap: 0.05rem;
+  margin-block-start: 4.2rem;
+  padding: 0.3rem 0.6rem;
+  border-radius: 0.3rem;
+  background: color-mix(in oklab, var(--color-bg-option, #1b1b23) 78%, transparent);
+  color: var(--color-text-primary, #eee);
+  font-size: 0.72em;
+  opacity: 0.85;
+}
+
+.dp-ghost[data-dp-mode="pin"] {
+  border-radius: 50%;
+}

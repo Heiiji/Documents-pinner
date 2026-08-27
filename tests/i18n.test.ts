@@ -40,7 +40,10 @@ function referencedKeys(): Map<string, string> {
 }
 
 describe("localisation files", () => {
-  const tables = Object.fromEntries(LANGS.map((l) => [l, load(l)])) as Record<string, Record<string, string>>;
+  const tables = Object.fromEntries(LANGS.map((l) => [l, load(l)])) as Record<
+    string,
+    Record<string, string>
+  >;
 
   it("are key-for-key parallel across every language", () => {
     const reference = Object.keys(tables.en).sort();
@@ -67,6 +70,40 @@ describe("localisation files", () => {
         expect(placeholders(tables[lang][key]), `${lang} ${key}`).toEqual(expected);
       }
     }
+  });
+
+  /**
+   * Keys built by interpolation — `DP.chip.${state}`, `DP.settings.${key}.name` — are
+   * invisible to the literal scan above, so the families are listed explicitly. A key
+   * that only ever appears as a template is exactly the one that goes missing.
+   */
+  it("define every key built from a template rather than written as a literal", () => {
+    const families = [
+      ["DP.chip.", ["visible", "hidden", "seesButCannotOpen", "opensButCannotSee"]],
+      ["DP.board.mode.", ["pin", "prop"]],
+      [
+        "DP.settings.",
+        [
+          "rendering",
+          "effectsLevel",
+          "vramBudgetMb",
+          "autoDegrade",
+          "dropModifier",
+          "placementLegend",
+          "defaultMode",
+          "defaultAudience",
+          "defaultOwnershipSync",
+        ].flatMap((k) => [`${k}.name`, `${k}.hint`]),
+      ],
+    ] as const;
+
+    const missing: string[] = [];
+    for (const [prefix, leaves] of families) {
+      for (const leaf of leaves) {
+        if (!(`${prefix}${leaf}` in tables.en)) missing.push(`${prefix}${leaf}`);
+      }
+    }
+    expect(missing, `undefined templated i18n keys:\n${missing.join("\n")}`).toEqual([]);
   });
 
   it("define every DP.* key the source and templates reference", () => {

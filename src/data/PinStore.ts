@@ -26,7 +26,7 @@ import { g, internal } from "../fvtt";
 import type { DpMode, DpPinFlags } from "../types/dp";
 import { anchorHidden } from "./audience";
 import { readPin } from "./PinData";
-import { defaultPin, mergePin, validatePin, type PinPatch } from "./pin-schema";
+import { defaultPin, mergePin, naturalSize, validatePin, type PinPatch } from "./pin-schema";
 
 // ---------------------------------------------------------------------------
 // Per-anchor serialisation
@@ -196,18 +196,10 @@ export function convertMode(
   });
 }
 
-/**
- * A size for a mode that has never been seen before.
- *
- * A pin is one grid square, matching a Map Note's footprint so the two read as peers.
- * A prop defaults to a portrait sheet four squares wide, which is the shape of nearly
- * every letter, warrant and handbill a GM pins; content-fitting refines it once the
- * source has been measured.
- */
+/** The grid this scene uses, or a sane stand-in outside a canvas. */
 function derivedSize(mode: DpMode): { width: number; height: number } {
   const grid = g()?.canvas?.scene?.grid?.size ?? g()?.scenes?.current?.grid?.size ?? 100;
-  if (mode === "pin") return { width: grid, height: grid };
-  return { width: grid * 4, height: Math.round(grid * 4 * 1.414) };
+  return naturalSize(mode, grid);
 }
 
 /**

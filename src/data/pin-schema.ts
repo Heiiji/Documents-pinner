@@ -383,6 +383,26 @@ export function mergePin(current: DpPinFlags, patch: PinPatch): PinValidationRes
   return validatePin(deepMerge(current, patch));
 }
 
+/**
+ * The size a mode takes when nothing has been remembered for it.
+ *
+ * A pin is one grid square, matching a Map Note's footprint so the two read as peers
+ * on the same map. A prop is a portrait sheet four squares wide — the shape of nearly
+ * every letter, warrant and handbill a GM pins — which content-fitting then refines
+ * once the source has actually been measured.
+ *
+ * Pure and shared, because the store, the placement ghost and the mode switch must all
+ * arrive at the same number or a pin changes size when you look at it twice.
+ */
+export function naturalSize(
+  mode: DpPinFlags["mode"],
+  gridSize: number
+): { width: number; height: number } {
+  const grid = Number.isFinite(gridSize) && gridSize > 0 ? gridSize : 100;
+  if (mode === "pin") return { width: grid, height: grid };
+  return { width: grid * 4, height: Math.round(grid * 4 * 1.414) };
+}
+
 /** Whether a payload describes a pin that can actually resolve its source. */
 export function hasResolvableSource(pin: DpPinFlags): boolean {
   return pin.source.kind === "document" ? !!pin.source.uuid : !!pin.source.src;

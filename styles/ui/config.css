@@ -1,0 +1,28 @@
+/*
+ * The row injected into the core Tile config sheet.
+ *
+ * Deliberately three elements and nothing else. Injecting into a core ApplicationV2's
+ * DOM is the most fragile thing this module does, so it is scoped under `.dp-scope`,
+ * styled only in terms of its own children, and inherits everything else from the
+ * sheet it is a guest in.
+ */
+
+.dp-config {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0;
+  border-block-start: 1px solid color-mix(in oklab, var(--color-border-light-1, #7a7971) 50%, transparent);
+}
+
+.dp-config__row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  cursor: pointer;
+}
+
+.dp-config__studio {
+  margin-inline-start: auto;
+}

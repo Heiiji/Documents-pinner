@@ -15,4 +15,10 @@
 
 @import url("./base.css") layer(dp.base);
 @import url("./fx/_props.css") layer(dp.fx);
+@import url("./ui/chips.css") layer(dp.ui);
+@import url("./ui/hud.css") layer(dp.ui);
+@import url("./ui/board.css") layer(dp.ui);
+@import url("./ui/picker.css") layer(dp.ui);
+@import url("./ui/ghost.css") layer(dp.ui);
+@import url("./ui/config.css") layer(dp.ui);
 @import url("./theme.css") layer(dp.theme);

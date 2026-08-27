@@ -1,0 +1,94 @@
+/*
+ * The document picker.
+ *
+ * A flat list, not a tree: a GM reaching for this already knows the name and does not
+ * want to remember which journal they filed it under. The parent is shown as trailing
+ * context rather than as structure, so the name a GM is scanning for is always the
+ * first thing on the line.
+ */
+
+.dp-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  block-size: 100%;
+  color: var(--color-text-primary, #eee);
+}
+
+.dp-picker__search {
+  inline-size: 100%;
+}
+
+.dp-picker__list {
+  flex: 1;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow-y: auto;
+  border: 1px solid color-mix(in oklab, var(--color-border-light-1, #7a7971) 60%, transparent);
+  border-radius: 0.35rem;
+}
+
+.dp-picker__item {
+  display: grid;
+  grid-template-columns: auto 1fr auto auto;
+  align-items: baseline;
+  gap: 0.5rem;
+  padding: 0.3rem 0.55rem;
+  cursor: pointer;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 1.9rem;
+
+  &:hover,
+  &:focus-visible {
+    background: color-mix(in oklab, var(--color-warm-1, #c9ad6a) 16%, transparent);
+    outline: none;
+  }
+
+  /* The first row is what Enter takes, so it is marked as such rather than left to
+     be discovered by pressing Enter and seeing what happens. */
+  &:first-child {
+    box-shadow: inset 3px 0 0 var(--color-warm-1, #c9ad6a);
+  }
+}
+
+.dp-picker__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dp-picker__context {
+  font-size: 0.78em;
+  opacity: 0.6;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-inline-size: 14ch;
+}
+
+.dp-picker__type {
+  font-size: 0.68em;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  opacity: 0.5;
+}
+
+.dp-picker__empty {
+  padding: 1.5rem;
+  text-align: center;
+  opacity: 0.7;
+  font-style: italic;
+}
+
+.dp-picker__foot {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.dp-picker__hint {
+  font-size: 0.78em;
+  opacity: 0.6;
+  margin-inline-start: auto;
+}

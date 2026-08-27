@@ -89,6 +89,15 @@ export function resolveSourceSync(pin: DpPinFlags): any {
  * step with it, which is what `followName` is for — a GM who renames "Letter" to "The
  * Duke's Letter" should not have to find every pin of it.
  */
+/** The label for a source that has no pin yet — the placement ghost's chip. */
+export function labelForSource(source: DpSource): string {
+  if (source.kind === "image" && source.src) {
+    return decodeURIComponent(source.src.split("/").pop() ?? "").replace(/\.[a-z0-9]+$/i, "");
+  }
+  const doc = resolveUuidSync(source.uuid);
+  return doc?.name ?? g()?.i18n?.localize?.("DP.pin.untitled") ?? "Pin";
+}
+
 export function labelFor(pin: DpPinFlags): string {
   if (pin.display.label) return pin.display.label;
   const source = resolveSourceSync(pin);
