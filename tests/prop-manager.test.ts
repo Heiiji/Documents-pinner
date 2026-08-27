@@ -185,3 +185,23 @@ describe("the mesh under a prop", () => {
     expect(tiles[0].object.mesh.alpha).toBe(1);
   });
 });
+
+describe("switching the rendering setting mid-session", () => {
+  it("clears the DOM cards when the canvas path takes over again", async () => {
+    const { domPropCount } = await import("../src/canvas/DomPropTier");
+    const game = (globalThis as any).game;
+
+    // Start on the DOM path.
+    await game.settings.set("documents-pinner", "rendering", "dom");
+    manager.refresh();
+    await settle();
+    expect(domPropCount()).toBe(1);
+
+    // ...and back. Without the clear, every card stayed mounted over the meshes now
+    // drawing the same props.
+    await game.settings.set("documents-pinner", "rendering", "canvas");
+    manager.refresh();
+    await settle();
+    expect(domPropCount()).toBe(0);
+  });
+});

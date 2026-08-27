@@ -495,7 +495,11 @@ class Manager {
       }
     }
 
+    // Both branches, always: a GM switching the rendering setting back to canvas
+    // mid-session would otherwise leave every mounted card in the overlay forever, on top
+    // of the meshes now drawing the same props.
     if (dom) syncDomTier(domEntries);
+    else clearDomTier();
     this.#queue = queue.sort((a, b) => a.priority - b.priority);
     this.applyAlpha();
     this.#trim();
