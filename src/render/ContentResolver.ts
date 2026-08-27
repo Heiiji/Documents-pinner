@@ -130,7 +130,7 @@ export async function resolveCard(
   }
 
   const source = await api.resolveSource(pin);
-  if (!source) return placeholder(pin, common);
+  if (!source) return placeholder(common);
 
   const { text, kind } = rawContentOf(source);
   const { html, isOwner } = await enrichFor(source, text);
@@ -148,7 +148,7 @@ export async function resolveCard(
   };
 }
 
-function placeholder(pin: DpPinFlags, common: any): ResolvedCard {
+function placeholder(common: any): ResolvedCard {
   const title = t("DP.card.missing");
   return {
     html: cardHtml({ ...common, title, bodyHtml: "", missing: true, showTitle: false }),

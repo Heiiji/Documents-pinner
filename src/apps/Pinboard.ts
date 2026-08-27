@@ -20,6 +20,7 @@
  * - **Detachable**, so it can live on a second monitor for the whole session.
  */
 
+import { MODULE_ID } from "../const";
 import { cv, g, internal, ns } from "../fvtt";
 import { t, tn } from "../i18n";
 import { escapeAttr, escapeHtml } from "../html";
@@ -28,6 +29,7 @@ import * as store from "../data/PinStore";
 import { readPin } from "../data/PinData";
 import { syncAnchor } from "../data/ownership-sync";
 import { getCorePreset } from "../effects/presets/core-presets";
+import { allPresets } from "../effects/preset-library";
 import { chipsMarkup } from "./chips";
 import { chipUsersFor } from "./PinHUD";
 import {
@@ -282,7 +284,7 @@ export function definePinboard(): any {
       // Preserve the caret: re-rendering on every keystroke would otherwise send the
       // cursor to the start of the search box and make typing a word impossible.
       const active = content.querySelector<HTMLInputElement>(".dp-board__search");
-      const caret = active === document.activeElement ? active.selectionStart : null;
+      const caret = active && active === document.activeElement ? active.selectionStart : null;
 
       content.replaceChildren(result);
       this.#wire(content);
@@ -399,11 +401,14 @@ export function definePinboard(): any {
 
       const actions: Record<string, () => void> = {
         " ": () => void api.toggleVisibility(doc)?.then(() => this.render()),
-        Enter: () => Hooks.call("documents-pinner.openStudio", doc),
+        Enter: () => Hooks.call(`${MODULE_ID}.openStudio`, doc),
         l: () => void api.locate(doc),
         o: () => void api.openLocally(doc),
         f: () => api.flash(doc),
         m: () => void api.toggleMode(doc)?.then(() => this.render()),
+        // Open the document on every screen in this pin's audience, right now. Not the
+        // same as revealing: it pushes the sheet up rather than making the pin visible.
+        s: () => void api.showToAudience(doc),
       };
       const action = actions[event.key] ?? actions[event.key.toLowerCase()];
       if (action) {
@@ -464,12 +469,29 @@ function onLocate(this: any, _event: Event, target: HTMLElement) {
   void api.locate(this.docFor(rowIdOf(target)));
 }
 
-function onCycleEffect(this: any, _event: Event, target: HTMLElement) {
-  Hooks.call("documents-pinner.openStudio", this.docFor(rowIdOf(target)), "appearance");
+/**
+ * Step to the next preset in the library.
+ *
+ * A cycle rather than a menu: the row already shows which effect is on, and a GM
+ * comparing two of them against the same map wants one click per comparison, not a
+ * dropdown opened and dismissed each time. Shift steps backwards, so overshooting by
+ * one costs one keystroke rather than a full lap.
+ */
+function onCycleEffect(this: any, event: Event, target: HTMLElement) {
+  const doc = this.docFor(rowIdOf(target));
+  const pin = readPin(doc);
+  if (!pin) return;
+
+  const presets = allPresets();
+  const step = (event as MouseEvent).shiftKey ? -1 : 1;
+  const current = presets.findIndex((preset) => preset.id === pin.effect.id);
+  const next = presets[(current + step + presets.length) % presets.length];
+
+  void api.patch(doc, { effect: { id: next.id } })?.then(() => this.render());
 }
 
 function onRowMenu(this: any, _event: Event, target: HTMLElement) {
-  Hooks.call("documents-pinner.openStudio", this.docFor(rowIdOf(target)));
+  Hooks.call(`${MODULE_ID}.openStudio`, this.docFor(rowIdOf(target)));
 }
 
 function rowIdOf(target: HTMLElement): string {
@@ -531,7 +553,7 @@ async function onBulkDelete(this: any) {
 }
 
 function onPlace(this: any) {
-  Hooks.call("documents-pinner.openPicker");
+  Hooks.call(`${MODULE_ID}.openPicker`);
 }
 
 /** Open the Pinboard, reusing the existing window rather than stacking copies. */

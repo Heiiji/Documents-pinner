@@ -30,6 +30,7 @@ import {
   rectsIntersect,
   rotatedBounds,
   sameMat,
+  scaleOf,
   stageMatrix,
   visibleSceneRect,
   type Mat,
@@ -296,7 +297,7 @@ class Manager {
 
       const longEdge = textureLongEdge(
         tier,
-        Math.max(tile.document.width, tile.document.height) * (matrix.a || 1),
+        Math.max(tile.document.width, tile.document.height) * scaleOf(matrix),
         resolution
       );
       const key = this.#keyFor(tile, pin, longEdge);
@@ -401,7 +402,7 @@ class Manager {
     const size = { width: tile.document.width, height: tile.document.height };
     const longEdge = textureLongEdge(
       record.tier,
-      Math.max(size.width, size.height) * (stageMatrix().a || 1),
+      Math.max(size.width, size.height) * scaleOf(stageMatrix()),
       rendererResolution()
     );
     if (!longEdge) return;

@@ -57,8 +57,11 @@ jobs:
 
       - name: Package
         run: |
+          # No templates or assets directory: markup is built in TypeScript and every
+          # texture is generated procedurally as a data: URI, so the module ships no
+          # binary assets at all. Listing an empty directory here would fail the build.
           zip -r module.zip \
-            module.json dist styles templates lang assets \
+            module.json dist styles lang \
             README.md CHANGELOG.md LICENSE \
             -x "*.DS_Store" "*.map"
 

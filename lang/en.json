@@ -16,7 +16,7 @@
   "DP.board.filterPins": "Pins",
   "DP.board.filterProps": "Props",
   "DP.board.filterVisible": "Visible",
-  "DP.board.help": "↑↓ move · Space reveal · Enter configure · L find · O open · F flash · M shape · / search · Esc clear",
+  "DP.board.help": "↑↓ move · Space reveal · Enter configure · L find · O open · S show to players · F flash · M shape · / search · Esc clear",
   "DP.board.hideAll": "Hide all",
   "DP.board.hideSelected": "Hide",
   "DP.board.level": "Scene level",

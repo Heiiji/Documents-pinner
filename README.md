@@ -97,8 +97,8 @@ A ghost of the real prop at real size follows the cursor, so you can see how big
 | hold `Alt` | **peek** — every prop fades so the map underneath can be read. Players get this too |
 
 In the Pinboard: `↑↓` move, `Space` reveals, `Enter` opens Pin Studio, `L` finds it on the
-map, `O` opens it for you alone, `F` flashes it on every screen, `M` switches shape, `/`
-searches, `Esc` clears. Shift-select a range, then reveal the lot in one gesture.
+map, `O` opens it for you alone, `S` pushes it to every screen in its audience, `F`
+flashes it, `M` switches shape, `/` searches, `Esc` clears. Shift-select a range, then reveal the lot in one gesture.
 
 ## Settings
 

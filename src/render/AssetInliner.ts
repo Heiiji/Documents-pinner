@@ -61,7 +61,10 @@ function evictTo(limit: number): void {
 export async function inlineAsset(url: string): Promise<string | null> {
   if (!url) return null;
   if (url.startsWith("data:")) return url;
-  if (/^[a-z][a-z0-9+.-]*:/i.test(url) && !url.startsWith(location.origin)) return null;
+  // Cross-origin is refused rather than attempted: the fetch would fail CORS, and even
+  // if it succeeded the result would taint the canvas it is drawn into.
+  const origin = typeof location === "undefined" ? "" : location.origin;
+  if (/^[a-z][a-z0-9+.-]*:/i.test(url) && !(origin && url.startsWith(origin))) return null;
 
   const cached = cache.get(url);
   if (cached) {

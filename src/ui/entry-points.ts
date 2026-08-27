@@ -212,8 +212,12 @@ export function onRenderConfig(app: any, element: HTMLElement): void {
       ? `<button type="button" class="dp-config__studio">${t("DP.config.openStudio")}</button>`
       : "");
 
+  // Appending is the fallback, not an afterthought: `anchor?.before()` on a sheet with
+  // no footer is a silent no-op, and a row that quietly fails to appear is the worst
+  // outcome for the one piece of DOM this module injects into a core application.
   const anchor = element.querySelector(".form-footer") ?? element.querySelector("footer");
-  anchor?.before(section);
+  if (anchor) anchor.before(section);
+  else (element.querySelector("form") ?? element).appendChild(section);
 
   section.querySelector(".dp-config__toggle")?.addEventListener("change", (event) => {
     const checked = (event.target as HTMLInputElement).checked;

@@ -16,7 +16,7 @@
   "DP.board.filterPins": "Épingles",
   "DP.board.filterProps": "Accessoires",
   "DP.board.filterVisible": "Visibles",
-  "DP.board.help": "↑↓ naviguer · Espace révéler · Entrée configurer · L localiser · O ouvrir · F clignoter · M forme · / rechercher · Échap effacer",
+  "DP.board.help": "↑↓ naviguer · Espace révéler · Entrée configurer · L localiser · O ouvrir · S montrer aux joueurs · F clignoter · M forme · / rechercher · Échap effacer",
   "DP.board.hideAll": "Tout masquer",
   "DP.board.hideSelected": "Masquer",
   "DP.board.level": "Niveau de la scène",

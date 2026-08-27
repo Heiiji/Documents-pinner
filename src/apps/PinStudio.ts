@@ -88,7 +88,7 @@ function text(name: string, value: string, placeholderKey?: string): string {
 // Tabs
 // ---------------------------------------------------------------------------
 
-function contentTab(doc: any, pin: DpPinFlags): string {
+function contentTab(pin: DpPinFlags): string {
   const source = api.resolveSourceSync(pin);
   return (
     `<section class="dp-studio__tab" data-dp-tab="content">` +
@@ -121,7 +121,7 @@ function contentTab(doc: any, pin: DpPinFlags): string {
   );
 }
 
-function appearanceTab(doc: any, pin: DpPinFlags): string {
+function appearanceTab(pin: DpPinFlags): string {
   const swatches = CORE_PRESETS.map(
     (preset) =>
       `<button type="button" class="dp-studio__swatch" data-action="setEffect"` +
@@ -224,9 +224,9 @@ export function studioMarkup(doc: any, pin: DpPinFlags, active: TabId): string {
 
   const body =
     active === "content"
-      ? contentTab(doc, pin)
+      ? contentTab(pin)
       : active === "appearance"
-        ? appearanceTab(doc, pin)
+        ? appearanceTab(pin)
         : audienceTab(doc, pin);
 
   return (

@@ -75,7 +75,7 @@ export function writeParam(preset: DpPreset, path: string, value: number): DpPre
   return { ...preset, params };
 }
 
-function listMarkup(presets: DpPreset[], selectedId: string): string {
+function listMarkup(presets: readonly DpPreset[], selectedId: string): string {
   const item = (preset: DpPreset) =>
     `<li><button type="button" class="dp-presets__item" data-action="select"` +
     ` data-dp-preset="${escapeAttr(preset.id)}" aria-pressed="${preset.id === selectedId}">` +
@@ -155,7 +155,7 @@ function paramsMarkup(preset: DpPreset, editable: boolean): string {
 }
 
 export function presetStudioMarkup(
-  presets: DpPreset[],
+  presets: readonly DpPreset[],
   selected: DpPreset,
   backdrop: Backdrop,
   frozen: boolean

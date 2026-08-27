@@ -2,8 +2,10 @@ import { defineConfig } from "vite";
 
 /**
  * The repository root IS the Foundry module folder (symlink it into Data/modules).
- * Vite therefore builds ONLY the TypeScript in src/ into dist/; templates, lang,
- * assets and styles are served by Foundry straight from the repo, unprocessed.
+ * Vite therefore builds ONLY the TypeScript in src/ into dist/; lang and styles are
+ * served by Foundry straight from the repo, unprocessed. There is no templates or
+ * assets directory: markup is built in TypeScript and every texture is generated
+ * procedurally as a data: URI, so the module ships no binary assets.
  *
  * CSS is deliberately NOT part of the build: styles/documents-pinner.css uses a
  * native `@layer` statement plus `@import ... layer()` so the cascade order is
