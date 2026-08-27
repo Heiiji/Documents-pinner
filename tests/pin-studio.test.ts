@@ -103,11 +103,19 @@ describe("studioMarkup", () => {
     expect(studioMarkup(doc, pin(), "content")).toContain("DP.studio.sourceMissing");
   });
 
-  it("names every audience choice, including the discovered kind", () => {
+  it("names every audience choice the module can actually honour", () => {
     const markup = studioMarkup(doc, pin(), "audience");
-    for (const kind of ["everyone", "selected", "discovered", "hidden"]) {
+    for (const kind of ["everyone", "selected", "hidden"]) {
       expect(markup, kind).toContain(`value="${kind}"`);
     }
+  });
+
+  it("does not offer `discovered`, which cannot sync ownership or stick", () => {
+    // Its visibility half works — each client tests its own line of sight — but the
+    // sticky half needs a PLAYER's discovery to be persisted, and players never write
+    // pin configuration while the module ships no socket. Offering it produced a
+    // permanent "visible but won't open". See DESIGN A9.
+    expect(studioMarkup(doc, pin(), "audience")).not.toContain('value="discovered"');
   });
 
   it("offers only the two ownership levels that are ever granted", () => {

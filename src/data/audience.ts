@@ -64,6 +64,17 @@ export function canSee(audience: DpAudience, ctx: AudienceContext): boolean {
 /**
  * Whether the acting GM should persist a discovery for this user right now.
  * Returns false when the record already exists, so callers can skip the write.
+ *
+ * DELIBERATELY UNWIRED, and the Pin Studio no longer offers the `discovered` audience
+ * because of it. Persisting a discovery needs to know that a PLAYER's vision reached the
+ * pin, and there is no honest way to learn that under the module's own constraints:
+ * players never write pin configuration (DESIGN §3) and the module ships no socket
+ * (DESIGN §8). Line-of-sight visibility itself works — every client evaluates its own —
+ * so `canSee` keeps handling the kind for any payload that already carries it.
+ *
+ * The route in is a GM-side sweep over each player's own tokens' vision polygons. It is
+ * written up in DESIGN A9 as deferred rather than left here as a caller-less function
+ * that looks finished.
  */
 export function shouldRecordDiscovery(audience: DpAudience, ctx: AudienceContext): boolean {
   if (audience.kind !== "discovered" || !audience.sticky) return false;

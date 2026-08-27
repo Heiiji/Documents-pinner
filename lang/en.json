@@ -101,6 +101,7 @@
   "DP.notice.ledgerRepaired": "Repaired {count} leftover permission grant(s) from pins that no longer exist.",
   "DP.notice.noteNoSource": "That note does not point at a journal, so there is nothing to pin.",
   "DP.notice.ownershipOverridden": "Permissions for \"{ownershipKey}\" were changed by hand; Documents Pinner left them alone.",
+  "DP.notice.ownershipWriteFailed": "Could not update document permissions. The pin is visible, but players may not be able to open it.",
   "DP.notice.showUnavailable": "This Foundry build has no Journal.show, so the document could not be pushed to players.",
   "DP.notice.sourceMissing": "The document behind this pin no longer exists.",
   "DP.paper.bloodied": "Bloodied",

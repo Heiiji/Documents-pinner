@@ -101,6 +101,7 @@
   "DP.notice.ledgerRepaired": "{count} autorisation(s) résiduelle(s) réparée(s), issues d'épingles qui n'existent plus.",
   "DP.notice.noteNoSource": "Cette note ne désigne aucun journal : il n'y a rien à épingler.",
   "DP.notice.ownershipOverridden": "Les permissions de « {ownershipKey} » ont été modifiées à la main ; Documents Pinner n'y a pas touché.",
+  "DP.notice.ownershipWriteFailed": "Impossible de mettre à jour les permissions du document. L'épingle est visible, mais les joueur(s) ne pourront peut-être pas l'ouvrir.",
   "DP.notice.showUnavailable": "Cette version de Foundry ne propose pas Journal.show ; le document n'a pas pu être affiché aux joueurs.",
   "DP.notice.sourceMissing": "Le document derrière cette épingle n'existe plus.",
   "DP.paper.bloodied": "Ensanglanté",

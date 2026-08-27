@@ -15,7 +15,7 @@ import { cv, g, isOurs } from "./fvtt";
 import { publicApi } from "./api";
 import * as settings from "./settings";
 import { definePinData } from "./data/PinData";
-import { onSourceOwnershipEdited, reconcile } from "./data/ownership-sync";
+import { onPreDeleteTile, onSourceOwnershipEdited, reconcile } from "./data/ownership-sync";
 import { onCanvasReady as migrateOnCanvasReady } from "./data/migrations";
 import { definePinnedTile, refreshAllPins } from "./canvas/PinnedTile";
 import { registerPropHitLayer, suspendHits, syncHitLayer } from "./canvas/PropHitLayer";
@@ -129,6 +129,10 @@ Hooks.on(`${MODULE_ID}.openPresets`, () => openPresetStudio());
 Hooks.on(`${MODULE_ID}.peek`, (active: boolean) => propManager().setPeeking(active));
 
 // --- Keeping surfaces in step with the world --------------------------------
+
+// A pin can be deleted by any core gesture — the Tiles layer, Ctrl+Z, the Placeables
+// sidebar — and every one of those must give back the ownership it granted.
+Hooks.on("preDeleteTile", onPreDeleteTile);
 
 for (const hook of ["createTile", "updateTile", "deleteTile"]) {
   Hooks.on(hook, (doc: any) => {

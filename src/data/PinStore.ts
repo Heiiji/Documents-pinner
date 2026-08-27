@@ -53,6 +53,34 @@ export function enqueue<T>(anchorId: string, task: () => Promise<T>): Promise<T>
   return run;
 }
 
+/**
+ * Chain a task after the in-flight work of EVERY anchor it touches.
+ *
+ * The bulk path needs this: `batchUpdate` reads N payloads and writes them in one scene
+ * update, and reading them outside the queue meant a Pinboard "reveal all" landing while
+ * a HUD chip toggle was still in flight read the stale payload and clobbered it — the
+ * exact failure the per-anchor queue exists to prevent, arrived at by the one writer that
+ * did not use it.
+ *
+ * Registering the same tracked promise on every anchor's queue also makes the ordering
+ * work in the other direction: a chip click arriving mid-batch waits for the batch.
+ */
+export function enqueueAll<T>(anchorIds: readonly string[], task: () => Promise<T>): Promise<T> {
+  const ids = [...new Set(anchorIds)].filter(Boolean);
+  if (!ids.length) return task();
+
+  const previous = Promise.allSettled(ids.map((id) => queues.get(id) ?? Promise.resolve()));
+  const run = previous.then(task);
+  const tracked = run
+    .catch(() => {})
+    .then(() => {
+      for (const id of ids) if (queues.get(id) === tracked) queues.delete(id);
+    });
+
+  for (const id of ids) queues.set(id, tracked);
+  return run;
+}
+
 /** Resolves once every queued write has settled. Used by tests and the ready sweep. */
 export async function settled(): Promise<void> {
   await Promise.allSettled([...queues.values()]);
@@ -208,25 +236,33 @@ function derivedSize(mode: DpMode): { width: number; height: number } {
  * The Pinboard's bulk actions are the reason this exists: "reveal to all" over a dozen
  * pins must land as one change on every client, not a dozen staggered ones.
  */
-export async function batchUpdate(
+export function batchUpdate(
   scene: any,
   entries: { doc: any; patch: PinPatch }[]
 ): Promise<any[]> {
-  const updates = entries
-    .map(({ doc, patch }) => {
-      const current = readPin(doc);
-      if (!current) return null;
-      const { pin } = mergePin(current, patch);
-      return {
-        _id: doc.id,
-        hidden: anchorHidden(pin.audience),
-        [`flags.${MODULE_ID}.${FLAGS.PIN}`]: pin,
-      };
-    })
-    .filter(Boolean);
+  // Through the queue, like every other writer. The payloads are read INSIDE it, so a
+  // bulk reveal landing on top of an in-flight chip toggle sees that toggle's result
+  // rather than the payload as it was before.
+  return enqueueAll(
+    entries.map(({ doc }) => doc?.id ?? ""),
+    async () => {
+      const updates = entries
+        .map(({ doc, patch }) => {
+          const current = readPin(doc);
+          if (!current) return null;
+          const { pin } = mergePin(current, patch);
+          return {
+            _id: doc.id,
+            hidden: anchorHidden(pin.audience),
+            [`flags.${MODULE_ID}.${FLAGS.PIN}`]: pin,
+          };
+        })
+        .filter(Boolean);
 
-  if (!updates.length) return [];
-  return scene.updateEmbeddedDocuments("Tile", updates, internal());
+      if (!updates.length) return [];
+      return scene.updateEmbeddedDocuments("Tile", updates, internal());
+    }
+  );
 }
 
 /**

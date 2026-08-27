@@ -208,8 +208,21 @@ export function planRebase(
       if (!ledger.overridden.includes(key)) ledger.overridden.push(key);
       notices.push({ key: "DP.notice.ownershipOverridden", data: { ownershipKey: key } });
     } else if (next > granted) {
-      // The GM raised it above what we asked for. Adopt the new value as ours.
+      // The GM raised it above what we asked for.
+      //
+      // The BASELINE moves with it, and that is the whole point. Adopting the raise into
+      // `granted` alone left the baseline where it was, so a later release saw
+      // `current === granted`, did not classify it as an override, and restored the old
+      // baseline — silently reverting a deliberate GM edit, and, when the baseline was
+      // `null` because the key had not existed before us, DELETING the player's ownership
+      // outright. Invariant 2 says a deliberate GM edit always wins; this is what makes
+      // that true for a raise as well as for a lowering.
+      //
+      // No notice: nothing was lost, so there is nothing to warn a GM about. The key is
+      // still recorded in `overridden` so the ledger remembers a manual edit touched it.
+      ledger.baseline[key] = next;
       ledger.granted[key] = next;
+      if (!ledger.overridden.includes(key)) ledger.overridden.push(key);
     } else if (next < granted) {
       // The GM lowered it under us. That becomes both the new floor and the new ceiling.
       ledger.baseline[key] = next;

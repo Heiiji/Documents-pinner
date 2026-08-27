@@ -26,6 +26,7 @@
  * GM's notes to a player, so it does not rely on a single mechanism.
  */
 
+import { MODULE_ID } from "../const";
 import { ns } from "../fvtt";
 
 /** Elements that can execute, navigate or reach the network. Removed outright. */
@@ -44,6 +45,18 @@ export const FORBIDDEN_TAGS = new Set([
   // A page-supplied <style> is not dangerous so much as unscoped: in the DOM reader it
   // would escape the card and restyle Foundry itself.
   "style",
+  // `noscript` is a PARSER-MODE bomb, not an executable element. `DOMParser` parses with
+  // scripting disabled, where its content is ordinary markup; `innerHTML` on a live page
+  // parses with scripting ENABLED, where its content is raw text — so a `</noscript>`
+  // inside an attribute value closes the element early and everything after it becomes
+  // live markup in the browser and inert markup to us. Verified with parse5: the same
+  // string yields `noscript p[title]` to the sanitiser and `noscript img[src,onerror] p`
+  // to the browser, and the same trick resurrects a stripped `.secret` section.
+  //
+  // A6's round-trip cannot catch this by construction — it reaches a fixpoint of the
+  // wrong parser on the first pass — so the element is removed outright. A journal page
+  // has no use for one.
+  "noscript",
 ]);
 
 /**
@@ -68,7 +81,13 @@ export function isDangerousUrl(value: string): boolean {
     .toLowerCase();
 
   if (/^(javascript|vbscript|file|blob):/.test(url)) return true;
-  if (url.startsWith("data:")) return !/^data:image\/(png|jpe?g|gif|webp|svg\+xml);/.test(url);
+  // `[;,]` and not `;`: a data URL's media type is followed by a comma when there are no
+  // parameters, so `data:image/png,...` and `data:image/svg+xml,%3Csvg...` — which is
+  // exactly the shape `effects/textures.ts` generates — were misclassified as dangerous.
+  // The separator is required, so `data:image/pngevil,` is still refused.
+  if (url.startsWith("data:")) {
+    return !/^data:image\/(png|jpe?g|gif|webp|svg\+xml)[;,]/.test(url);
+  }
   return false;
 }
 
@@ -120,6 +139,12 @@ export function scrub(root: ParentNode): void {
     for (const attr of [...element.attributes]) {
       if (isDangerousAttr(attr.name, attr.value)) element.removeAttribute(attr.name);
     }
+    // `querySelectorAll` does not cross into a template's DocumentFragment, so
+    // `<template><script>...</script></template>` survived the scrub byte-for-byte.
+    // Inert in the HTML reader — and the whole point is that the same string is then
+    // concatenated into an XML document, where `<template>` means nothing at all.
+    const content = (element as HTMLTemplateElement).content;
+    if (content) scrub(content);
   }
 }
 
@@ -148,9 +173,19 @@ export function serialiseXml(body: ParentNode & { firstChild: ChildNode | null }
   return xml.slice(open + 1, close);
 }
 
-/** Remove GM secret sections. Applied whenever the viewer is not an owner. */
+/**
+ * Remove GM secret sections. Applied whenever the viewer is not an owner.
+ *
+ * Descends into template content for the same reason `scrub` does: `querySelectorAll`
+ * does not cross a DocumentFragment boundary, and this is the one filter in the module
+ * where missing a node means a GM's notes reach a player.
+ */
 export function stripSecrets(root: ParentNode): void {
   for (const secret of [...root.querySelectorAll("section.secret, .secret")]) secret.remove();
+  for (const element of [...root.querySelectorAll("template")]) {
+    const content = (element as HTMLTemplateElement).content;
+    if (content) stripSecrets(content);
+  }
 }
 
 export interface EnrichedContent {
@@ -215,7 +250,12 @@ export function sanitise(html: string, isOwner: boolean): string {
     if (next === current) return next;
     current = next;
   }
-  return current;
+
+  // FAIL CLOSED. Reaching here means the markup did not settle in three passes, i.e. it
+  // is by definition not at a fixpoint — which is precisely the shape mutation XSS takes.
+  // Returning `current` shipped exactly the input this loop exists to reject.
+  console.warn(`${MODULE_ID} | sanitiser did not converge; content dropped`);
+  return "";
 }
 
 /**

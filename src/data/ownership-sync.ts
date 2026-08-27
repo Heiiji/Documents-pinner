@@ -44,11 +44,59 @@ async function applyPlan(doc: any, plan: OwnershipPlan): Promise<void> {
   const data: Record<string, unknown> = {};
 
   if (plan.ownership) data.ownership = plan.ownership;
-  if (plan.ledger) data[`flags.${MODULE_ID}.${FLAGS.GRANTS}`] = plan.ledger;
-  else if (ledgerOf(doc)) data[`flags.${MODULE_ID}.${DELETE_PREFIX}${FLAGS.GRANTS}`] = null;
+  writeLedger(data, doc, plan.ledger);
 
-  if (Object.keys(data).length) await doc.update(data, internal());
+  if (Object.keys(data).length) {
+    try {
+      await doc.update(data, internal());
+    } catch (error) {
+      // A failed ownership write is invisible otherwise: the GM sees the pin revealed
+      // and the player cannot open it, with nothing anywhere saying why. Every UI caller
+      // reaches this through `void`, so the report has to happen here.
+      console.warn(`${MODULE_ID} | ownership write failed for ${doc?.uuid}`, error);
+      notify({ key: "DP.notice.ownershipWriteFailed" }, "error");
+      return;
+    }
+  }
   for (const notice of plan.notices) notify(notice, "warn");
+}
+
+/**
+ * Put the ledger on the document as a REPLACEMENT rather than a merge.
+ *
+ * `Document#update` deep-merges nested plain objects — the module depends on that
+ * everywhere else — so writing the whole ledger object could never REMOVE a key from it.
+ * `planRetarget` correctly emits `{ben: 2, "-=ali": null}` for the ownership half, but
+ * the ledger half kept `holders: { ali: {...}, ben: {...} }` forever: a phantom holder
+ * naming a user whose ownership entry no longer existed, which then made every later
+ * release report a GM override that never happened, restore nothing, and grow
+ * `overridden` — and which `reconcile` cannot repair, because the anchor is alive and so
+ * the entry is not an orphan.
+ *
+ * Deleted and re-set in ONE update rather than in two, because the ownership diff and the
+ * ledger must land together: ownership without its ledger entry is a grant nothing will
+ * ever release, and a ledger without its ownership change is a release that restores a
+ * value that was never written. Dotted paths cannot express this — the `holders` sub-keys
+ * are anchor UUIDs, which contain dots — and `{recursive: false}` cannot be used either,
+ * because the ownership half in the same update is a diff that NEEDS the merge.
+ */
+function writeLedger(
+  data: Record<string, unknown>,
+  doc: any,
+  ledger: OwnershipPlan["ledger"]
+): void {
+  const path = `flags.${MODULE_ID}.${FLAGS.GRANTS}`;
+  const unset = `flags.${MODULE_ID}.${DELETE_PREFIX}${FLAGS.GRANTS}`;
+  const stored = ledgerOf(doc);
+
+  if (!ledger) {
+    if (stored) data[unset] = null;
+    return;
+  }
+  // Insertion order is the contract: the deletion is expanded and merged before the
+  // value beside it, so the stored ledger is whatever the plan says and nothing older.
+  if (stored) data[unset] = null;
+  data[path] = ledger;
 }
 
 /**
@@ -95,14 +143,40 @@ export async function syncAnchor(anchorDoc: any): Promise<void> {
 export async function releaseAnchor(anchorDoc: any, sourceUuid?: string | null): Promise<void> {
   if (!isGM()) return;
 
+  // Both of these are read SYNCHRONOUSLY, before the first await: `onPreDeleteTile` calls
+  // this while the tile is about to stop existing, and the ledger is keyed by the
+  // anchor's uuid.
   const uuid = sourceUuid ?? readPin(anchorDoc)?.source.uuid ?? null;
+  const anchor = anchorDoc?.uuid ?? "";
+
   const source = await resolveUuid(uuid);
   if (!source?.update || source.pack) return;
 
   await enqueue(`grants:${source.uuid}`, async () => {
-    const plan = planRelease({ ...(source.ownership ?? {}) }, ledgerOf(source), anchorDoc.uuid);
+    const plan = planRelease({ ...(source.ownership ?? {}) }, ledgerOf(source), anchor);
     await applyPlan(source, plan);
   });
+}
+
+/**
+ * Release an anchor's grant when its tile is deleted by ANY gesture.
+ *
+ * `releaseAnchor` was reachable only from `api.deletePin`/`api.unpin`, which only the
+ * Pinboard and the Pin Studio call. So a GM who selected the tile on the Tiles layer and
+ * pressed Delete — or pressed Ctrl+Z, or deleted it from the v14 Placeables sidebar —
+ * left the player holding OBSERVER on that journal indefinitely, with the pin gone and
+ * nothing to take it back from. `reconcile` repairs it only at the next `ready`, and only
+ * on the primary GM's client.
+ *
+ * DESIGN §10.8 keeps anchors as ordinary Tiles precisely so other tooling can act on
+ * them, which makes this a mainline path rather than an edge case.
+ *
+ * `preDelete` and not `delete`: the pin flag has to still be readable.
+ */
+export function onPreDeleteTile(doc: any, options: any): void {
+  if (!isGM() || isOurs(options)) return;
+  if (!readPin(doc)) return;
+  void releaseAnchor(doc);
 }
 
 /**
@@ -122,17 +196,17 @@ export async function onSourceOwnershipEdited(
   if (!isGM() || g()?.user?.id !== userId) return;
   if (isOurs(options)) return;
 
-  const stored = ledgerOf(doc);
-  if (!stored) return;
-
   await enqueue(`grants:${doc.uuid}`, async () => {
+    // Read INSIDE the queue, like `syncAnchor` and `releaseAnchor` do. Reading it out
+    // here raced every in-flight grant: the hook fires while a `syncAnchor` is still
+    // writing, the ledger does not exist yet, and the rebase was dropped on the floor.
+    const stored = ledgerOf(doc);
+    if (!stored) return;
+
     const { ledger, notices } = planRebase(stored, changed.ownership);
-    await doc.update(
-      ledger
-        ? { [`flags.${MODULE_ID}.${FLAGS.GRANTS}`]: ledger }
-        : { [`flags.${MODULE_ID}.${DELETE_PREFIX}${FLAGS.GRANTS}`]: null },
-      internal()
-    );
+    const data: Record<string, unknown> = {};
+    writeLedger(data, doc, ledger);
+    if (Object.keys(data).length) await doc.update(data, internal());
     for (const notice of notices) notify(notice, "warn");
   });
 }

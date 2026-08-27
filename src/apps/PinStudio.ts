@@ -184,10 +184,15 @@ function audienceTab(doc: any, pin: DpPinFlags): string {
     `<section class="dp-studio__tab" data-dp-tab="audience">` +
     field(
       "DP.studio.audience",
+      // `discovered` is deliberately NOT offered. Its visibility half works — each client
+      // tests its own line of sight — but the sticky half needs a player's discovery to be
+      // PERSISTED, and players never write pin configuration (DESIGN §3) while the module
+      // ships no socket (DESIGN §8). So `discovered` stayed permanently empty,
+      // `grantKeysFor` returned nothing, and ownership sync could never fire: a permanent
+      // "visible but won't open" for an audience kind the Studio was offering. See A9.
       select("audience.kind", pin.audience.kind, [
         { value: "everyone", label: t("DP.audience.everyone") },
         { value: "selected", label: t("DP.hud.audienceSome") },
-        { value: "discovered", label: t("DP.studio.audienceDiscovered") },
         { value: "hidden", label: t("DP.audience.hidden") },
       ])
     ) +

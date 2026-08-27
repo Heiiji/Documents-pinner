@@ -149,7 +149,10 @@ describe("a manual GM edit always wins", () => {
     expect(apply(state, r.ownership).ali).toBe(OWNER);
   });
 
-  it("adopts a raise so a later release still restores the baseline", () => {
+  it("keeps a raise the GM made by hand, rather than reverting it on release", () => {
+    // Invariant 2: a deliberate GM edit always wins. Adopting the raise into `granted`
+    // alone left the baseline behind, so release saw `current === granted`, decided
+    // nothing had been overridden, and put the OLD value back.
     const before: OwnershipRecord = { default: 0, ali: 1 };
     const g = planGrant(before, null, { anchorUuid: A, keys: ["ali"], level: OBSERVER });
     let state = apply(before, g.ownership);
@@ -157,9 +160,38 @@ describe("a manual GM edit always wins", () => {
     state = { ...state, ali: OWNER };
     const rebased = planRebase(g.ledger, { ali: OWNER });
     expect(rebased.ledger!.granted.ali).toBe(OWNER);
+    expect(rebased.ledger!.baseline.ali).toBe(OWNER);
 
     const r = planRelease(state, rebased.ledger, A);
-    expect(r.ownership).toEqual({ ali: 1 });
+    expect(apply(state, r.ownership).ali).toBe(OWNER);
+  });
+
+  it("does not DELETE a raised key whose baseline was absent before us", () => {
+    // The damaging case, and the one the old test did not cover: Ali had no entry at all,
+    // so `baseline.ali` was null. The GM reveals (granted 2), then decides Ali should own
+    // the journal and sets OWNER by hand, then hides the pin. Release did not see an
+    // override, saw `base === null`, emitted `-=ali`, and Ali's ownership vanished.
+    const before: OwnershipRecord = { default: 0 };
+    const g = planGrant(before, null, { anchorUuid: A, keys: ["ali"], level: OBSERVER });
+    expect(g.ledger!.baseline.ali).toBeNull();
+
+    let state = apply(before, g.ownership);
+    state = { ...state, ali: OWNER };
+    const rebased = planRebase(g.ledger, { ali: OWNER });
+
+    const r = planRelease(state, rebased.ledger, A);
+    const after = apply(state, r.ownership);
+    expect(after.ali).toBe(OWNER);
+    expect("ali" in after).toBe(true);
+  });
+
+  it("still deletes an untouched key that did not exist before us", () => {
+    // Invariant 3 is unchanged: only a MANUAL edit protects a key from being cleaned up.
+    const before: OwnershipRecord = { default: 0 };
+    const g = planGrant(before, null, { anchorUuid: A, keys: ["ali"], level: OBSERVER });
+    const state = apply(before, g.ownership);
+
+    const r = planRelease(state, g.ledger, A);
     expect(apply(state, r.ownership)).toEqual(before);
   });
 

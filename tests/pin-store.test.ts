@@ -278,3 +278,43 @@ describe("settled", () => {
     expect(done).toBe(true);
   });
 });
+
+/**
+ * The one writer that bypassed the queue.
+ *
+ * `batchUpdate` read N payloads and wrote them in a single scene update, but read them
+ * OUTSIDE the per-anchor queue every other writer uses. A Pinboard "reveal all" landing
+ * while a HUD chip toggle was still in flight therefore read the pre-toggle payload and
+ * wrote it back over the toggle — the exact lost-update the queue exists to prevent,
+ * reached by the only path that did not use it.
+ */
+describe("batchUpdate and the per-anchor queue", () => {
+  it("waits for an in-flight single-anchor write before reading the payload", async () => {
+    const doc = fakeDoc();
+    const scene = fakeScene([doc]);
+
+    // A slow single-anchor write, as a HUD chip toggle in flight would be.
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const original = doc.update.bind(doc);
+    doc.update = async (data: any, options: any) => {
+      await gate;
+      return original(data, options);
+    };
+
+    const single = update(doc, { display: { label: "toggled" } });
+    const batch = batchUpdate(scene as any, [{ doc, patch: { mode: "pin" } }]);
+
+    release();
+    await single;
+    await batch;
+
+    // The batch read the payload the single write had already produced, instead of the
+    // stale one it had captured before that write landed.
+    const written = scene.calls[0].updates[0][FLAG_PATH];
+    expect(written.display.label).toBe("toggled");
+    expect(written.mode).toBe("pin");
+  });
+});
