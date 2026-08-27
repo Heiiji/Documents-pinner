@@ -16,6 +16,7 @@
  */
 
 import { MODULE_ID } from "../const";
+import { logger } from "../log";
 import { g, isGM, isOurs, notify, ns } from "../fvtt";
 import { visibleSceneRect } from "../canvas/transform";
 import { t } from "../i18n";
@@ -25,6 +26,8 @@ import * as settings from "../settings";
 import { armAt } from "../apps/PlacementGhost";
 import { openPicker } from "../apps/DocumentPicker";
 import { readPin } from "../data/PinData";
+
+const log = logger("entry");
 
 /** Whether the configured drag modifier is currently held. */
 export function modifierHeld(event?: DragEvent | MouseEvent): boolean {
@@ -87,7 +90,7 @@ async function removeStrayNotes(canvas: any, before: Set<string>): Promise<void>
   if (!strays.length) return;
 
   await canvas.scene.deleteEmbeddedDocuments("Note", strays, { render: false });
-  console.log(`${MODULE_ID} | removed ${strays.length} note(s) core created from a pin drop`);
+  log.info(`removed ${strays.length} note(s) core created from a pin drop`);
 }
 
 /**

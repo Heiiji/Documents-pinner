@@ -11,9 +11,12 @@
  * takes the whole module down with it.
  */
 
-import { INTERNAL_OPTION, MODULE_ID } from "./const";
+import { INTERNAL_OPTION } from "./const";
+import { logger } from "./log";
 import { tn } from "./i18n";
 import type { DpNotice } from "./types/dp";
+
+const log = logger("core");
 
 declare const game: any;
 declare const canvas: any;
@@ -89,7 +92,7 @@ export function notify(notice: DpNotice | string, type: "info" | "warn" | "error
   const message = typeof notice === "string" ? notice : tn(notice);
   const target = notifications();
   if (target?.[type]) target[type](message);
-  else console.log(`${MODULE_ID} | ${message}`);
+  else log.info(message);
 }
 
 /** Options every document write from this module carries, so our hooks can stand down. */

@@ -16,6 +16,7 @@
  */
 
 import { DELETE_PREFIX, FLAGS, MODULE_ID } from "../const";
+import { logger } from "../log";
 import { g, internal, isGM, isOurs, isPrimaryGM, notify, playerIds, resolveUuid } from "../fvtt";
 import type { DpGrantLedger } from "../types/dp";
 import { grantKeysFor } from "./audience";
@@ -28,6 +29,8 @@ import {
 } from "./ownership-plan";
 import { enqueue } from "./PinStore";
 import { readPin } from "./PinData";
+
+const log = logger("grants");
 
 function ledgerOf(doc: any): DpGrantLedger | null {
   return (doc?.flags?.[MODULE_ID]?.[FLAGS.GRANTS] as DpGrantLedger) ?? null;
@@ -49,11 +52,15 @@ async function applyPlan(doc: any, plan: OwnershipPlan): Promise<void> {
   if (Object.keys(data).length) {
     try {
       await doc.update(data, internal());
+      log.debug(
+        `ownership on ${doc?.uuid}: ${JSON.stringify(plan.ownership ?? {})}` +
+          `${plan.ledger ? "" : " (ledger cleared)"}`
+      );
     } catch (error) {
       // A failed ownership write is invisible otherwise: the GM sees the pin revealed
       // and the player cannot open it, with nothing anywhere saying why. Every UI caller
       // reaches this through `void`, so the report has to happen here.
-      console.warn(`${MODULE_ID} | ownership write failed for ${doc?.uuid}`, error);
+      log.warn(`ownership write failed for ${doc?.uuid}`, error);
       notify({ key: "DP.notice.ownershipWriteFailed" }, "error");
       return;
     }

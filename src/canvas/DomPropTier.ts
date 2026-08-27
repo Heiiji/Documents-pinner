@@ -26,13 +26,15 @@
  *    LOD pass would enrich fifty documents after every pan.
  */
 
-import { MODULE_ID } from "../const";
+import { logger } from "../log";
 import { escapeAttr } from "../html";
 import { resolveCard } from "../render/ContentResolver";
 import { currentLevel } from "../effects/level";
 import { mount, write } from "../apps/OverlayRoot";
 import type { LodTier } from "./lod";
 import type { DpPinFlags } from "../types/dp";
+
+const log = logger("props.dom");
 
 export interface DomPropEntry {
   id: string;
@@ -107,6 +109,7 @@ export function syncDomTier(entries: readonly DomPropEntry[]): void {
 function upsert(entry: DomPropEntry): void {
   let prop = props.get(entry.id);
 
+  let mounted = false;
   if (!prop) {
     const element = document.createElement("div");
     element.className = "dp-prop";
@@ -115,10 +118,11 @@ function upsert(entry: DomPropEntry): void {
     prop = { element, key: "", generation: 0 };
     props.set(entry.id, prop);
     mount(element);
+    mounted = true;
   }
 
   prop.element.dataset.dpFx = escapeAttr(entry.pin.effect.id);
-  place(prop.element, entry);
+  place(prop.element, entry, mounted);
 
   const key = contentKeyOf(entry);
   if (prop.key === key) return;
@@ -133,7 +137,7 @@ function upsert(entry: DomPropEntry): void {
       if (!current || current.generation !== generation) return;
       current.element.innerHTML = card.html;
     })
-    .catch((error) => console.warn(`${MODULE_ID} | DOM prop failed to resolve:`, error));
+    .catch((error) => log.warn(`DOM prop failed to resolve:`, error));
 }
 
 /**
@@ -142,7 +146,7 @@ function upsert(entry: DomPropEntry): void {
  * The overlay root carries the stage matrix, so these five values are written once per
  * geometry change and never per frame.
  */
-function place(element: HTMLElement, entry: DomPropEntry): void {
+function place(element: HTMLElement, entry: DomPropEntry, revealing: boolean): void {
   const doc = entry.doc;
   write(element, () => {
     element.style.left = `${doc.x}px`;
@@ -151,6 +155,12 @@ function place(element: HTMLElement, entry: DomPropEntry): void {
     element.style.height = `${doc.height}px`;
     element.style.transform = `rotate(${doc.rotation ?? 0}deg)`;
     element.style.opacity = String(entry.alpha);
+    // The reveal. A prop appearing instantly reads as a rendering glitch; the same prop
+    // fading up reads as something being revealed, which is the moment the module exists
+    // for — and the canvas tier has always had it. The class is added on the frame AFTER
+    // the element is mounted so the transition has an initial state to run from; the
+    // stylesheet drops it entirely under `prefers-reduced-motion`.
+    if (revealing) requestAnimationFrame(() => element.classList.add("dp-prop--in"));
   });
 }
 

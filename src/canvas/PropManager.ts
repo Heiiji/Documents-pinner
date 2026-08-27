@@ -21,6 +21,7 @@
  */
 
 import { DEFAULTS, MODULE_ID } from "../const";
+import { logger } from "../log";
 import { cancelIdle, cv, g, notify, ns, nsAny, onIdle, rendererResolution } from "../fvtt";
 import * as settings from "../settings";
 import { readPin } from "../data/PinData";
@@ -58,6 +59,8 @@ import { TextureCache, cacheKey } from "../render/TextureCache";
 import { currentLevel, sampleFrame, sampledFps } from "../effects/level";
 import { findPreset } from "../effects/preset-library";
 import { clearDomTier, setDomPropAlpha, syncDomTier, type DomPropEntry } from "./DomPropTier";
+
+const log = logger("props");
 
 /**
  * The frame time above which the scene counts as struggling.
@@ -398,6 +401,10 @@ class Manager {
   }
 
   #degrade(): void {
+    log.warn(
+      `frame rate held below target; reducing every prop's detail one step ` +
+        `(now ${this.#globalDemotions + 1})`
+    );
     this.#globalDemotions += 1;
     notify({ key: "DP.notice.degraded" }, "warn");
     this.#scheduleLod(0);
@@ -677,6 +684,9 @@ class Manager {
     const svg = svgDocument(body, `${fonts}\n${css}`, size.width, size.height);
     const result = await rasterise(svg, size.width, size.height, longEdge);
     if (!result) {
+      // Not retried until this pin's content, size or preset changes — which is what the
+      // key encodes — so say so once rather than going quiet.
+      log.warn(`could not draw ${tile.id}; it will not be retried until its content changes`);
       this.#failedKeys.add(key);
       return;
     }
@@ -687,6 +697,11 @@ class Manager {
       return;
     }
 
+    log.debug(
+      `drew ${tile.id} at ${result.width}x${result.height} (${Math.round(result.bytes / 1024)} kB, ` +
+        `tier ${record.tier}); cache now ${this.#cache.size} textures, ` +
+        `${Math.round(this.#cache.bytes / 1024 / 1024)} MB`
+    );
     this.#cache.set(key, result.texture, result.bytes);
     this.#bind(record, tile, result.texture, key);
     // The mesh was held invisible while there was only a placeholder on it; now that the
@@ -715,8 +730,8 @@ class Manager {
       // to `canvas.primary`, so there is no mesh and the whole canvas tier is a no-op.
       if (!this.#warnedNoMesh) {
         this.#warnedNoMesh = true;
-        console.warn(
-          `${MODULE_ID} | tile ${tile.id} has no mesh; its texture may be missing, ` +
+        log.warn(
+          `tile ${tile.id} has no mesh; its texture may be missing, ` +
             `so the prop cannot be drawn into the scene`
         );
       }
@@ -764,6 +779,10 @@ class Manager {
       focused?.boundKey ? [focused.boundKey] : []
     );
     if (!evicted.length) return;
+    log.debug(
+      `evicted ${evicted.length} texture(s) to stay under ` +
+        `${Math.round(settings.vramBudgetBytes() / 1024 / 1024)} MB`
+    );
 
     // Evicted props demote rather than vanish: the mesh keeps core's own texture.
     for (const record of this.#records.values()) {
@@ -811,7 +830,7 @@ function playRevealSound(src: string | null): void {
   try {
     AudioHelper?.play?.({ src, volume: 0.6, autoplay: true, loop: false }, false);
   } catch (error) {
-    console.warn(`${MODULE_ID} | could not play reveal sound ${src}`, error);
+    log.warn(`could not play reveal sound ${src}`, error);
   }
 }
 

@@ -11,6 +11,7 @@
  */
 
 import { MODULE_ID } from "./const";
+import { logger } from "./log";
 import { cv, g, isOurs } from "./fvtt";
 import { publicApi } from "./api";
 import * as settings from "./settings";
@@ -42,6 +43,8 @@ import {
   onSourceRenamed,
 } from "./ui/entry-points";
 
+const log = logger("boot");
+
 declare const Hooks: any;
 
 /** Context-menu hooks core has used across generations. Unknown names never fire. */
@@ -67,19 +70,25 @@ Hooks.once("init", () => {
   registerPropHitLayer();
   definePinHUD();
   registerKeybindings();
-  console.log(`${MODULE_ID} | init`);
+  log.info(`init`);
 });
 
 Hooks.once("ready", () => {
   const module = g()?.modules?.get(MODULE_ID);
   if (module) module.api = publicApi();
 
-  void probeRasterisation();
+  // Which rendering path this client took is the first thing any bug report needs, and
+  // the user cannot see it anywhere else — the probe is silent when it succeeds.
+  void probeRasterisation().then((canRasterise) => {
+    log.info(
+      `ready | props render on the ${canRasterise ? "canvas" : "DOM"} path` +
+        `${settings.get("rendering") === "dom" ? " (chosen in settings)" : ""}`
+    );
+  });
   warmFontCache();
   void reconcile();
 
   Hooks.callAll(`${MODULE_ID}.ready`, module?.api);
-  console.log(`${MODULE_ID} | ready`);
 });
 
 // --- Canvas lifecycle -------------------------------------------------------

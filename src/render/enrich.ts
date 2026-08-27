@@ -26,8 +26,10 @@
  * GM's notes to a player, so it does not rely on a single mechanism.
  */
 
-import { MODULE_ID } from "../const";
+import { logger } from "../log";
 import { ns } from "../fvtt";
+
+const log = logger("sanitise");
 
 /** Elements that can execute, navigate or reach the network. Removed outright. */
 export const FORBIDDEN_TAGS = new Set([
@@ -254,7 +256,7 @@ export function sanitise(html: string, isOwner: boolean): string {
   // FAIL CLOSED. Reaching here means the markup did not settle in three passes, i.e. it
   // is by definition not at a fixpoint — which is precisely the shape mutation XSS takes.
   // Returning `current` shipped exactly the input this loop exists to reject.
-  console.warn(`${MODULE_ID} | sanitiser did not converge; content dropped`);
+  log.warn(`sanitiser did not converge; content dropped`);
   return "";
 }
 

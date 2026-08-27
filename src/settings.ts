@@ -16,6 +16,7 @@
 
 import { DEFAULTS, MODULE_ID } from "./const";
 import { g } from "./fvtt";
+import { setLogLevel, type LogLevel } from "./log";
 
 export type RenderingMode = "canvas" | "dom";
 export type EffectsLevel = "auto" | "full" | "reduced" | "off";
@@ -96,6 +97,28 @@ export const SETTINGS = {
     type: Boolean,
     default: true,
   },
+  /**
+   * How much this module says in the console.
+   *
+   * `warn` by default: Foundry's console is shared with a system and every other module,
+   * and one that chatters in a GM's log is one they disable. `debug` is the diagnostic
+   * surface for the three failures that are invisible from the outside — a card that will
+   * not rasterise, a texture budget that keeps evicting, an ownership write that did not
+   * land — and is the first thing a useful bug report needs.
+   */
+  logLevel: {
+    scope: "client",
+    config: true,
+    type: String,
+    default: "warn",
+    choices: {
+      off: "DP.settings.logLevel.off",
+      error: "DP.settings.logLevel.error",
+      warn: "DP.settings.logLevel.warn",
+      info: "DP.settings.logLevel.info",
+      debug: "DP.settings.logLevel.debug",
+    },
+  },
   defaultMode: {
     scope: "world",
     config: true,
@@ -170,6 +193,7 @@ interface SettingTypes {
   autoDegrade: boolean;
   dropModifier: DropModifier;
   placementLegend: boolean;
+  logLevel: LogLevel;
   defaultMode: "prop" | "pin";
   defaultAudience: "everyone" | "hidden";
   defaultOwnershipSync: boolean;
@@ -200,6 +224,7 @@ export async function set<K extends SettingKey>(key: K, value: SettingTypes[K]):
   try {
     await g()?.settings?.set(MODULE_ID, key, value);
   } catch (error) {
+    // Not through the logger: this can fail before the level is applied.
     console.warn(`${MODULE_ID} | could not store setting ${key}`, error);
   }
 }
@@ -208,6 +233,10 @@ export async function set<K extends SettingKey>(key: K, value: SettingTypes[K]):
 export function register(): void {
   const settings = g()?.settings;
   if (!settings?.register) return;
+
+  // The logger takes its level by injection rather than reading it, so that `log.ts` can
+  // be imported by anything without a cycle back through this file.
+  const applyLogLevel = () => setLogLevel(get("logLevel"));
 
   for (const [key, def] of Object.entries(SETTINGS) as [SettingKey, SettingDef][]) {
     settings.register(MODULE_ID, key, {
@@ -219,8 +248,11 @@ export function register(): void {
       default: def.default,
       ...(def.choices ? { choices: def.choices } : {}),
       ...(def.range ? { range: def.range } : {}),
+      ...(key === "logLevel" ? { onChange: applyLogLevel } : {}),
     });
   }
+
+  applyLogLevel();
 }
 
 /**

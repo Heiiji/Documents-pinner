@@ -161,3 +161,29 @@ describe("syncDomTier", () => {
     expect(card.getAttribute("aria-hidden")).toBe("true");
   });
 });
+
+describe("the reveal", () => {
+  it("fades a newly mounted card in rather than snapping it on", async () => {
+    syncDomTier([entry()]);
+    await settle();
+    // Two frames: the class lands on the frame after mount so the transition has an
+    // initial state to run from.
+    await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
+
+    const card = overlay()!.querySelector<HTMLElement>(".dp-prop")!;
+    expect(card.classList.contains("dp-prop--in")).toBe(true);
+  });
+
+  it("does not re-run the reveal when an existing card merely moves", async () => {
+    syncDomTier([entry()]);
+    await settle();
+    await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
+
+    const card = overlay()!.querySelector<HTMLElement>(".dp-prop")!;
+    card.classList.remove("dp-prop--in");
+
+    syncDomTier([entry({ doc: doc({ x: 900 }) })]);
+    await settle();
+    expect(card.classList.contains("dp-prop--in")).toBe(false);
+  });
+});

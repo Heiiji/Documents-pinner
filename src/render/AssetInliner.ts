@@ -17,9 +17,11 @@
  * missing file into a request storm against the user's own server.
  */
 
-import { MODULE_ID } from "../const";
+import { logger } from "../log";
 import { g, onIdle } from "../fvtt";
 import { serialiseXml } from "./enrich";
+
+const log = logger("assets");
 
 /** 2 MB per asset: past this, a card is carrying a file, not an illustration. */
 export const MAX_ASSET_BYTES = 2 * 1024 * 1024;
@@ -105,7 +107,7 @@ async function fetchAsDataUri(url: string): Promise<string | null> {
 
     const blob = await response.blob();
     if (blob.size > MAX_ASSET_BYTES) {
-      console.warn(`${MODULE_ID} | asset too large to inline (${blob.size} bytes): ${url}`);
+      log.warn(`asset too large to inline (${blob.size} bytes): ${url}`);
       return null;
     }
     return await blobToDataUri(blob);

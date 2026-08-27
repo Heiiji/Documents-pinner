@@ -76,3 +76,15 @@
   opacity: 0.15;
   transition: opacity 90ms linear;
 }
+
+/*
+ * The signature move — the prop was soft, the reader is sharp — is motion, and a stated
+ * preference outranks it. The reader still arrives; it simply arrives already sharp.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .dp-reader {
+    transition: none;
+    opacity: 1;
+    filter: none;
+  }
+}

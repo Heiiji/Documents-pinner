@@ -26,7 +26,10 @@
  */
 
 import { MODULE_ID, RES_TIERS } from "../const";
+import { logger } from "../log";
 import { rendererResolution } from "../fvtt";
+
+const log = logger("render");
 
 export interface RasterResult {
   texture: any;
@@ -81,7 +84,7 @@ export async function probeRasterisation(): Promise<boolean> {
     for (let i = 3; i < pixels.length; i += 4) if (pixels[i] > 0) painted++;
     canRasterise = painted > 0;
   } catch (error) {
-    console.warn(`${MODULE_ID} | canvas rendering unavailable, using DOM:`, error);
+    log.warn(`canvas rendering unavailable, using DOM:`, error);
     canRasterise = false;
   }
 
@@ -210,7 +213,7 @@ export async function rasterise(
       bytes: textureBytes(pixelWidth, pixelHeight),
     };
   } catch (error) {
-    console.warn(`${MODULE_ID} | rasterisation failed:`, error);
+    log.warn(`rasterisation failed:`, error);
     // One failure is a bad card; a run of them means the client cannot rasterise, and
     // the run is counted rather than read out of the error text — see FAILURE_LATCH.
     consecutiveFailures += 1;
@@ -220,7 +223,7 @@ export async function rasterise(
       String(error).includes("Tainted")
     ) {
       canRasterise = false;
-      console.warn(`${MODULE_ID} | canvas rendering disabled after repeated failures`);
+      log.warn(`canvas rendering disabled after repeated failures`);
     }
     return null;
   }

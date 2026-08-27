@@ -21,10 +21,13 @@
  * `planMigration` is pure and unit-tested; everything below it performs the writes.
  */
 
+import { logger } from "../log";
 import { FLAGS, MODULE_ID, SCHEMA_VERSION } from "../const";
 import { g, internal, isPrimaryGM, notify } from "../fvtt";
 import * as settings from "../settings";
 import { validatePin } from "./pin-schema";
+
+const log = logger("migrate");
 
 /** JSON with object keys in a stable order, so key order alone never forces a write. */
 function stable(value: unknown): string {
@@ -77,7 +80,7 @@ export async function migrateScene(scene: any): Promise<number> {
   if (!updates.length) return 0;
 
   await scene.updateEmbeddedDocuments("Tile", updates, internal());
-  console.log(`${MODULE_ID} | migrated ${updates.length} pin(s) on "${scene.name}"`);
+  log.info(`migrated ${updates.length} pin(s) on "${scene.name}"`);
   return updates.length;
 }
 

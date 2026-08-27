@@ -23,7 +23,17 @@
   /* Lets the browser skip layout and paint entirely for an off-screen card. */
   content-visibility: auto;
   /* The token fade and the peek arrive as an opacity write from PropManager. */
-  transition: opacity 120ms linear;
+  transition:
+    opacity 120ms linear,
+    filter 260ms ease-out;
+
+  /* The reveal, matching the canvas tier's: a prop appearing instantly reads as a
+     rendering glitch, the same prop resolving reads as something being revealed. */
+  filter: blur(4px);
+}
+
+.dp-prop--in {
+  filter: none;
 }
 
 /*
@@ -72,4 +82,20 @@
 
 .dp-tooltip--in {
   opacity: 1;
+}
+
+/*
+ * A stated preference, not a performance hint. Everything above that moves is either a
+ * fade or a blur resolving, so removing the motion leaves the prop exactly where it was
+ * going to end up rather than removing anything a GM placed.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .dp-prop,
+  .dp-tooltip {
+    transition: none;
+  }
+
+  .dp-prop {
+    filter: none;
+  }
 }

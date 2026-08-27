@@ -25,7 +25,9 @@ export default tseslint.config(
       "@typescript-eslint/no-unused-vars": ["error", { argsIgnorePattern: "^_" }],
       // Foundry modules conventionally log a boot line at init/ready; that is how a
       // user's console tells them the module actually loaded.
-      "no-console": ["warn", { allow: ["log", "warn", "error"] }],
+      // `info` and `debug` join the list because the module now routes everything
+      // through `src/log.ts`, where the level decides which of the four is used.
+      "no-console": ["warn", { allow: ["log", "warn", "error", "info", "debug"] }],
       eqeqeq: ["error", "smart"],
       "prefer-const": "error",
     },
