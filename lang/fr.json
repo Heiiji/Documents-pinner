@@ -105,6 +105,7 @@
 
   "DP.module.title": "Documents Pinner",
 
+  "DP.notice.degraded": "Les épingles coûtaient trop cher par image ; le niveau de détail de chacune a été abaissé d'un cran. À revoir dans le Tableau des épingles.",
   "DP.notice.ledgerRepaired": "{count} autorisation(s) résiduelle(s) réparée(s), issues d'épingles qui n'existent plus.",
   "DP.notice.ownershipOverridden": "Les permissions de « {ownershipKey} » ont été modifiées à la main ; Documents Pinner n'y a pas touché.",
   "DP.notice.showUnavailable": "Cette version de Foundry ne propose pas Journal.show ; le document n'a pas pu être affiché aux joueurs.",
@@ -141,6 +142,9 @@
   "DP.preset.warn.badEnum": "{path} n'accepte pas « {value} » ; la valeur par défaut a été utilisée.",
   "DP.preset.warn.futureVersion": "Ce préréglage vient d'une version plus récente (v{found}, ici v{supported}). Les réglages non pris en charge ont été retirés.",
   "DP.preset.warn.unknownParam": "Paramètre inconnu ignoré : {path}",
+
+  "DP.reader.close": "Fermer",
+  "DP.reader.title": "Document épinglé",
 
   "DP.settings.autoDegrade.hint": "Si les épingles coûtent plus de quelques millisecondes par image, abaisser d'un cran chaque niveau de détail et le signaler une fois.",
   "DP.settings.autoDegrade.name": "Réduire les détails automatiquement",

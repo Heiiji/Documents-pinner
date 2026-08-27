@@ -1,0 +1,78 @@
+/*
+ * The focus reader.
+ *
+ * Mounted inside the scene-transformed overlay, so it sits in exact registration with
+ * the prop it replaced — same position, size and rotation — and stays there through a
+ * pan or zoom without a per-frame write.
+ *
+ * Deliberately NOT lit, fogged or occluded. At the moment someone is reading it, it is
+ * a UI surface rather than a scene object, and a card dimmed by the room's darkness
+ * would be unreadable exactly when it needs to be read.
+ */
+
+.dp-reader {
+  position: absolute;
+  transform-origin: 50% 50%;
+  pointer-events: auto;
+  overflow: hidden;
+  border-radius: 0.25rem;
+  box-shadow:
+    0 0 0 1px rgb(0 0 0 / 35%),
+    0 12px 40px rgb(0 0 0 / 55%);
+
+  /* The signature move: the prop was soft, the reader is sharp. The transition runs
+     on the compositor — opacity and filter only, no layout, no backdrop-filter. */
+  opacity: 0;
+  filter: blur(6px);
+  transition:
+    opacity 220ms ease-out,
+    filter 220ms ease-out;
+
+  &.dp-reader--in {
+    opacity: 1;
+    filter: none;
+  }
+
+  /* Text in a reader is meant to be selected; everywhere else in the module it is not. */
+  & .dp-card,
+  & .dp-card__body {
+    user-select: text;
+    cursor: auto;
+  }
+
+  & .dp-card__body {
+    block-size: 100%;
+    overflow-y: auto;
+  }
+}
+
+.dp-reader__close {
+  position: absolute;
+  inset-block-start: 0.25rem;
+  inset-inline-end: 0.25rem;
+  inline-size: 1.6rem;
+  block-size: 1.6rem;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: rgb(0 0 0 / 35%);
+  color: #fff;
+  cursor: pointer;
+  opacity: 0.6;
+
+  &:hover,
+  &:focus-visible {
+    opacity: 1;
+  }
+}
+
+/*
+ * Peek: hold the key and every prop fades so the map underneath can be read. Applied
+ * to the overlay root, so the DOM tier and the canvas tier agree about the state.
+ */
+.dp-peeking .dp-reader {
+  opacity: 0.15;
+  transition: opacity 90ms linear;
+}

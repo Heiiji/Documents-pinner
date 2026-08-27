@@ -23,6 +23,8 @@ import { releaseAnchor, syncAnchor } from "./data/ownership-sync";
 import * as settings from "./settings";
 import type { DpAudience, DpMode, DpPinFlags, DpSource } from "./types/dp";
 
+declare const Hooks: any;
+
 // ---------------------------------------------------------------------------
 // Sources
 // ---------------------------------------------------------------------------
@@ -317,10 +319,22 @@ export async function showToAudience(anchorDoc: any): Promise<void> {
   else notify({ key: "DP.notice.showUnavailable" }, "warn");
 }
 
-/** Open the document on this client only. Reveals nothing to anyone else. */
+/**
+ * Open the document on this client only. Reveals nothing to anyone else.
+ *
+ * A PROP opens in place — that is what makes it a prop rather than a pin with a
+ * picture. A pin opens the sheet, which is what its icon promises. `readInPlace`
+ * forces the in-place reader even for a pin, for a GM who wants a small marker that
+ * still reads on the map.
+ */
 export async function openLocally(anchorDoc: any): Promise<void> {
   const pin = readPin(anchorDoc);
   if (!pin) return;
+
+  if (pin.mode === "prop" || pin.interaction.open === "readInPlace") {
+    Hooks.call(`${MODULE_ID}.openReader`, anchorDoc);
+    return;
+  }
 
   const source = await resolveSource(pin);
   if (!source?.sheet) {

@@ -17,10 +17,16 @@ import * as settings from "./settings";
 import { definePinData } from "./data/PinData";
 import { onSourceOwnershipEdited, reconcile } from "./data/ownership-sync";
 import { onCanvasReady as migrateOnCanvasReady } from "./data/migrations";
+import { definePinnedTile, refreshAllPins } from "./canvas/PinnedTile";
+import { registerPropHitLayer, suspendHits, syncHitLayer } from "./canvas/PropHitLayer";
+import { propManager, teardownProps } from "./canvas/PropManager";
+import { probeRasterisation } from "./render/Rasterizer";
+import { warmFontCache } from "./render/AssetInliner";
 import { definePinHUD } from "./apps/PinHUD";
 import { openPinboard, refreshPinboard } from "./apps/Pinboard";
 import { openPicker } from "./apps/DocumentPicker";
 import { alignToBoard, destroyOverlay, syncTransform } from "./apps/OverlayRoot";
+import { closeReader, openReader, repositionReader } from "./apps/ReaderOverlay";
 import { disarm } from "./apps/PlacementGhost";
 import { onGetSceneControlButtons } from "./ui/controls";
 import { registerKeybindings } from "./ui/keybindings";
@@ -43,9 +49,18 @@ const CONTEXT_HOOKS = [
   "getJournalEntryPageContextOptions",
 ];
 
+/** Gestures during which the prop hit areas must go dead. */
+const POINTER_BUSY_HOOKS: [string, boolean][] = [
+  ["dragLeftStart", true],
+  ["dragLeftDrop", false],
+  ["dragLeftCancel", false],
+];
+
 Hooks.once("init", () => {
   settings.register();
   definePinData();
+  definePinnedTile();
+  registerPropHitLayer();
   definePinHUD();
   registerKeybindings();
   console.log(`${MODULE_ID} | init`);
@@ -55,7 +70,10 @@ Hooks.once("ready", () => {
   const module = g()?.modules?.get(MODULE_ID);
   if (module) module.api = publicApi();
 
+  void probeRasterisation();
+  warmFontCache();
   void reconcile();
+
   Hooks.callAll(`${MODULE_ID}.ready`, module?.api);
   console.log(`${MODULE_ID} | ready`);
 });
@@ -65,13 +83,26 @@ Hooks.once("ready", () => {
 Hooks.on("canvasReady", () => {
   alignToBoard();
   syncTransform(true);
+  propManager().start();
+  syncHitLayer();
   void migrateOnCanvasReady(cv()?.scene);
 });
 
 Hooks.on("canvasTearDown", () => {
   disarm();
+  closeReader();
+  teardownProps();
   destroyOverlay();
 });
+
+Hooks.on("canvasPan", () => {
+  // Cheap and idempotent: both of these dirty-check before writing anything, so this
+  // hook firing every tick during an animated pan costs six float comparisons.
+  syncTransform();
+  repositionReader();
+});
+
+for (const [hook, busy] of POINTER_BUSY_HOOKS) Hooks.on(hook, () => suspendHits(busy));
 
 // --- Entry points -----------------------------------------------------------
 
@@ -80,16 +111,23 @@ Hooks.on("dropCanvasData", onDropCanvasData);
 Hooks.on("getHeaderControlsApplicationV2", onGetHeaderControls);
 Hooks.on("chatMessage", onChatMessage);
 Hooks.on("renderTileConfig", onRenderConfig);
-for (const hook of CONTEXT_HOOKS)
+for (const hook of CONTEXT_HOOKS) {
   Hooks.on(hook, (_app: any, options: any[]) => addContextOption(options));
+}
 
 Hooks.on(`${MODULE_ID}.openPicker`, () => openPicker());
 Hooks.on(`${MODULE_ID}.openBoard`, () => openPinboard());
+Hooks.on(`${MODULE_ID}.openReader`, (doc: any) => void openReader(doc));
 
 // --- Keeping surfaces in step with the world --------------------------------
 
 for (const hook of ["createTile", "updateTile", "deleteTile"]) {
-  Hooks.on(hook, () => refreshPinboard());
+  Hooks.on(hook, () => {
+    propManager().refresh();
+    syncHitLayer();
+    repositionReader();
+    refreshPinboard();
+  });
 }
 
 for (const type of ["JournalEntry", "JournalEntryPage"]) {
@@ -97,6 +135,17 @@ for (const type of ["JournalEntry", "JournalEntryPage"]) {
     if (isOurs(options)) return;
     void onSourceOwnershipEdited(doc, changed, options, userId);
     onSourceRenamed(doc, changed, options);
+    propManager().invalidate(doc.uuid);
+    refreshPinboard();
+  });
+}
+
+// A user connecting or disconnecting changes who is in an audience, and therefore what
+// every chip shows and which props this client should be drawing at all.
+for (const hook of ["userConnected", "updateUser"]) {
+  Hooks.on(hook, () => {
+    refreshAllPins();
+    syncHitLayer();
     refreshPinboard();
   });
 }

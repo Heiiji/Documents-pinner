@@ -105,6 +105,7 @@
 
   "DP.module.title": "Documents Pinner",
 
+  "DP.notice.degraded": "Pins were costing too much per frame, so every one was lowered a detail level. Review them in the Pinboard.",
   "DP.notice.ledgerRepaired": "Repaired {count} leftover permission grant(s) from pins that no longer exist.",
   "DP.notice.ownershipOverridden": "Permissions for \"{ownershipKey}\" were changed by hand; Documents Pinner left them alone.",
   "DP.notice.showUnavailable": "This Foundry build has no Journal.show, so the document could not be pushed to players.",
@@ -141,6 +142,9 @@
   "DP.preset.warn.badEnum": "{path} does not accept \"{value}\"; the default was used.",
   "DP.preset.warn.futureVersion": "This preset was made with a newer version (v{found}, this is v{supported}). Unsupported settings were dropped.",
   "DP.preset.warn.unknownParam": "Ignored an unknown setting: {path}",
+
+  "DP.reader.close": "Close",
+  "DP.reader.title": "Pinned document",
 
   "DP.settings.autoDegrade.hint": "If pins start costing more than a few milliseconds per frame, lower every detail level by one and say so once.",
   "DP.settings.autoDegrade.name": "Reduce detail automatically",
