@@ -54,6 +54,18 @@ export interface DpAudience {
   ownershipSync: DpOwnershipSync;
 }
 
+/**
+ * Remembered size per mode, so switching pin <-> prop is lossless.
+ *
+ * `null` means "derive it": a prop fits its content, a pin takes the grid size. A GM
+ * who hand-resized either mode gets that size back when they switch away and return,
+ * which is what makes the switch a view change rather than an edit.
+ */
+export interface DpGeometry {
+  pin: { width: number; height: number } | null;
+  prop: { width: number; height: number } | null;
+}
+
 export interface DpEffectRef {
   id: string;
   /** 0–1. */
@@ -82,6 +94,7 @@ export interface DpPinFlags {
   mode: DpMode;
   source: DpSource;
   display: DpDisplay;
+  geometry: DpGeometry;
   effect: DpEffectRef;
   audience: DpAudience;
   interaction: DpInteraction;

@@ -26,6 +26,7 @@ import type {
   DpAudienceKind,
   DpDisplay,
   DpEffectRef,
+  DpGeometry,
   DpInteraction,
   DpNotice,
   DpPinFlags,
@@ -87,6 +88,10 @@ export function defaultDisplay(): DpDisplay {
   };
 }
 
+export function defaultGeometry(): DpGeometry {
+  return { pin: null, prop: null };
+}
+
 export function defaultEffect(): DpEffectRef {
   return { id: "none", intensity: 0.6, speed: 1, seed: 0, motion: "loop", params: {} };
 }
@@ -106,6 +111,7 @@ export function defaultPin(overrides: Partial<DpPinFlags> = {}): DpPinFlags {
     mode: "prop",
     source: defaultSource(),
     display: defaultDisplay(),
+    geometry: defaultGeometry(),
     effect: defaultEffect(),
     audience: makeAudience(),
     interaction: defaultInteraction(),
@@ -177,6 +183,27 @@ function normaliseDisplay(raw: unknown, warnings: DpNotice[]): DpDisplay {
     fadeUnderTokens: bool(s.fadeUnderTokens, d.fadeUnderTokens),
     fadeUnderTokensAlpha: num(s.fadeUnderTokensAlpha, d.fadeUnderTokensAlpha, 0, 1),
   };
+}
+
+/**
+ * A remembered size, or `null` to derive one.
+ *
+ * The bounds are the scene-pixel range a placeable can usefully occupy: below one
+ * pixel it is unclickable, and a size beyond 64k would blow past MAX_TEXTURE_SIZE on
+ * every GPU. A partially-specified size is discarded rather than half-honoured.
+ */
+function modeSize(raw: unknown): { width: number; height: number } | null {
+  const s = obj(raw);
+  if (typeof s.width !== "number" || typeof s.height !== "number") return null;
+  const width = num(s.width, 0, 1, 65_536);
+  const height = num(s.height, 0, 1, 65_536);
+  return width && height ? { width, height } : null;
+}
+
+function normaliseGeometry(raw: unknown, warnings: DpNotice[]): DpGeometry {
+  const s = obj(raw);
+  warnUnknownKeys(s, ["pin", "prop"], warnings, "geometry", UNKNOWN_KEY);
+  return { pin: modeSize(s.pin), prop: modeSize(s.prop) };
 }
 
 /**
@@ -287,6 +314,7 @@ export function validatePin(input: unknown): PinValidationResult {
     "mode",
     "source",
     "display",
+    "geometry",
     "effect",
     "audience",
     "interaction",
@@ -306,12 +334,53 @@ export function validatePin(input: unknown): PinValidationResult {
     mode: oneOf(raw.mode, MODES, "prop", warnings, "mode", BAD_ENUM),
     source: normaliseSource(raw.source, warnings, errors),
     display: normaliseDisplay(raw.display, warnings),
+    geometry: normaliseGeometry(raw.geometry, warnings),
     effect: normaliseEffect(raw.effect, warnings),
     audience: normaliseAudience(raw.audience, warnings),
     interaction: normaliseInteraction(raw.interaction, warnings),
   };
 
   return { pin, errors, warnings };
+}
+
+/**
+ * A partial pin, for patch-style edits: `{ audience: { kind: "everyone" } }`.
+ *
+ * Arrays replace rather than merge — a half-merged user list would mean an audience
+ * nobody asked for — and so does anything nullable, because "set this back to null"
+ * has to be expressible.
+ */
+export type PinPatch = {
+  [K in keyof DpPinFlags]?: DpPinFlags[K] extends unknown[]
+    ? DpPinFlags[K]
+    : DpPinFlags[K] extends object
+      ? { [P in keyof DpPinFlags[K]]?: DpPinFlags[K][P] }
+      : DpPinFlags[K];
+};
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
+function deepMerge(base: unknown, patch: unknown): unknown {
+  if (!isPlainObject(base) || !isPlainObject(patch)) return patch;
+  const out: Record<string, unknown> = { ...base };
+  for (const [key, value] of Object.entries(patch)) {
+    out[key] = key in base ? deepMerge(base[key], value) : value;
+  }
+  return out;
+}
+
+/**
+ * Apply a patch and re-validate.
+ *
+ * Re-validating is not belt-and-braces: a patch arrives from a form, a keybinding or
+ * another module's API call, and the merged result is what gets written to the world.
+ * Clamping only on the way in would let a bad patch persist a value the schema says
+ * is impossible.
+ */
+export function mergePin(current: DpPinFlags, patch: PinPatch): PinValidationResult {
+  return validatePin(deepMerge(current, patch));
 }
 
 /** Whether a payload describes a pin that can actually resolve its source. */
