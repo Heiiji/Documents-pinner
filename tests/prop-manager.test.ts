@@ -163,3 +163,25 @@ describe("onTileDrawn", () => {
     expect(tile.mesh.texture).toBe(fresh);
   });
 });
+
+/**
+ * Every anchor now carries a real placeholder texture, because core builds no mesh
+ * without one — so the mesh always has something to draw and the two tiers have to say
+ * when that something should be seen.
+ */
+describe("the mesh under a prop", () => {
+  it("is drawn once the prop's own texture is bound", () => {
+    expect(tiles[0].object.mesh.alpha).toBe(1);
+  });
+
+  it("is held at zero while a readable-sized prop is still being drawn", async () => {
+    // Invalidating drops the binding; the placeholder is an icon, and stretching it
+    // across a prop the GM is waiting for reads as a bug rather than as loading.
+    manager.invalidate("JournalEntry.j");
+    manager.applyAlpha();
+    expect(tiles[0].object.mesh.alpha).toBe(0);
+
+    await settle();
+    expect(tiles[0].object.mesh.alpha).toBe(1);
+  });
+});

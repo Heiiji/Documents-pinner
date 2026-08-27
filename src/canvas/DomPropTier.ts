@@ -88,9 +88,11 @@ export function syncDomTier(entries: readonly DomPropEntry[]): void {
   const live = new Set<string>();
 
   for (const entry of entries) {
-    // L0 is culled and L1 is a silhouette the canvas tier draws with a shared texture;
-    // neither is worth a live DOM element, and the focused one is the reader's job.
-    if (entry.tier === "L0" || entry.tier === "L1" || entry.focused) continue;
+    // Only L0 is skipped. The canvas tier draws a silhouette at L1 from the tile's own
+    // texture, but on this path the mesh is held at alpha 0 — the card IS the prop — so
+    // skipping L1 here would make a prop vanish as the GM zoomed out rather than shrink.
+    // The focused one is the reader's job; a second copy under it helps nobody.
+    if (entry.tier === "L0" || entry.focused) continue;
     live.add(entry.id);
     upsert(entry);
   }

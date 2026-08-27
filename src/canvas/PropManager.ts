@@ -325,7 +325,7 @@ class Manager {
 
       const alpha = this.#alphaFor(tile, pin, tokens);
       if (dom) setDomPropAlpha(record.id, alpha);
-      else if (tile.mesh) tile.mesh.alpha = alpha;
+      if (tile.mesh) tile.mesh.alpha = this.#meshAlphaFor(record, alpha, dom);
     }
   }
 
@@ -337,6 +337,28 @@ class Manager {
     }
     if (this.#peeking) alpha = Math.min(alpha, 0.15);
     return alpha;
+  }
+
+  /**
+   * The alpha the tile's own MESH should be drawn at.
+   *
+   * Every anchor now carries a real placeholder texture, because core builds no mesh
+   * without one — so the mesh has something to draw at every moment, and the two tiers
+   * have to say when that something should be seen.
+   *
+   * On the DOM path: never. The card over it IS the prop, and a placeholder icon
+   * stretched to letter size showing through it would be the artefact.
+   *
+   * On the canvas path: not while a readable-sized prop is still being drawn. The
+   * placeholder is an icon, not a letter, and stretching it across a prop the GM is
+   * waiting for reads as a bug rather than as loading. Below the silhouette threshold it
+   * is left alone, because at that size it is a speck either way.
+   */
+  #meshAlphaFor(record: PropRecord, alpha: number, dom: boolean): number {
+    if (dom) return 0;
+    const awaitingTexture =
+      record.boundKey === null && record.tier !== "L0" && record.tier !== "L1";
+    return awaitingTexture ? 0 : alpha;
   }
 
   setFocused(id: string | null): void {
@@ -621,6 +643,7 @@ class Manager {
     const provisional = this.#keyFor(tile, pin, longEdge, record.contentHash);
     if (this.#cache.has(provisional)) {
       this.#bind(record, tile, this.#cache.get(provisional), provisional);
+      this.applyAlpha();
       return;
     }
 
@@ -635,6 +658,7 @@ class Manager {
     const cached = this.#cache.get(key);
     if (cached) {
       this.#bind(record, tile, cached, key);
+      this.applyAlpha();
       return;
     }
     if (this.#failedKeys.has(key)) return;
@@ -661,6 +685,10 @@ class Manager {
 
     this.#cache.set(key, result.texture, result.bytes);
     this.#bind(record, tile, result.texture, key);
+    // The mesh was held invisible while there was only a placeholder on it; now that the
+    // prop's own texture is bound it has something worth showing. `#recomputeLod` runs
+    // this before the queue drains, so the bind has to say so itself.
+    this.applyAlpha();
     this.#trim();
   }
 

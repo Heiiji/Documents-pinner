@@ -100,10 +100,16 @@ describe("syncDomTier", () => {
     expect(card.style.transform).toBe("rotate(15deg)");
   });
 
-  it("draws nothing for a culled or silhouette prop", async () => {
-    syncDomTier([entry({ tier: "L0" }), entry({ id: "t2", tier: "L1" })]);
+  it("draws nothing for a culled prop", async () => {
+    syncDomTier([entry({ tier: "L0" })]);
     await settle();
     expect(domPropCount()).toBe(0);
+  });
+
+  it("still draws a silhouette-sized prop, because the mesh under it is at alpha 0", async () => {
+    syncDomTier([entry({ tier: "L1" })]);
+    await settle();
+    expect(domPropCount()).toBe(1);
   });
 
   it("leaves the focused prop to the reader rather than stacking two copies", async () => {
