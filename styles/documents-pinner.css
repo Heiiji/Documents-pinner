@@ -1,0 +1,18 @@
+/*
+ * The ONLY stylesheet module.json loads.
+ *
+ * The @layer statement on the first line fixes the cascade order regardless of the
+ * order the @import rules resolve in — which is exactly the guarantee a bundler would
+ * otherwise have provided. Everything the module ships lives inside a `dp.*` layer,
+ * and Foundry's own unlayered styles beat layered styles by definition, so this module
+ * structurally CANNOT outrank core UI, even with a careless selector.
+ *
+ * Chromium 144 (Foundry v14 / Electron 40) supports @layer, @import ... layer(),
+ * native nesting, @property, :has(), color-mix() and @container natively, so there is
+ * no build step and no preprocessor anywhere in the CSS pipeline.
+ */
+@layer dp.base, dp.pin, dp.fx, dp.ui, dp.theme;
+
+@import url("./base.css") layer(dp.base);
+@import url("./fx/_props.css") layer(dp.fx);
+@import url("./theme.css") layer(dp.theme);

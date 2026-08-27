@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      # Foundry v14 type definitions are still immature (no stable release exists for
+      # any Foundry generation), so type errors must never be able to block a release.
+      # Types are stripped by esbuild at build time and are never type-checked there.
+      - name: Typecheck (advisory)
+        continue-on-error: true
+        run: npm run typecheck
+
+      - name: Validate manifest
+        run: |
+          node -e '
+            const m = JSON.parse(require("fs").readFileSync("module.json", "utf8"));
+            const need = ["id", "title", "version", "compatibility", "esmodules", "styles", "languages"];
+            const missing = need.filter((k) => !(k in m));
+            if (missing.length) throw new Error("module.json missing: " + missing.join(", "));
+            if (!m.compatibility.minimum) throw new Error("compatibility.minimum is required");
+            for (const l of m.languages) {
+              if (!require("fs").existsSync(l.path)) throw new Error("missing language file " + l.path);
+            }
+            for (const s of m.styles) {
+              if (!require("fs").existsSync(s)) throw new Error("missing stylesheet " + s);
+            }
+            console.log("module.json OK (id=" + m.id + ", compat " + JSON.stringify(m.compatibility) + ")");
+          '

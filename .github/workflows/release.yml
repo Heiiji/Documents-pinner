@@ -1,0 +1,100 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    # Job-level so the conditional skip below can read it; a step's own `env:` block
+    # is not visible to that step's `if:` expression.
+    env:
+      FOUNDRY_KEY: ${{ secrets.FOUNDRY_KEY }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Derive version from the tag
+        id: version
+        run: echo "value=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build
+
+      # The tag is the single source of truth for the version; module.json is stamped
+      # from it. compatibility is NOT touched here and NOT duplicated in this file —
+      # it is read back out below, so there is exactly one place to edit on a Foundry
+      # version bump.
+      - name: Stamp module.json
+        id: manifest
+        env:
+          VERSION: ${{ steps.version.outputs.value }}
+          REPO: ${{ github.repository }}
+        run: |
+          node -e '
+            const fs = require("fs");
+            const { VERSION, REPO } = process.env;
+            const m = JSON.parse(fs.readFileSync("module.json", "utf8"));
+            m.version = VERSION;
+            m.url = `https://github.com/${REPO}`;
+            m.manifest = `https://github.com/${REPO}/releases/latest/download/module.json`;
+            m.download = `https://github.com/${REPO}/releases/download/v${VERSION}/module.zip`;
+            fs.writeFileSync("module.json", JSON.stringify(m, null, 2) + "\n");
+            fs.appendFileSync(process.env.GITHUB_OUTPUT, `compatibility=${JSON.stringify(m.compatibility)}\n`);
+            fs.appendFileSync(process.env.GITHUB_OUTPUT, `id=${m.id}\n`);
+            console.log(`stamped ${m.id} ${m.version}`);
+          '
+
+      - name: Package
+        run: |
+          zip -r module.zip \
+            module.json dist styles templates lang assets \
+            README.md CHANGELOG.md LICENSE \
+            -x "*.DS_Store" "*.map"
+
+      - name: GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            module.json
+            module.zip
+          generate_release_notes: true
+
+      # Optional: publish to the Foundry package registry. Skipped automatically when
+      # the FOUNDRY_KEY secret is not configured, so forks and first releases work.
+      - name: Publish to the Foundry package registry
+        if: ${{ env.FOUNDRY_KEY != '' }}
+        env:
+          VERSION: ${{ steps.version.outputs.value }}
+          MODULE_ID: ${{ steps.manifest.outputs.id }}
+          COMPATIBILITY: ${{ steps.manifest.outputs.compatibility }}
+          REPO: ${{ github.repository }}
+        run: |
+          payload=$(node -e '
+            const { VERSION, MODULE_ID, COMPATIBILITY, REPO } = process.env;
+            console.log(JSON.stringify({
+              dry_run: false,
+              id: MODULE_ID,
+              release: {
+                version: VERSION,
+                manifest: `https://github.com/${REPO}/releases/download/v${VERSION}/module.json`,
+                notes: `https://github.com/${REPO}/blob/main/CHANGELOG.md`,
+                compatibility: JSON.parse(COMPATIBILITY),
+              },
+            }));
+          ')
+          curl --fail-with-body -sS -X POST \
+            -H "Content-Type: application/json" \
+            -H "Authorization: $FOUNDRY_KEY" \
+            -d "$payload" \
+            https://api.foundryvtt.com/_api/packages/release_version

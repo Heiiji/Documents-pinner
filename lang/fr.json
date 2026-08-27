@@ -1,0 +1,40 @@
+{
+  "DP.module.title": "Documents Pinner",
+
+  "DP.audience.hidden": "Masqué aux joueurs",
+  "DP.audience.everyone": "Visible par tous",
+  "DP.audience.selected": "Visible par {count} joueur(s) sur {userCount}",
+  "DP.audience.discovered": "Révélé à la découverte ({count} pour l'instant)",
+  "DP.audience.unknown": "Visibilité inconnue",
+
+  "DP.notice.ownershipOverridden": "Les permissions de « {ownershipKey} » ont été modifiées à la main ; Documents Pinner n'y a pas touché.",
+
+  "DP.pin.error.missingSource": "Cette épingle n'a ni document ni image source ; un substitut est affiché.",
+  "DP.pin.warn.badEnum": "{path} n'accepte pas « {value} » ; la valeur par défaut a été utilisée.",
+  "DP.pin.warn.unknownKey": "Réglage d'épingle inconnu ignoré : {path}",
+  "DP.pin.warn.futureVersion": "Cette épingle a été créée avec une version plus récente (v{found}, ici v{supported}). Les réglages non pris en charge ont été abandonnés.",
+  "DP.pin.warn.badPath": "{path} n'est pas un chemin de fichier utilisable ({value}) ; il a été effacé.",
+  "DP.pin.warn.droppedParams": "{count} remplacement(s) d'effet non reconnu(s) par cette version ont été abandonnés.",
+
+  "DP.preset.error.notAnObject": "Ceci n'est pas un préréglage.",
+  "DP.preset.error.badId": "« {value} » n'est pas un identifiant valide. Utilisez des minuscules, des chiffres et des tirets.",
+  "DP.preset.warn.unknownParam": "Paramètre inconnu ignoré : {path}",
+  "DP.preset.warn.badColour": "{path} n'est pas une couleur valide ({value}) ; la valeur par défaut a été utilisée.",
+  "DP.preset.warn.badEnum": "{path} n'accepte pas « {value} » ; la valeur par défaut a été utilisée.",
+  "DP.preset.warn.futureVersion": "Ce préréglage vient d'une version plus récente (v{found}, ici v{supported}). Les réglages non pris en charge ont été retirés.",
+
+  "DP.preset.none": "Aucun",
+  "DP.preset.agedParchment": "Parchemin vieilli",
+  "DP.preset.tornEdges": "Bords déchirés",
+  "DP.preset.sealedAndWax": "Sceau de cire",
+  "DP.preset.bloodstained": "Taché de sang",
+  "DP.preset.outOfFocus": "Flou",
+  "DP.preset.arcaneGlow": "Lueur arcanique",
+  "DP.preset.holographicFrame": "Cadre holographique",
+  "DP.preset.crtScanlines": "Balayage cathodique",
+  "DP.preset.glitch": "Glitch",
+
+  "DP.cost.low": "Léger",
+  "DP.cost.medium": "Modéré",
+  "DP.cost.high": "Lourd"
+}

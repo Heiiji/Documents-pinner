@@ -1,0 +1,16 @@
+/*
+ * Theme bridge.
+ *
+ * Only SEMANTIC Foundry variables are referenced, each with a literal fallback. That
+ * is what makes v13+ light and dark themes both work with zero override rules — there
+ * is no `.theme-dark` block to keep in sync because nothing here hardcodes a palette.
+ */
+
+.dp-pin,
+.dp-panel {
+  --dp-paper: var(--color-bg-option, #1b1b23);
+  --dp-ink: var(--color-text-primary, #eeeeee);
+  --dp-edge: var(--color-border-light-1, #7a7971);
+  --dp-accent: var(--color-warm-1, #c9ad6a);
+  --dp-scrim: color-mix(in oklab, var(--dp-paper) 80%, transparent);
+}

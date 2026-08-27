@@ -1,0 +1,27 @@
+{
+  "name": "documents-pinner",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Foundry VTT module: pin a document onto the map as a pin or a readable prop, with per-pin visibility and immersive effects.",
+  "license": "MIT",
+  "scripts": {
+    "build": "vite build",
+    "watch": "vite build --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src tests",
+    "format": "prettier --write \"{src,tests}/**/*.{ts,js}\" \"styles/**/*.css\""
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.17.0",
+    "@types/node": "^22.10.2",
+    "eslint": "^9.17.0",
+    "prettier": "^3.4.2",
+    "typescript": "^5.7.2",
+    "typescript-eslint": "^8.18.1",
+    "vite": "^6.0.5",
+    "vitest": "^2.1.8"
+  }
+}

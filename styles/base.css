@@ -1,0 +1,51 @@
+/*
+ * Structural rules for the canvas-synced overlay and the pin/prop card.
+ *
+ * Every selector is `.dp-` or `#dp-` prefixed. The only exception in the whole module
+ * is the section injected into the core Tile config, which is wrapped in `.dp-scope`
+ * so the same rule still holds.
+ */
+
+#documents-pinner-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  overflow: hidden;
+  transform-origin: 0 0;
+  /* The container must never swallow canvas pointer events: drag-to-pan, token drag
+     and the ruler all start with a pointerdown on the board. Individual cards opt in. */
+  pointer-events: none;
+  /* Below core's HUD, whose ApplicationV2 position.zIndex is 100. */
+  z-index: 90;
+}
+
+.dp-pin {
+  position: absolute;
+  transform-origin: 50% 50%;
+  /* Lets the browser skip layout and paint entirely for off-screen cards. */
+  content-visibility: auto;
+
+  &[data-dp-interactive="true"] {
+    pointer-events: auto;
+    cursor: pointer;
+  }
+}
+
+.dp-surface,
+.dp-frame,
+.dp-fx {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.dp-fx {
+  /* Purely decorative: never announced, never focusable. */
+  content: "";
+}
+
+.dp-content {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}

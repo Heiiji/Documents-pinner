@@ -1,0 +1,40 @@
+{
+  "DP.module.title": "Documents Pinner",
+
+  "DP.audience.hidden": "Hidden from players",
+  "DP.audience.everyone": "Visible to everyone",
+  "DP.audience.selected": "Visible to {count} of {userCount} players",
+  "DP.audience.discovered": "Revealed on discovery ({count} so far)",
+  "DP.audience.unknown": "Unknown visibility",
+
+  "DP.notice.ownershipOverridden": "Permissions for \"{ownershipKey}\" were changed by hand; Documents Pinner left them alone.",
+
+  "DP.pin.error.missingSource": "This pin has no source document or image, so it shows a placeholder.",
+  "DP.pin.warn.badEnum": "{path} does not accept \"{value}\"; the default was used.",
+  "DP.pin.warn.unknownKey": "Ignored an unknown pin setting: {path}",
+  "DP.pin.warn.futureVersion": "This pin was made with a newer version (v{found}, this is v{supported}). Unsupported settings were dropped.",
+  "DP.pin.warn.badPath": "{path} is not a usable file path ({value}); it was cleared.",
+  "DP.pin.warn.droppedParams": "Dropped {count} effect override(s) this version does not understand.",
+
+  "DP.preset.error.notAnObject": "That is not a preset.",
+  "DP.preset.error.badId": "\"{value}\" is not a valid preset id. Use lowercase letters, digits and hyphens.",
+  "DP.preset.warn.unknownParam": "Ignored an unknown setting: {path}",
+  "DP.preset.warn.badColour": "{path} is not a valid colour ({value}); the default was used.",
+  "DP.preset.warn.badEnum": "{path} does not accept \"{value}\"; the default was used.",
+  "DP.preset.warn.futureVersion": "This preset was made with a newer version (v{found}, this is v{supported}). Unsupported settings were dropped.",
+
+  "DP.preset.none": "None",
+  "DP.preset.agedParchment": "Aged Parchment",
+  "DP.preset.tornEdges": "Torn Edges",
+  "DP.preset.sealedAndWax": "Sealed & Wax",
+  "DP.preset.bloodstained": "Bloodstained",
+  "DP.preset.outOfFocus": "Out of Focus",
+  "DP.preset.arcaneGlow": "Arcane Glow",
+  "DP.preset.holographicFrame": "Holographic Frame",
+  "DP.preset.crtScanlines": "CRT Scanlines",
+  "DP.preset.glitch": "Glitch",
+
+  "DP.cost.low": "Light",
+  "DP.cost.medium": "Moderate",
+  "DP.cost.high": "Heavy"
+}

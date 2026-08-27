@@ -1,0 +1,65 @@
+/*
+ * Registered custom properties.
+ *
+ * @property is load-bearing rather than decorative: registering a property gives it a
+ * TYPE, which makes it animatable and interpolatable. That is what lets preset
+ * cross-fades and the intensity slider run as compositor-side CSS transitions instead
+ * of a JavaScript ticker loop.
+ *
+ * `preset-css.ts` emits BASE values plus a single `--dp-i` multiplier; the rules that
+ * consume these do the multiplication in calc(), so dragging intensity is one write.
+ */
+
+@property --dp-i            { syntax: "<number>"; inherits: true; initial-value: 1; }
+@property --dp-motion       { syntax: "<number>"; inherits: true; initial-value: 1; }
+
+@property --dp-tint         { syntax: "<color>";  inherits: true; initial-value: transparent; }
+@property --dp-tint-amt     { syntax: "<number>"; inherits: true; initial-value: 0; }
+
+@property --dp-glow         { syntax: "<color>";  inherits: true; initial-value: transparent; }
+@property --dp-glow-r       { syntax: "<length>"; inherits: true; initial-value: 0px; }
+@property --dp-glow-op      { syntax: "<number>"; inherits: true; initial-value: 0; }
+
+@property --dp-blur         { syntax: "<length>"; inherits: true; initial-value: 0px; }
+@property --dp-chroma       { syntax: "<length>"; inherits: true; initial-value: 0px; }
+@property --dp-chroma-angle { syntax: "<angle>";  inherits: true; initial-value: 0deg; }
+
+@property --dp-scan-gap     { syntax: "<length>"; inherits: true; initial-value: 3px; }
+@property --dp-scan-op      { syntax: "<number>"; inherits: true; initial-value: 0; }
+
+@property --dp-jitter       { syntax: "<length>"; inherits: true; initial-value: 0px; }
+@property --dp-noise        { syntax: "<number>"; inherits: true; initial-value: 0; }
+@property --dp-noise-scale  { syntax: "<number>"; inherits: true; initial-value: 1; }
+@property --dp-flicker      { syntax: "<number>"; inherits: true; initial-value: 0; }
+@property --dp-warp         { syntax: "<number>"; inherits: true; initial-value: 0; }
+
+@property --dp-edge-amt     { syntax: "<number>"; inherits: true; initial-value: 0; }
+
+@property --dp-frame        { syntax: "<color>";  inherits: true; initial-value: transparent; }
+@property --dp-frame-w      { syntax: "<length>"; inherits: true; initial-value: 0px; }
+@property --dp-frame-r      { syntax: "<length>"; inherits: true; initial-value: 0px; }
+
+@property --dp-surface-op   { syntax: "<number>"; inherits: true; initial-value: 0; }
+
+@property --dp-shadow-x     { syntax: "<length>"; inherits: true; initial-value: 0px; }
+@property --dp-shadow-y     { syntax: "<length>"; inherits: true; initial-value: 0px; }
+@property --dp-shadow-blur  { syntax: "<length>"; inherits: true; initial-value: 0px; }
+@property --dp-shadow-op    { syntax: "<number>"; inherits: true; initial-value: 0; }
+
+/* The pure-CSS half of the accessibility contract: correct before any JS runs, and
+   still correct if the client setting is corrupt. `reduced` keeps static identity —
+   tint, frame, texture, edge shape — and stops only motion. */
+@media (prefers-reduced-motion: reduce) {
+  :root { --dp-motion: 0; }
+}
+
+[data-dp-fx="reduced"] .dp-pin,
+[data-dp-fx="reduced"] .dp-pin * {
+  animation: none !important;
+  transition: none !important;
+}
+
+[data-dp-fx="off"] .dp-pin .dp-fx,
+[data-dp-fx="off"] .dp-pin .dp-surface {
+  display: none;
+}
