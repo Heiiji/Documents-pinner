@@ -67,7 +67,11 @@
   &:hover,
   &:focus-visible {
     border-color: var(--color-warm-1, #c9ad6a);
-    background: color-mix(in oklab, var(--color-warm-1, #c9ad6a) 22%, var(--color-bg-option, #1b1b23));
+    background: color-mix(
+      in oklab,
+      var(--color-warm-1, #c9ad6a) 22%,
+      var(--color-bg-option, #1b1b23)
+    );
     outline: none;
   }
 

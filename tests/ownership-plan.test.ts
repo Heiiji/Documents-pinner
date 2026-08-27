@@ -48,7 +48,11 @@ describe("planGrant", () => {
     const current: OwnershipRecord = { default: 0 };
     const first = planGrant(current, null, { anchorUuid: A, keys: ["ali"], level: OBSERVER });
     const after = apply(current, first.ownership);
-    const second = planGrant(after, first.ledger, { anchorUuid: A, keys: ["ali"], level: OBSERVER });
+    const second = planGrant(after, first.ledger, {
+      anchorUuid: A,
+      keys: ["ali"],
+      level: OBSERVER,
+    });
 
     expect(second.ownership).toBeNull();
     expect(second.ledger!.holders.ali).toEqual({ [A]: OBSERVER });

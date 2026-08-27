@@ -70,9 +70,17 @@
   mix-blend-mode: var(--dp-tint-blend, normal);
   box-shadow:
     inset 0 0 calc(var(--dp-glow-r, 0px) * var(--dp-i, 1))
-      color-mix(in oklab, var(--dp-glow, transparent) calc(var(--dp-glow-op, 0) * 100%), transparent),
+      color-mix(
+        in oklab,
+        var(--dp-glow, transparent) calc(var(--dp-glow-op, 0) * 100%),
+        transparent
+      ),
     0 0 calc(var(--dp-glow-r, 0px) * var(--dp-i, 1))
-      color-mix(in oklab, var(--dp-glow, transparent) calc(var(--dp-glow-op, 0) * 100%), transparent);
+      color-mix(
+        in oklab,
+        var(--dp-glow, transparent) calc(var(--dp-glow-op, 0) * 100%),
+        transparent
+      );
   border: var(--dp-frame-w, 0px) solid var(--dp-frame, transparent);
   border-radius: var(--dp-frame-r, 0px);
 }

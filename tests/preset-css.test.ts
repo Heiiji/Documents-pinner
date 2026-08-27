@@ -50,7 +50,10 @@ describe("presetToCssVars", () => {
   it("converts frequencies to durations and zero to a disabled animation", () => {
     const p = defaultPreset({
       id: "z",
-      params: { flicker: { amount: 0.5, hz: 4 }, glow: { color: "#fff", radius: 1, opacity: 1, pulseHz: 0 } },
+      params: {
+        flicker: { amount: 0.5, hz: 4 },
+        glow: { color: "#fff", radius: 1, opacity: 1, pulseHz: 0 },
+      },
     });
     const vars = presetToCssVars(p);
     expect(vars["--dp-flicker-dur"]).toBe("0.25s");
@@ -76,7 +79,9 @@ describe("presetToCssVars", () => {
   it("flags motion only for looping presets", () => {
     expect(presetToCssVars(defaultPreset({ id: "z", motion: "loop" }))["--dp-motion"]).toBe("1");
     expect(presetToCssVars(defaultPreset({ id: "z", motion: "none" }))["--dp-motion"]).toBe("0");
-    expect(presetToCssVars(defaultPreset({ id: "z", motion: "onReveal" }))["--dp-motion"]).toBe("0");
+    expect(presetToCssVars(defaultPreset({ id: "z", motion: "onReveal" }))["--dp-motion"]).toBe(
+      "0"
+    );
   });
 });
 

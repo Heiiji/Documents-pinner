@@ -92,7 +92,8 @@
   gap: 0.45rem;
   padding: 0.25rem 0.5rem;
   border-inline-start: 3px solid transparent;
-  border-block-end: 1px solid color-mix(in oklab, var(--color-border-light-1, #7a7971) 30%, transparent);
+  border-block-end: 1px solid
+    color-mix(in oklab, var(--color-border-light-1, #7a7971) 30%, transparent);
   cursor: default;
 
   /* Off-screen rows in a long list skip layout and paint entirely. */

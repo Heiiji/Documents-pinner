@@ -115,7 +115,12 @@ describe("setUserVisible", () => {
   });
 
   it("normalises an emptied selection to hidden so the core field carries the state", () => {
-    const a = setUserVisible(makeAudience({ kind: "selected", users: ["ali"] }), "ali", false, PLAYERS);
+    const a = setUserVisible(
+      makeAudience({ kind: "selected", users: ["ali"] }),
+      "ali",
+      false,
+      PLAYERS
+    );
     expect(a.kind).toBe("hidden");
     expect(anchorHidden(a)).toBe(true);
   });

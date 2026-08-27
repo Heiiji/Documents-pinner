@@ -13,7 +13,8 @@
   align-items: center;
   gap: 0.5rem;
   padding: 0.4rem 0;
-  border-block-start: 1px solid color-mix(in oklab, var(--color-border-light-1, #7a7971) 50%, transparent);
+  border-block-start: 1px solid
+    color-mix(in oklab, var(--color-border-light-1, #7a7971) 50%, transparent);
 }
 
 .dp-config__row {

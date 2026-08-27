@@ -9,10 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Nothing yet.
 
-## [1.0.0] — unreleased
+## [0.1.0] — unreleased
 
-First release. Pin any journal, page or image onto the map as a small icon or as a
+First public beta. Pin any journal, page or image onto the map as a small icon or as a
 full-size readable prop, with per-pin visibility the GM controls in one click.
+
+Numbered 0.1.0 rather than 1.0.0 deliberately: the canvas behaviours have never been
+watched working on a real scene, and a 1.0 that has not been run at a table is a promise
+this project has not earned yet.
 
 > Feature-complete and covered by 500+ tests, but not yet verified in a live session. The
 > canvas behaviours in particular — lighting, fog, occlusion, frame rate under load — are
@@ -135,5 +139,5 @@ occluded. The module detects this at startup rather than failing visibly.
 
 The full list is in the README and in `docs/DESIGN.md` §10.
 
-[Unreleased]: https://github.com/Heiiji/Documents-pinner/compare/v1.0.0...HEAD
-[1.0.0]: https://github.com/Heiiji/Documents-pinner/releases/tag/v1.0.0
+[Unreleased]: https://github.com/Heiiji/Documents-pinner/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/Heiiji/Documents-pinner/releases/tag/v0.1.0

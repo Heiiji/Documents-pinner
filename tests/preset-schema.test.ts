@@ -8,7 +8,12 @@ import {
   validatePreset,
   withComputedCost,
 } from "../src/effects/preset-schema";
-import { CORE_PRESETS, CORE_PRESET_IDS, DEFAULT_PRESET_ID, getCorePreset } from "../src/effects/presets/core-presets";
+import {
+  CORE_PRESETS,
+  CORE_PRESET_IDS,
+  DEFAULT_PRESET_ID,
+  getCorePreset,
+} from "../src/effects/presets/core-presets";
 
 describe("the shipped library", () => {
   it("ships the ten documented presets", () => {
@@ -128,14 +133,19 @@ describe("validatePreset", () => {
   });
 
   it("falls back on a malformed colour and says so", () => {
-    const r = validatePreset({ id: "x", params: { tint: { color: "red; background: url(evil)" } } });
+    const r = validatePreset({
+      id: "x",
+      params: { tint: { color: "red; background: url(evil)" } },
+    });
     expect(r.preset!.params.tint.color).toBe(defaultParams().tint.color);
     expect(r.warnings.map((w) => w.key)).toContain("DP.preset.warn.badColour");
   });
 
   it("accepts every documented blend mode and rejects anything else", () => {
     for (const blend of BLEND_MODES) {
-      expect(validatePreset({ id: "x", params: { tint: { blend } } }).preset!.params.tint.blend).toBe(blend);
+      expect(
+        validatePreset({ id: "x", params: { tint: { blend } } }).preset!.params.tint.blend
+      ).toBe(blend);
     }
     const r = validatePreset({ id: "x", params: { tint: { blend: "plaid" } } });
     expect(r.preset!.params.tint.blend).toBe("normal");

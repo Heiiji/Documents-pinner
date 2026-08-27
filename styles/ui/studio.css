@@ -19,7 +19,8 @@
 .dp-studio__tabs {
   display: flex;
   gap: 0.25rem;
-  border-block-end: 1px solid color-mix(in oklab, var(--color-border-light-1, #7a7971) 60%, transparent);
+  border-block-end: 1px solid
+    color-mix(in oklab, var(--color-border-light-1, #7a7971) 60%, transparent);
 }
 
 .dp-studio__tabbtn {
@@ -155,7 +156,8 @@
   align-items: center;
   gap: 0.5rem;
   padding-block-start: 0.5rem;
-  border-block-start: 1px solid color-mix(in oklab, var(--color-border-light-1, #7a7971) 60%, transparent);
+  border-block-start: 1px solid
+    color-mix(in oklab, var(--color-border-light-1, #7a7971) 60%, transparent);
 
   & label {
     display: flex;
