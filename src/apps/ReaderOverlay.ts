@@ -21,7 +21,7 @@
  */
 
 import { MODULE_ID } from "../const";
-import { cv, g } from "../fvtt";
+import { cv, notify } from "../fvtt";
 import { t } from "../i18n";
 import { escapeAttr } from "../html";
 import { readPin } from "../data/PinData";
@@ -60,7 +60,21 @@ export async function openReader(tileDoc: any): Promise<void> {
 
   const size = { width: tileDoc.width, height: tileDoc.height };
   const card = await resolveCard(pin, size, { tier: "L3", baked: false });
-  if (!card.readable && !g()?.user?.isGM) return;
+
+  // NOT gated on permission. With ownership sync off — a documented setting, and the
+  // whole point of DESIGN §3.1 — a player can see a prop without holding OBSERVER on the
+  // journal behind it, and refusing here gave them a cursor that said "clickable" and a
+  // click that did nothing at all: no reader, no sheet, no notification. That is exactly
+  // the "I can see it but nothing happens" failure the key glyph exists to warn about.
+  //
+  // There is nothing to protect at this point either: the card has already been built
+  // and already had its secrets stripped FOR THIS USER by `enrichFor`, so the module is
+  // refusing to show content it is already holding. The refusal belongs to a source that
+  // is genuinely gone, and that one says so.
+  if (card.missing) {
+    notify({ key: "DP.notice.sourceMissing" }, "warn");
+    return;
+  }
 
   element = document.createElement("div");
   element.className = "dp-reader";

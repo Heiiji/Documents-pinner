@@ -87,7 +87,12 @@ function buildLayerClass(CanvasLayer: any): any {
 
       for (const tile of cv()?.tiles?.placeables ?? []) {
         const pin = readPin(tile.document);
-        if (!pin || pin.mode !== "prop") continue;
+        // BOTH modes. The Tiles layer is GM-only, so a mode skipped here is a mode no
+        // player can ever click — and filtering to props made the module's first
+        // promise, "a little token players double-click to see the document",
+        // unreachable for everyone it was written for. `rotatedPolygon` is already
+        // mode-agnostic; nothing else needed to change.
+        if (!pin) continue;
         if (pin.interaction.open === "never" || pin.interaction.clickThrough) continue;
         if (!tile.isVisible) continue;
 

@@ -16,9 +16,10 @@
  */
 
 import { MODULE_ID } from "../const";
-import { g, isGM, isOurs, notify } from "../fvtt";
+import { g, isGM, isOurs, notify, ns } from "../fvtt";
 import { visibleSceneRect } from "../canvas/transform";
 import { t } from "../i18n";
+import { escapeHtml } from "../html";
 import * as api from "../api";
 import * as settings from "../settings";
 import { armAt } from "../apps/PlacementGhost";
@@ -192,14 +193,21 @@ export function onChatMessage(_log: any, message: string): boolean | void {
  * Deliberately tiny. Injecting into a core ApplicationV2's DOM is the most fragile
  * thing this module does, so the blast radius is one row: a switch, a thumbnail and a
  * link out to the Studio. It is also the one-click path for adopting an existing tile,
- * including one another module made.
+ * including one another module made — and, from the Note sheet, the module's only
+ * concrete ecosystem-integration surface.
  */
 export function onRenderConfig(app: any, element: HTMLElement): void {
   if (!isGM()) return;
 
   const doc = app?.document;
-  if (!doc || doc.documentName !== "Tile") return;
+  if (!doc) return;
   if (element.querySelector(".dp-scope")) return;
+
+  if (doc.documentName === "Note") {
+    injectSection(element, noteSection(doc));
+    return;
+  }
+  if (doc.documentName !== "Tile") return;
 
   const pin = readPin(doc);
   const section = document.createElement("div");
@@ -212,26 +220,85 @@ export function onRenderConfig(app: any, element: HTMLElement): void {
       ? `<button type="button" class="dp-config__studio">${t("DP.config.openStudio")}</button>`
       : "");
 
-  // Appending is the fallback, not an afterthought: `anchor?.before()` on a sheet with
-  // no footer is a silent no-op, and a row that quietly fails to appear is the worst
-  // outcome for the one piece of DOM this module injects into a core application.
-  const anchor = element.querySelector(".form-footer") ?? element.querySelector("footer");
-  if (anchor) anchor.before(section);
-  else (element.querySelector("form") ?? element).appendChild(section);
+  injectSection(element, section);
 
   section.querySelector(".dp-config__toggle")?.addEventListener("change", (event) => {
-    const checked = (event.target as HTMLInputElement).checked;
-    if (!checked) {
-      void api.unpin(doc);
+    const input = event.target as HTMLInputElement;
+    if (!input.checked) {
+      // Unpinning drops the payload and releases the ownership grant, and the sheet is
+      // still holding the pre-toggle data — so this one asks, and puts the switch back
+      // when the answer is no.
+      void confirmUnpin().then((ok) => {
+        if (ok) void api.unpin(doc);
+        else input.checked = true;
+      });
       return;
     }
-    // Adopting needs a source, and the sheet is the wrong place to choose one.
-    openPicker();
+    // Adopting needs a source, and the sheet is the wrong place to choose one — but the
+    // picker is told WHICH tile it is choosing for. A bare `openPicker()` armed the
+    // ghost and placed an unrelated new pin somewhere else, leaving this tile untouched.
+    openPicker({ adopt: doc });
   });
 
   section.querySelector(".dp-config__studio")?.addEventListener("click", () => {
     Hooks.call(`${MODULE_ID}.openStudio`, doc);
   });
+}
+
+/**
+ * The Note sheet's row.
+ *
+ * A Note cannot BE an anchor — `BaseNote` has no `hidden`, `width`, `height` or
+ * `rotation`, which is exactly why DESIGN §2 chose Tile — so this converts: it places a
+ * real anchor where the note stands and removes the note. Destructive, so it asks.
+ */
+function noteSection(doc: any): HTMLElement {
+  const section = document.createElement("div");
+  section.className = "dp-scope dp-config";
+  section.innerHTML =
+    `<button type="button" class="dp-config__adopt">${t("DP.config.adoptNote")}</button>` +
+    `<p class="dp-config__hint">${t("DP.config.adoptNoteHint")}</p>`;
+
+  section.querySelector(".dp-config__adopt")?.addEventListener("click", () => {
+    void confirmAdoptNote().then((ok) => {
+      if (!ok) return;
+      // A note that links a journal already knows its source; one that does not asks.
+      if (api.sourceFromNote(doc)) void api.adoptNote(doc);
+      else openPicker({ adopt: doc });
+    });
+  });
+  return section;
+}
+
+/**
+ * Put the section in the sheet.
+ *
+ * Appending is the fallback, not an afterthought: `anchor?.before()` on a sheet with no
+ * footer is a silent no-op, and a row that quietly fails to appear is the worst outcome
+ * for the one piece of DOM this module injects into a core application.
+ */
+function injectSection(element: HTMLElement, section: HTMLElement): void {
+  const anchor = element.querySelector(".form-footer") ?? element.querySelector("footer");
+  if (anchor) anchor.before(section);
+  else (element.querySelector("form") ?? element).appendChild(section);
+}
+
+function confirmUnpin(): Promise<boolean> {
+  return confirmAction("DP.config.unpinTitle", "DP.config.unpinBody");
+}
+
+function confirmAdoptNote(): Promise<boolean> {
+  return confirmAction("DP.config.adoptNote", "DP.config.adoptNoteBody");
+}
+
+/** A yes/no dialog. A build with no DialogV2 refuses rather than acting unasked. */
+async function confirmAction(titleKey: string, bodyKey: string): Promise<boolean> {
+  const DialogV2 = ns("applications.api.DialogV2");
+  if (!DialogV2?.confirm) return false;
+  return DialogV2.confirm({
+    window: { title: t(titleKey) },
+    content: `<p>${escapeHtml(t(bodyKey))}</p>`,
+  }).catch(() => false);
 }
 
 /** Keep a pin's label in step with a renamed source. */

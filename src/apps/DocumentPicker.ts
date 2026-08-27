@@ -16,6 +16,7 @@ import { t } from "../i18n";
 import { escapeAttr, escapeHtml } from "../html";
 import { fold } from "./pinboard-model";
 import { arm } from "./PlacementGhost";
+import * as api from "../api";
 import type { DpSource } from "../types/dp";
 
 let PickerClass: any = null;
@@ -122,6 +123,15 @@ export function definePicker(): any {
     };
 
     search = "";
+    /**
+     * A tile or note this picker is choosing a source FOR, rather than placing a new pin.
+     *
+     * The Tile config's "this is a pin" checkbox used to call a bare `openPicker()`,
+     * which armed the ghost and placed a NEW pin somewhere else entirely — leaving the
+     * tile being configured untouched and the GM with two objects. `adoptTile` was the
+     * correct verb, already written and tested, and had no caller anywhere.
+     */
+    adopt: any = null;
 
     async _renderHTML() {
       const wrapper = document.createElement("div");
@@ -136,7 +146,11 @@ export function definePicker(): any {
           : null;
 
       content.replaceChildren(result);
-      this.#wire(content);
+      // Wired to `result`, the NEW subtree, not to `content`. ApplicationV2 hands back
+      // the same `content` element on every render, so listeners attached there
+      // accumulate one set per render — and because these handlers trigger renders, the
+      // growth compounds.
+      this.#wire(result);
 
       const search = content.querySelector<HTMLInputElement>(".dp-picker__search");
       if (caret !== null) {
@@ -181,6 +195,12 @@ export function definePicker(): any {
         followName: true,
       };
       this.close();
+
+      if (this.adopt) {
+        void adoptWith(this.adopt, source);
+        this.adopt = null;
+        return;
+      }
       arm(source);
     }
   };
@@ -197,16 +217,40 @@ async function onBrowse(this: any) {
     type: "imagevideo",
     callback: (path: string) => {
       this.close();
-      arm({ kind: "image", uuid: null, src: path, pageId: null, followName: false });
+      const source: DpSource = {
+        kind: "image",
+        uuid: null,
+        src: path,
+        pageId: null,
+        followName: false,
+      };
+      if (this.adopt) {
+        void adoptWith(this.adopt, source);
+        this.adopt = null;
+        return;
+      }
+      arm(source);
     },
   });
   picker.render(true);
 }
 
-export function openPicker(): any {
+/** Attach the chosen source to the placeable that opened the picker. */
+async function adoptWith(target: any, source: DpSource): Promise<void> {
+  if (target.documentName === "Note") await api.adoptNote(target, source);
+  else await api.adoptTile(target, source);
+}
+
+export interface PickerOptions {
+  /** Adopt this placeable instead of placing a new pin. */
+  adopt?: any;
+}
+
+export function openPicker(options: PickerOptions = {}): any {
   const Picker = definePicker();
   if (!Picker) return null;
   instance ??= new Picker();
+  instance.adopt = options.adopt ?? null;
   instance.render(true);
   return instance;
 }

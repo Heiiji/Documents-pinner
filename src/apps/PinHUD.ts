@@ -33,7 +33,7 @@ import { t, tn } from "../i18n";
 import { escapeAttr, escapeHtml } from "../html";
 import * as api from "../api";
 import { readPin } from "../data/PinData";
-import { CORE_PRESETS } from "../effects/presets/core-presets";
+import { allPresets } from "../effects/preset-library";
 import { chipsMarkup, describeChips, type ChipUser } from "./chips";
 import type { DpPinFlags } from "../types/dp";
 
@@ -111,7 +111,9 @@ function audiencePaletteMarkup(anchorDoc: any, pin: DpPinFlags): string {
 }
 
 function effectsPaletteMarkup(pin: DpPinFlags): string {
-  const swatches = CORE_PRESETS.map(
+  // The whole library. A gallery that offered only the shipped ten made the Preset
+  // Studio a producer with no consumer.
+  const swatches = allPresets().map(
     (preset) =>
       `<button type="button" class="dp-hud__swatch" data-action="setEffect"` +
       ` data-dp-preset="${escapeAttr(preset.id)}" aria-pressed="${pin.effect.id === preset.id}"` +
@@ -225,6 +227,18 @@ export function definePinHUD(): any {
       },
     };
 
+    /**
+     * The palette that is open, and the control that had focus.
+     *
+     * Kept on the INSTANCE rather than read back off the DOM, because the DOM is
+     * replaced wholesale on every render — which is precisely the thing that made the
+     * palette close after every chip click. A tile update re-renders the HUD, the fresh
+     * markup has both palettes `hidden`, and revealing to three of five players cost
+     * three reopenings and lost focus three times.
+     */
+    openPaletteId: string | null = null;
+    focusedSelector: string | null = null;
+
     /** The anchor this HUD is bound to. `object` is core's; `document` is its doc. */
     get anchorDoc(): any {
       return this.object?.document ?? this.document ?? null;
@@ -241,13 +255,56 @@ export function definePinHUD(): any {
     }
 
     _replaceHTML(result: HTMLElement, content: HTMLElement) {
+      // Read before the DOM is thrown away; re-applied after the new one is in place.
+      this.focusedSelector = focusSelectorIn(content) ?? this.focusedSelector;
+
       content.replaceChildren(result);
-      this.#wire(content);
+      // Wired to `result`, the NEW subtree, not to `content`. ApplicationV2 hands back
+      // the same `content` element on every render, so listeners attached there
+      // accumulate one set per render — and because these handlers trigger renders, the
+      // growth compounds.
+      this.#wire(result);
+      this.#restoreState(result);
+    }
+
+    /**
+     * Put the disclosure and the focus back where the GM left them.
+     *
+     * Both halves matter and they fail together: a palette that closes takes the focused
+     * chip with it, so the next click needs a reopen AND a re-aim.
+     */
+    #restoreState(root: HTMLElement) {
+      if (this.openPaletteId) {
+        const palette = root.querySelector<HTMLElement>(`#${CSS.escape(this.openPaletteId)}`);
+        const button = root.querySelector<HTMLElement>(
+          `[aria-controls="${CSS.escape(this.openPaletteId)}"]`
+        );
+        if (palette && button) {
+          palette.hidden = false;
+          button.setAttribute("aria-expanded", "true");
+        } else {
+          this.openPaletteId = null;
+        }
+      }
+
+      if (!this.focusedSelector) return;
+      const target = root.querySelector<HTMLElement>(this.focusedSelector);
+      if (!target) return;
+      // The toolbar is one tab stop: whatever regains focus becomes the tabbable one.
+      if (target.classList.contains("dp-hud__btn")) {
+        for (const button of root.querySelectorAll<HTMLElement>(".dp-hud__btn")) {
+          button.tabIndex = -1;
+        }
+        target.tabIndex = 0;
+      }
+      target.focus({ preventScroll: true });
     }
 
     #wire(root: HTMLElement) {
       const buttons = [...root.querySelectorAll<HTMLElement>(".dp-hud__btn")];
       if (buttons[0]) buttons[0].tabIndex = 0;
+      // `#restoreState` runs after this and may move the tab stop to whichever button
+      // the GM actually had focused.
 
       root.addEventListener("keydown", (event) => {
         const target = event.target as HTMLElement;
@@ -289,6 +346,7 @@ export function definePinHUD(): any {
     }
 
     #closePalettes(root: HTMLElement) {
+      this.openPaletteId = null;
       for (const palette of root.querySelectorAll<HTMLElement>(".dp-hud__palette")) {
         palette.hidden = true;
       }
@@ -364,11 +422,42 @@ function onTogglePalette(this: any, _event: Event, target: HTMLElement) {
     button.setAttribute("aria-expanded", "false");
   }
 
+  // Remembered on the instance so the next render can put it back; see `#restoreState`.
+  this.openPaletteId = open ? null : id;
+
   if (!open && palette) {
     palette.hidden = false;
     target.setAttribute("aria-expanded", "true");
     palette.querySelector<HTMLElement>("button, input")?.focus();
   }
+}
+
+/**
+ * A selector that will find the focused control again in freshly built markup.
+ *
+ * Identity-based, never positional: a chip is found by its user and a button by its
+ * action, so restoring focus survives a re-render that changed how many chips there are.
+ */
+export function focusSelectorIn(root: ParentNode): string | null {
+  const active = typeof document === "undefined" ? null : (document.activeElement as HTMLElement);
+  if (!active || !root.contains?.(active)) return null;
+
+  const user = active.dataset?.dpUser;
+  if (user) return `.dp-chip[data-dp-user="${CSS.escape(user)}"]`;
+
+  const kind = active.dataset?.dpKind;
+  if (kind) return `[data-dp-kind="${CSS.escape(kind)}"]`;
+
+  const preset = active.dataset?.dpPreset;
+  if (preset) return `[data-dp-preset="${CSS.escape(preset)}"]`;
+
+  const action = active.dataset?.action;
+  if (!action) return null;
+  // `togglePalette` appears twice; the palette it controls is what tells them apart.
+  const controls = active.getAttribute("aria-controls");
+  return controls
+    ? `[data-action="${CSS.escape(action)}"][aria-controls="${CSS.escape(controls)}"]`
+    : `[data-action="${CSS.escape(action)}"]`;
 }
 
 function onToggleLock(this: any) {

@@ -15,7 +15,7 @@
  */
 
 import { MODULE_ID } from "../const";
-import { cv, g, isGM } from "../fvtt";
+import { cv, g } from "../fvtt";
 import * as api from "../api";
 import { openPinboard } from "../apps/Pinboard";
 import { armLastUsed, disarm, isArmed } from "../apps/PlacementGhost";
@@ -103,10 +103,11 @@ export function registerKeybindings(): void {
     },
   });
 
-  if (isGM()) registerGmOnly(keybindings);
-}
-
-function registerGmOnly(keybindings: any): void {
+  // Registered unconditionally, like the four above it. This ran behind `if (isGM())`
+  // from `Hooks.once("init")`, where `game.user` is not yet populated — so `isGM()` was
+  // false for everyone, Alt+M was never registered at all, and it did not even appear in
+  // Configure Controls while the README documented it. The gate was redundant anyway:
+  // `restricted: true` is Foundry's own GM gate, and the other four already rely on it.
   keybindings.register(MODULE_ID, "toggleMode", {
     name: "DP.keys.toggleMode",
     hint: "DP.keys.toggleModeHint",

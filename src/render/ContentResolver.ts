@@ -23,7 +23,7 @@ import * as api from "../api";
 import { cardHtml } from "./CardTemplate";
 import { dressing } from "../effects/EffectRegistry";
 import { currentLevel } from "../effects/level";
-import { getCorePreset } from "../effects/presets/core-presets";
+import { findPreset } from "../effects/preset-library";
 import type { LodTier } from "../canvas/lod";
 import { enrichFor } from "./enrich";
 import { hashContent } from "./TextureCache";
@@ -89,7 +89,11 @@ export async function resolveCard(
   size: { width: number; height: number },
   options: ResolveOptions = {}
 ): Promise<ResolvedCard> {
-  const preset = getCorePreset(pin.effect.id);
+// The library, not just the shipped ten. `getCorePreset` searches CORE_PRESETS only,
+// so a pin assigned a user preset got no effect at all, a raw id where its label should
+// be, and no reveal animation — the entire Preset Studio produced artefacts the module
+// could not use, while the README promised "author, export and share your own".
+  const preset = findPreset(pin.effect.id);
   const dressed = preset
     ? dressing({
         preset,

@@ -24,7 +24,7 @@ import { escapeAttr, escapeHtml } from "../html";
 import * as api from "../api";
 import { readPin } from "../data/PinData";
 import { PAPERS } from "../render/CardTemplate";
-import { CORE_PRESETS } from "../effects/presets/core-presets";
+import { allPresets } from "../effects/preset-library";
 import { chipsMarkup, describeChips } from "./chips";
 import { chipUsersFor } from "./PinHUD";
 import type { DpPinFlags } from "../types/dp";
@@ -122,7 +122,8 @@ function contentTab(pin: DpPinFlags): string {
 }
 
 function appearanceTab(pin: DpPinFlags): string {
-  const swatches = CORE_PRESETS.map(
+  // The whole library, so a preset a GM authored can actually be assigned to a pin.
+  const swatches = allPresets().map(
     (preset) =>
       `<button type="button" class="dp-studio__swatch" data-action="setEffect"` +
       ` data-dp-preset="${escapeAttr(preset.id)}" aria-pressed="${pin.effect.id === preset.id}">` +
@@ -319,7 +320,11 @@ export function definePinStudio(): any {
 
     _replaceHTML(result: HTMLElement, content: HTMLElement) {
       content.replaceChildren(result);
-      this.#wire(content);
+      // Wired to `result`, the NEW subtree, not to `content`. ApplicationV2 hands back
+      // the same `content` element on every render, so listeners attached there
+      // accumulate one set per render — and because these handlers trigger renders, the
+      // growth compounds.
+      this.#wire(result);
     }
 
     #wire(root: HTMLElement) {

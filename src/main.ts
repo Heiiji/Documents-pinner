@@ -113,7 +113,10 @@ Hooks.on("getSceneControlButtons", onGetSceneControlButtons);
 Hooks.on("dropCanvasData", onDropCanvasData);
 Hooks.on("getHeaderControlsApplicationV2", onGetHeaderControls);
 Hooks.on("chatMessage", onChatMessage);
+// Both sheets: the Note path is the module's only ecosystem-integration surface,
+// and registering only the Tile one made adopting an existing Note impossible.
 Hooks.on("renderTileConfig", onRenderConfig);
+Hooks.on("renderNoteConfig", onRenderConfig);
 for (const hook of CONTEXT_HOOKS) {
   Hooks.on(hook, (_app: any, options: any[]) => addContextOption(options));
 }

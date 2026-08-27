@@ -361,7 +361,14 @@ async function place(keepArmed: boolean): Promise<void> {
     width: size.width,
     height: size.height,
     rotation: current.rotation,
-    elevation: cv()?.scene?.foregroundElevation ?? 0,
+    // Zero, NOT `foregroundElevation`. That field is the scene's foreground THRESHOLD
+    // (default 20): a tile at or above it is an overhead tile and sorts above tokens in
+    // `canvas.primary`, which breaks acceptance criterion 4 — "a token standing on a
+    // prop renders in front of it" — for every ghost-placed prop. That is one of the two
+    // visual claims the whole primary-group architecture was chosen for. The brief asked
+    // for the active Scene Level, not the threshold; the Studio's elevation field is
+    // where a GM raises a prop deliberately.
+    elevation: 0,
     effectId: preset.id,
     audienceKind: current.audience,
   });

@@ -56,7 +56,7 @@ import { svgDocument } from "../render/CardTemplate";
 import { inlineFonts, inlineImages } from "../render/AssetInliner";
 import { TextureCache, cacheKey } from "../render/TextureCache";
 import { currentLevel, sampleFrame } from "../effects/level";
-import { getCorePreset } from "../effects/presets/core-presets";
+import { findPreset } from "../effects/preset-library";
 import {
   clearDomTier,
   setDomPropAlpha,
@@ -390,7 +390,8 @@ class Manager {
     const mesh = tile.mesh;
     if (!mesh) return;
 
-    const preset = getCorePreset(pin.effect.id);
+    // The library, not just the shipped ten: a user preset's reveal never played.
+    const preset = findPreset(pin.effect.id);
     const animation = preset?.reveal.animation ?? "fade";
     const target = tile.document.alpha ?? 1;
     if (animation === "none" || currentLevel() !== "full") {

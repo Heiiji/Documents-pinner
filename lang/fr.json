@@ -4,7 +4,6 @@
   "DP.audience.hidden": "Masqué aux joueurs",
   "DP.audience.selected": "Visible par {count} joueur(s) sur {userCount}",
   "DP.audience.unknown": "Visibilité inconnue",
-
   "DP.board.allLevels": "Tous les niveaux",
   "DP.board.bulk": "Actions sur les épingles sélectionnées",
   "DP.board.deleteBody": "Supprimer {count} épingle(s) ? Les documents correspondants ne sont pas modifiés.",
@@ -36,12 +35,9 @@
   "DP.board.selectedN": "{count} sélectionnée(s)",
   "DP.board.title": "Tableau des épingles",
   "DP.board.totals": "{visible} visibles sur {total}",
-
   "DP.card.missing": "Le document visé par cette épingle n'existe plus.",
   "DP.card.pdf": "Cette page est un PDF ; ouvrez-la pour la lire.",
-
   "DP.chat.noMatch": "Aucun journal ni page ne correspond à « {query} ».",
-
   "DP.chip.hidden": "{name} ne voit pas cette épingle.",
   "DP.chip.noPlayers": "Aucun joueur dans ce monde",
   "DP.chip.opensButCannotSee": "{name} peut ouvrir le document mais ne voit pas l'épingle.",
@@ -49,18 +45,19 @@
   "DP.chip.summary": "Visible par {seeing} joueurs sur {total}",
   "DP.chip.summaryMismatch": "Visible par {seeing} joueurs sur {total} — {mismatched} ne peuvent pas l'ouvrir",
   "DP.chip.visible": "{name} voit cette épingle et peut ouvrir le document.",
-
+  "DP.config.adoptNote": "Convertir en document épinglé",
+  "DP.config.adoptNoteBody": "Remplacer cette note de carte par un document épinglé ? La note sera supprimée ; le journal qu'elle désigne reste intact.",
+  "DP.config.adoptNoteHint": "Place une épingle Documents Pinner à l'emplacement de cette note, puis supprime la note. Le journal lui-même n'est jamais modifié.",
   "DP.config.isPin": "Traiter cette tuile comme un document épinglé",
   "DP.config.openStudio": "Ouvrir le Studio d'épingle",
-
+  "DP.config.unpinBody": "La tuile reste sur la scène, mais ses réglages d'épingle sont abandonnés et les droits qu'elle accordait sont restitués.",
+  "DP.config.unpinTitle": "Ne plus traiter cette tuile comme une épingle ?",
   "DP.controls.board": "Tableau des épingles",
   "DP.controls.pin": "Épingler un document",
   "DP.controls.pinThis": "Épingler sur la scène",
-
   "DP.cost.high": "Lourd",
   "DP.cost.low": "Léger",
   "DP.cost.medium": "Modéré",
-
   "DP.ghost.audienceAll": "Tous",
   "DP.ghost.audienceNone": "Masquée",
   "DP.ghost.keysMode": "␣ accessoire ⇄ épingle · E effet · V audience",
@@ -68,7 +65,6 @@
   "DP.ghost.keysRotate": "⟳ molette rotation · ⇧⟳ précis · ⌥⟳ échelle",
   "DP.ghost.placedHidden": "« {name} » épinglé — masqué jusqu'à révélation.",
   "DP.ghost.placedVisible": "« {name} » épinglé — visible par les joueurs.",
-
   "DP.hud.audience": "Qui peut la voir",
   "DP.hud.audienceAll": "Tous",
   "DP.hud.audienceNone": "Aucun",
@@ -85,7 +81,6 @@
   "DP.hud.title": "Commandes de l'épingle",
   "DP.hud.toPin": "Réduire en épingle",
   "DP.hud.toProp": "Étaler comme accessoire",
-
   "DP.keys.cancel": "Annuler le placement",
   "DP.keys.cancelHint": "N'agit que pendant un placement ; sinon Échap se comporte normalement.",
   "DP.keys.cycleAudience": "Faire défiler l'audience des épingles sélectionnées",
@@ -98,33 +93,28 @@
   "DP.keys.pinLastUsedHint": "Prépare le placement avec le document et l'effet utilisés en dernier : une série de marqueurs sans aucune boîte de dialogue.",
   "DP.keys.toggleMode": "Basculer les épingles sélectionnées entre épingle et accessoire",
   "DP.keys.toggleModeHint": "Le même ancrage dans les deux cas : rien de ce qui référence l'épingle ne casse.",
-
   "DP.migration.done": "{count} épingle(s) mises à jour au format actuel.",
   "DP.migration.prompt": "{pinCount} épingle(s) réparties sur {sceneCount} scène(s) que vous n'avez pas ouvertes proviennent d'une version antérieure. Les mettre à jour maintenant ? Elles fonctionnent déjà dans les deux cas ; il s'agit seulement de les réécrire au format actuel.",
   "DP.migration.title": "Documents Pinner — mise à jour des épingles",
-
   "DP.module.title": "Documents Pinner",
-
   "DP.notice.degraded": "Les épingles coûtaient trop cher par image ; le niveau de détail de chacune a été abaissé d'un cran. À revoir dans le Tableau des épingles.",
   "DP.notice.ledgerRepaired": "{count} autorisation(s) résiduelle(s) réparée(s), issues d'épingles qui n'existent plus.",
+  "DP.notice.noteNoSource": "Cette note ne désigne aucun journal : il n'y a rien à épingler.",
   "DP.notice.ownershipOverridden": "Les permissions de « {ownershipKey} » ont été modifiées à la main ; Documents Pinner n'y a pas touché.",
   "DP.notice.showUnavailable": "Cette version de Foundry ne propose pas Journal.show ; le document n'a pas pu être affiché aux joueurs.",
   "DP.notice.sourceMissing": "Le document derrière cette épingle n'existe plus.",
-
   "DP.paper.bloodied": "Ensanglanté",
   "DP.paper.linen": "Toile",
   "DP.paper.paper": "Papier ordinaire",
   "DP.paper.parchment": "Parchemin",
   "DP.paper.slate": "Ardoise",
   "DP.paper.vellum": "Vélin",
-
   "DP.picker.browse": "Parcourir les images…",
   "DP.picker.hint": "Entrée sélectionne le premier résultat.",
   "DP.picker.list": "Documents que vous pouvez épingler",
   "DP.picker.none": "Aucun résultat pour cette recherche.",
   "DP.picker.search": "Rechercher journaux et pages",
   "DP.picker.title": "Épingler un document",
-
   "DP.pin.error.missingSource": "Cette épingle n'a ni document ni image source ; un substitut est affiché.",
   "DP.pin.untitled": "Épingle sans titre",
   "DP.pin.warn.badEnum": "{path} n'accepte pas « {value} » ; la valeur par défaut a été utilisée.",
@@ -132,7 +122,6 @@
   "DP.pin.warn.droppedParams": "{count} remplacement(s) d'effet non reconnu(s) par cette version ont été abandonnés.",
   "DP.pin.warn.futureVersion": "Cette épingle a été créée avec une version plus récente (v{found}, ici v{supported}). Les réglages non pris en charge ont été abandonnés.",
   "DP.pin.warn.unknownKey": "Réglage d'épingle inconnu ignoré : {path}",
-
   "DP.preset.agedParchment": "Parchemin vieilli",
   "DP.preset.arcaneGlow": "Lueur arcanique",
   "DP.preset.bloodstained": "Taché de sang",
@@ -150,7 +139,6 @@
   "DP.preset.warn.badEnum": "{path} n'accepte pas « {value} » ; la valeur par défaut a été utilisée.",
   "DP.preset.warn.futureVersion": "Ce préréglage vient d'une version plus récente (v{found}, ici v{supported}). Les réglages non pris en charge ont été retirés.",
   "DP.preset.warn.unknownParam": "Paramètre inconnu ignoré : {path}",
-
   "DP.presets.backdrop": "Fond de l'aperçu",
   "DP.presets.bgChecker": "Damier",
   "DP.presets.bgDark": "Sombre",
@@ -186,10 +174,8 @@
   "DP.presets.surface": "Taches",
   "DP.presets.tintAmount": "Teinte",
   "DP.presets.title": "Studio de préréglages",
-
   "DP.reader.close": "Fermer",
   "DP.reader.title": "Document épinglé",
-
   "DP.settings.autoDegrade.hint": "Si les épingles coûtent plus de quelques millisecondes par image, abaisser d'un cran chaque niveau de détail et le signaler une fois.",
   "DP.settings.autoDegrade.name": "Réduire les détails automatiquement",
   "DP.settings.defaultAudience.everyone": "Visible par tout le monde",
@@ -222,7 +208,6 @@
   "DP.settings.rendering.name": "Rendu des accessoires",
   "DP.settings.vramBudgetMb.hint": "Mémoire vidéo que les accessoires peuvent occuper à eux tous. Au-delà, ceux que vous n'avez pas regardés depuis le plus longtemps passent en version basse définition.",
   "DP.settings.vramBudgetMb.name": "Budget de mémoire de textures (Mo)",
-
   "DP.studio.audience": "Qui peut la voir",
   "DP.studio.audienceDiscovered": "Ceux qui l'ont découverte",
   "DP.studio.delete": "Supprimer l'épingle",

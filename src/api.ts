@@ -425,12 +425,68 @@ export async function adoptTile(tileDoc: any, source: DpSource): Promise<void> {
   await syncAnchor(tileDoc);
 }
 
+/**
+ * Adopt an existing Map Note as a pin.
+ *
+ * The module's only concrete ecosystem-integration surface (Pin Cushion, Revealed Notes
+ * Manager), and it had no route to it at all: `renderNoteConfig` was never registered,
+ * and `onRenderConfig` returned early on anything that was not a Tile.
+ *
+ * A Note is not an anchor and cannot become one — `BaseNote` has no `hidden`, `width`,
+ * `height` or `rotation`, which is the whole reason DESIGN §2 chose Tile — so adoption
+ * places a real anchor where the note stands and removes the note. Destructive, so the
+ * caller confirms first; the source document itself is never touched.
+ */
+export async function adoptNote(noteDoc: any, source?: DpSource | null): Promise<any> {
+  if (!isGM() || !noteDoc) return null;
+
+  const resolved = source ?? sourceFromNote(noteDoc);
+  if (!resolved) {
+    notify({ key: "DP.notice.noteNoSource" }, "warn");
+    return null;
+  }
+
+  const scene = noteDoc.parent ?? cv()?.scene;
+  const anchor = await pinAt(scene, resolved, {
+    x: noteDoc.x ?? 0,
+    y: noteDoc.y ?? 0,
+    centred: true,
+    mode: "pin",
+  });
+  if (!anchor) return null;
+
+  // Only once the anchor exists: a failed create must not also lose the note.
+  await noteDoc.delete?.();
+  return anchor;
+}
+
+/** The journal a Note points at, preferring the specific page over its parent entry. */
+export function sourceFromNote(noteDoc: any): DpSource | null {
+  const pageUuid = noteDoc?.page?.uuid;
+  if (pageUuid) {
+    return { kind: "document", uuid: pageUuid, src: null, pageId: null, followName: true };
+  }
+  const entryUuid = noteDoc?.entry?.uuid;
+  if (entryUuid) {
+    return {
+      kind: "document",
+      uuid: entryUuid,
+      src: null,
+      pageId: typeof noteDoc.pageId === "string" ? noteDoc.pageId : null,
+      followName: true,
+    };
+  }
+  return null;
+}
+
 /** The surface exposed on the module entry, and to other modules. */
 export function publicApi() {
   return {
     MODULE_ID,
     pinAt,
     adoptTile,
+    adoptNote,
+    sourceFromNote,
     setAudience,
     patchAndSync,
     toggleVisibility,

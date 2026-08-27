@@ -28,8 +28,7 @@ import * as api from "../api";
 import * as store from "../data/PinStore";
 import { readPin } from "../data/PinData";
 import { syncAnchor } from "../data/ownership-sync";
-import { getCorePreset } from "../effects/presets/core-presets";
-import { allPresets } from "../effects/preset-library";
+import { allPresets, findPreset } from "../effects/preset-library";
 import { chipsMarkup } from "./chips";
 import { chipUsersFor } from "./PinHUD";
 import {
@@ -61,7 +60,8 @@ export function rowsFor(scene: any): PinboardRow[] {
   return store.all(scene).map((doc: any) => {
     const pin = readPin(doc)!;
     const source = api.resolveSourceSync(pin);
-    const preset = getCorePreset(pin.effect.id);
+    // The library, not just the shipped ten, or a user preset shows as a raw id.
+    const preset = findPreset(pin.effect.id);
     const users = chipUsersFor(doc);
 
     return {
@@ -237,18 +237,32 @@ export function definePinboard(): any {
         locate: onLocate,
         cycleEffect: onCycleEffect,
         rowMenu: onRowMenu,
-        bulkReveal: (app: any) => bulk(app, true),
-        bulkHide: (app: any) => bulk(app, false),
+        // ApplicationV2 invokes an action as `handler.call(app, event, target)`, so
+        // `this` is the application and the first argument is the PointerEvent. These
+        // four read the event as the application: two threw, and two — the global ones
+        // — failed silently, because `store.all(event)` finds no `tiles` and returns [].
+        bulkReveal(this: any) {
+          return bulk(this, true);
+        },
+        bulkHide(this: any) {
+          return bulk(this, false);
+        },
         bulkDelete: onBulkDelete,
         place: onPlace,
-        revealAll: (app: any) => allRows(app, true),
-        hideAll: (app: any) => allRows(app, false),
+        revealAll(this: any) {
+          return allRows(this, true);
+        },
+        hideAll(this: any) {
+          return allRows(this, false);
+        },
       },
     };
 
     query: PinboardQuery = { filter: "all", search: "", level: null };
     selected: string[] = [];
     focusedId: string | null = null;
+    /** Whether the list has ever held the DOM focus, so only the first render claims it. */
+    hasFocusedList = false;
     /** The anchor of a shift-range, kept so a range can be extended repeatedly. */
     rangeAnchor: string | null = null;
 
@@ -269,6 +283,11 @@ export function definePinboard(): any {
     }
 
     async _renderHTML() {
+      // Without this no row is ever tabbable — `rowMarkup` emits `tabindex="0"` only for
+      // `focusedId`, which started null — so `P` opened the board with nothing focused
+      // and every one of the ten advertised shortcuts was unreachable.
+      if (!this.focusedId) this.focusedId = this.visibleRows[0]?.id ?? null;
+
       const wrapper = document.createElement("div");
       wrapper.innerHTML = boardMarkup(
         this.rows,
@@ -285,15 +304,35 @@ export function definePinboard(): any {
       // cursor to the start of the search box and make typing a word impossible.
       const active = content.querySelector<HTMLInputElement>(".dp-board__search");
       const caret = active && active === document.activeElement ? active.selectionStart : null;
+      // `#select` re-renders, and `replaceChildren` then destroyed the focus the click
+      // had just established — so a GM could focus a row but never keep it.
+      const hadRowFocus = !!(document.activeElement as HTMLElement)?.closest?.(".dp-row");
 
       content.replaceChildren(result);
-      this.#wire(content);
+      // Wired to `result`, the NEW subtree, not to `content`. ApplicationV2 hands back
+      // the same `content` element on every render, so listeners attached there
+      // accumulate one set per render — and because these handlers trigger renders, the
+      // growth compounds.
+      this.#wire(result);
 
       if (caret !== null) {
         const search = content.querySelector<HTMLInputElement>(".dp-board__search");
         search?.focus();
         search?.setSelectionRange(caret, caret);
+        return;
       }
+
+      // On the first render there is nothing to preserve, so the board opens ready to
+      // drive — which is the whole promise of "one-handed from the keyboard".
+      if (hadRowFocus || !this.hasFocusedList) {
+        this.hasFocusedList = true;
+        this.focusRow(content);
+      }
+    }
+
+    /** Put the DOM focus on whichever row the model says is focused. */
+    focusRow(root: ParentNode) {
+      root.querySelector<HTMLElement>('.dp-row[tabindex="0"]')?.focus({ preventScroll: true });
     }
 
     #wire(root: HTMLElement) {
@@ -360,7 +399,15 @@ export function definePinboard(): any {
      */
     #onKey(event: KeyboardEvent) {
       const target = event.target as HTMLElement;
-      const typing = target?.tagName === "INPUT" || target?.tagName === "SELECT";
+      // BUTTON and contenteditable are here because Space and the single letters are
+      // real keystrokes for them: Space on a focused button activates it, and stealing
+      // that would make the row controls unusable from the keyboard.
+      const typing =
+        target?.tagName === "INPUT" ||
+        target?.tagName === "SELECT" ||
+        target?.tagName === "TEXTAREA" ||
+        target?.tagName === "BUTTON" ||
+        target?.isContentEditable === true;
 
       if (event.key === "Escape") {
         if (this.query.search) this.query = { ...this.query, search: "" };
@@ -376,6 +423,17 @@ export function definePinboard(): any {
         event.preventDefault();
         return;
       }
+      // ArrowDown out of the search box is what makes "type four letters, then drive the
+      // list" work — without it the search box is a one-way trip.
+      if (typing && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
+        const list = event.currentTarget as HTMLElement;
+        const row = list.querySelector<HTMLElement>('.dp-row[tabindex="0"]');
+        if (row) {
+          row.focus({ preventScroll: true });
+          event.preventDefault();
+          return;
+        }
+      }
       if (typing) return;
 
       const visible = this.visibleRows;
@@ -390,6 +448,8 @@ export function definePinboard(): any {
           } else {
             this.rangeAnchor = this.focusedId;
           }
+          // The re-render rebuilds the list; `_replaceHTML` sees that the focus was on a
+          // row and puts it back on whichever row is now the focused one.
           this.render();
         }
         event.preventDefault();
@@ -523,8 +583,18 @@ async function applyVisibility(app: any, docs: any[], reveal: boolean) {
   app.render();
 }
 
+/**
+ * The audience a bulk reveal or hide should write.
+ *
+ * Hiding an ALREADY-hidden pin must leave `restore` alone. Writing it unconditionally
+ * stored `{ kind: "hidden" }`, which `normaliseAudience` rewrites to "everyone" — so a
+ * pin narrowed to one player, hidden by hand and then caught by "Hide all", later
+ * revealed itself to the whole table. That is the exact failure the remembered audience
+ * exists to prevent.
+ */
 function audienceFor(current: any, reveal: boolean) {
   if (reveal) return { ...current, kind: "everyone", users: [], restore: null };
+  if (current.kind === "hidden") return { ...current };
   return { ...current, kind: "hidden", restore: { kind: current.kind, users: [...current.users] } };
 }
 

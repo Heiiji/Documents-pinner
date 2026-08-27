@@ -1,5 +1,8 @@
-import { describe, expect, it } from "vitest";
-import { rotatedPolygon } from "../src/canvas/PropHitLayer";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { registerPropHitLayer, rotatedPolygon } from "../src/canvas/PropHitLayer";
+import { defaultPin } from "../src/data/pin-schema";
+import * as api from "../src/api";
+import { fakeTile, installWorld, uninstallWorld } from "./helpers/fake-foundry";
 
 /** A stand-in for PIXI.Polygon: the maths is ours, the container is not. */
 class FakePolygon {
@@ -83,5 +86,84 @@ describe("rotatedPolygon", () => {
     const poly = rotatedPolygon({ x: 5, y: 5, width: 10, height: 10, rotation: 12 }, PIXI);
     expect(poly.points.length).toBe(8);
     expect(poly.points.every((n: number) => Number.isFinite(n))).toBe(true);
+  });
+});
+
+/**
+ * The layer's OTHER half, which nothing covered: `sync()` deciding which placeables get
+ * a hit area at all. The Tiles layer is GM-only — that is the premise of DESIGN §2 and
+ * the reason this layer exists — so a mode the sync skips is a mode no player can ever
+ * click. Pin mode was skipped, which is the brief's first promise.
+ */
+describe("PropHitLayer.sync", () => {
+  // Registration is once-per-session by design, so the class is captured once and the
+  // world is rebuilt per test around it.
+  let LayerClass: any;
+
+  beforeAll(() => {
+    installWorld({});
+    expect(registerPropHitLayer()).toBe(true);
+    LayerClass = (Object.values((globalThis as any).CONFIG.Canvas.layers)[0] as any).layerClass;
+    uninstallWorld();
+  });
+
+  function layerFor(tiles: any[], isGM: boolean) {
+    installWorld({ isGM, tiles });
+    const layer = new LayerClass();
+    layer.hits = new Map();
+    layer.suspended = false;
+    layer.children = [];
+    layer.addChild = (child: any) => {
+      layer.children.push(child);
+      return child;
+    };
+    layer.sync();
+    return layer;
+  }
+
+  const pinned = (over: Record<string, any> = {}) => {
+    const tile = fakeTile({ id: over.id ?? "t1" });
+    tile.flags = {
+      "documents-pinner": {
+        pin: { ...defaultPin(), mode: over.mode ?? "prop", audience: { kind: "everyone" } },
+      },
+    };
+    if (over.isVisible === false) tile.object.isVisible = false;
+    return tile;
+  };
+
+  afterEach(() => uninstallWorld());
+
+  it("builds a hit area for a PIN, which is the gesture the whole module promises", () => {
+    const layer = layerFor([pinned({ mode: "pin" })], false);
+    expect(layer.hits.size).toBe(1);
+  });
+
+  it("builds a hit area for a prop", () => {
+    const layer = layerFor([pinned({ mode: "prop" })], false);
+    expect(layer.hits.size).toBe(1);
+  });
+
+  it("builds nothing for the GM, who interacts with the real Tile placeable", () => {
+    const layer = layerFor([pinned({ mode: "pin" })], true);
+    expect(layer.hits.size).toBe(0);
+  });
+
+  it("skips a pin this player cannot see", () => {
+    const layer = layerFor([pinned({ mode: "pin", isVisible: false })], false);
+    expect(layer.hits.size).toBe(0);
+  });
+
+  it("opens the document when a player double-clicks it", () => {
+    const layer = layerFor([pinned({ mode: "pin" })], false);
+    const container = [...layer.hits.values()][0];
+    const opened: any[] = [];
+    const spy = vi.spyOn(api, "openLocally").mockImplementation(async (doc: any) => {
+      opened.push(doc);
+    });
+
+    container.emit("pointertap", { detail: 2 });
+    expect(opened).toHaveLength(1);
+    spy.mockRestore();
   });
 });

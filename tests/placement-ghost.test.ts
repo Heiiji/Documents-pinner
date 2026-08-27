@@ -1,7 +1,12 @@
-import { describe, expect, it } from "vitest";
+/**
+ * @vitest-environment jsdom
+ */
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   SCALE_MAX,
   SCALE_MIN,
+  arm,
+  disarm,
   initialState,
   sizeOf,
   snap,
@@ -9,6 +14,7 @@ import {
   stepWheel,
   type GhostState,
 } from "../src/apps/PlacementGhost";
+import { installWorld, uninstallWorld } from "./helpers/fake-foundry";
 import { CORE_PRESETS } from "../src/effects/presets/core-presets";
 
 const source = {
@@ -110,5 +116,57 @@ describe("sizeOf", () => {
   it("applies the ghost's scale to both axes and rounds to whole pixels", () => {
     expect(sizeOf(ghost({ mode: "pin", scale: 2.5 }), 100)).toEqual({ width: 250, height: 250 });
     expect(Number.isInteger(sizeOf(ghost({ scale: 1.37 }), 100).width)).toBe(true);
+  });
+});
+
+/**
+ * Acceptance criterion 4 — "a token standing on a prop renders in front of it" — is one
+ * of the two visual claims the whole primary-group architecture was chosen for, and every
+ * ghost-placed prop broke it.
+ *
+ * `place()` wrote `elevation: canvas.scene.foregroundElevation`, which is the scene's
+ * foreground THRESHOLD (default 20), not an elevation to inherit. A tile at or above it
+ * is an overhead tile and sorts above tokens in `canvas.primary`.
+ */
+describe("placement elevation", () => {
+  const created: Record<string, unknown>[] = [];
+
+  beforeEach(() => {
+    created.length = 0;
+    const world = installWorld({ isGM: true });
+    // A default scene: the foreground threshold is 20, which is what used to be copied.
+    expect(world.canvas.scene.foregroundElevation).toBe(20);
+    world.canvas.scene.createEmbeddedDocuments = async (
+      _type: string,
+      docs: Record<string, unknown>[]
+    ) => {
+      created.push(...docs);
+      return [];
+    };
+    document.body.innerHTML = '<div id="board"></div>';
+  });
+
+  afterEach(() => {
+    disarm();
+    uninstallWorld();
+  });
+
+  it("places a prop at ground level, not above the foreground threshold", async () => {
+    const armed = arm({
+      kind: "document",
+      uuid: "JournalEntry.a",
+      src: null,
+      pageId: null,
+      followName: true,
+    });
+    expect(armed).toBe(true);
+
+    document
+      .getElementById("board")!
+      .dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0 }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(created).toHaveLength(1);
+    expect(created[0].elevation).toBe(0);
   });
 });

@@ -232,14 +232,18 @@ export function definePresetStudio(): any {
     _replaceHTML(result: HTMLElement, content: HTMLElement) {
       content.replaceChildren(result);
 
-      content.addEventListener("input", (event) => {
+      // Wired to `result`, the NEW subtree, not to `content`. ApplicationV2 hands back
+      // the same `content` element on every render, so listeners attached there
+      // accumulate one set per render — and because these handlers trigger renders, the
+      // growth compounds.
+      result.addEventListener("input", (event) => {
         const input = event.target as HTMLInputElement;
         if (input?.type !== "range") return;
         const output = input.nextElementSibling;
         if (output?.tagName === "OUTPUT") output.textContent = input.value;
       });
 
-      content.addEventListener("change", (event) => {
+      result.addEventListener("change", (event) => {
         const input = event.target as HTMLInputElement;
         if (input?.type !== "range" || input.disabled) return;
         void this.#setParam(input.name, Number(input.value));
