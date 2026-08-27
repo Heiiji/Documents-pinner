@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.1.1] — unreleased
+
 ### Fixed
 
 Six defects an adversarial re-read of the hardening diff turned up, each reproduced with a
@@ -164,5 +168,6 @@ occluded. The module detects this at startup rather than failing visibly.
 
 The full list is in the README and in `docs/DESIGN.md` §10.
 
-[Unreleased]: https://github.com/Heiiji/Documents-pinner/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/Heiiji/Documents-pinner/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/Heiiji/Documents-pinner/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/Heiiji/Documents-pinner/releases/tag/v0.1.0
