@@ -1,0 +1,144 @@
+/*
+ * The card.
+ *
+ * Loaded normally for the focus reader AND fetched and inlined verbatim into the SVG
+ * the rasteriser draws, so the two tiers physically cannot drift: they are the same
+ * bytes. That imposes two constraints nothing else in the module has.
+ *
+ * 1. **No dependency on the page's cascade.** An SVG rendered as an image is an
+ *    isolated document: Foundry's CSS variables do not exist inside it. Every value
+ *    here is either a `--dp-paper-*` variable the card sets on itself or a literal.
+ *
+ * 2. **No external references.** No @import, no url() to a file, no webfont by name.
+ *    Anything the SVG cannot resolve renders as a silent blank, so fonts arrive
+ *    inlined as data: URIs from AssetInliner and everything else is drawn with
+ *    gradients and borders.
+ *
+ * A prop is a physical object on a map, not UI, so it is deliberately theme-
+ * independent: a letter is parchment in light mode and in dark mode.
+ */
+
+.dp-card-root {
+  margin: 0;
+  padding: 0;
+}
+
+.dp-card {
+  --dp-paper-base: #e8dcc0;
+  --dp-paper-ink: #3a2410;
+  --dp-paper-edge: #c9b58d;
+  --dp-card-pad: 12px;
+
+  box-sizing: border-box;
+  overflow: hidden;
+  color: var(--dp-paper-ink);
+  font-family: "Signika", "Palatino Linotype", Palatino, Georgia, serif;
+  line-height: 1.45;
+  /* Layered gradients rather than an image: a texture file cannot be referenced from
+     inside the SVG, and inlining a real paper scan would cost more than the card. */
+  background:
+    radial-gradient(
+      120% 90% at 50% 0%,
+      color-mix(in oklab, var(--dp-paper-base) 92%, white) 0%,
+      var(--dp-paper-base) 55%,
+      color-mix(in oklab, var(--dp-paper-base) 88%, black) 100%
+    ),
+    var(--dp-paper-base);
+}
+
+.dp-card__sheet {
+  box-sizing: border-box;
+  block-size: 100%;
+  padding: var(--dp-card-pad);
+  overflow: hidden;
+  /* The fibre grain: a hairline inner border reads as a paper edge at every zoom the
+     LOD ladder produces, where a drop shadow would blur into mud at the coarse tier. */
+  border: 1px solid color-mix(in oklab, var(--dp-paper-edge) 70%, transparent);
+}
+
+.dp-card__title {
+  margin: 0 0 0.4em;
+  padding-block-end: 0.2em;
+  border-block-end: 1px solid color-mix(in oklab, var(--dp-paper-edge) 85%, transparent);
+  font-size: 1.35em;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  text-align: center;
+  font-variant: small-caps;
+}
+
+.dp-card__body {
+  font-size: 1em;
+
+  & p {
+    margin: 0 0 0.6em;
+  }
+
+  & h1,
+  & h2,
+  & h3 {
+    margin: 0.6em 0 0.3em;
+    font-size: 1.15em;
+    font-weight: 600;
+  }
+
+  & img {
+    max-inline-size: 100%;
+    block-size: auto;
+  }
+
+  & a {
+    color: color-mix(in oklab, var(--dp-paper-ink) 78%, #2a4d8f);
+    text-decoration: underline;
+    text-underline-offset: 0.15em;
+  }
+
+  & ul,
+  & ol {
+    margin: 0 0 0.6em;
+    padding-inline-start: 1.4em;
+  }
+
+  & blockquote {
+    margin: 0 0 0.6em;
+    padding-inline-start: 0.8em;
+    border-inline-start: 2px solid color-mix(in oklab, var(--dp-paper-edge) 80%, transparent);
+    font-style: italic;
+  }
+
+  & table {
+    inline-size: 100%;
+    border-collapse: collapse;
+  }
+
+  & td,
+  & th {
+    padding: 0.15em 0.35em;
+    border: 1px solid color-mix(in oklab, var(--dp-paper-edge) 60%, transparent);
+  }
+
+  & hr {
+    border: none;
+    border-block-start: 1px solid color-mix(in oklab, var(--dp-paper-edge) 80%, transparent);
+    margin: 0.6em 0;
+  }
+}
+
+/*
+ * The source is gone. Says so on the card rather than drawing an empty sheet, because
+ * a blank prop on a map is indistinguishable from one that failed to load — and the
+ * anchor is never deleted automatically, so this state has to be legible.
+ */
+.dp-card[data-dp-missing="true"] .dp-card__sheet {
+  display: grid;
+  place-items: center;
+  border-style: dashed;
+}
+
+.dp-card__missing {
+  margin: 0;
+  padding: 0 1em;
+  text-align: center;
+  font-style: italic;
+  opacity: 0.7;
+}

@@ -37,6 +37,9 @@
   "DP.board.title": "Pinboard",
   "DP.board.totals": "{visible} of {total} visible",
 
+  "DP.card.missing": "The document this pin points at no longer exists.",
+  "DP.card.pdf": "This page is a PDF; open it to read it.",
+
   "DP.chat.noMatch": "No journal or page matches \"{query}\".",
 
   "DP.chip.hidden": "{name} cannot see this pin.",

@@ -37,6 +37,9 @@
   "DP.board.title": "Tableau des épingles",
   "DP.board.totals": "{visible} visibles sur {total}",
 
+  "DP.card.missing": "Le document visé par cette épingle n'existe plus.",
+  "DP.card.pdf": "Cette page est un PDF ; ouvrez-la pour la lire.",
+
   "DP.chat.noMatch": "Aucun journal ni page ne correspond à « {query} ».",
 
   "DP.chip.hidden": "{name} ne voit pas cette épingle.",
