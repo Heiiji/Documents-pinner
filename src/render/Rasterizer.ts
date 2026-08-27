@@ -58,8 +58,20 @@ let consecutiveFailures = 0;
 /**
  * Probe the pipeline once, on this client.
  *
- * Draws a tiny card and counts painted pixels. Cached, because the answer is a
- * property of the browser and cannot change within a session.
+ * Draws a tiny card and counts painted pixels. Cached, because the answer is a property
+ * of the browser and cannot change within a session.
+ *
+ * **This currently fails in Chromium too, and that is not a bug in the probe.** An SVG
+ * image containing a `foreignObject` taints the canvas it is drawn into — in Chromium as
+ * well as in WebKit — so the readback throws `SecurityError`, and so does the WebGL
+ * upload the real pipeline depends on (`texImage2D: Tainted canvases may not be loaded`).
+ * Verified in a live v14 world on Chromium 144: a plain SVG uploads fine, the same SVG
+ * with a `foreignObject` does not, and `createImageBitmap` cannot decode an SVG blob at
+ * all. There is no workaround along this path.
+ *
+ * A2 assumed this was a WebKit quirk. It is not: it is what every current browser does,
+ * and it means the canvas tier described in DESIGN §6 cannot work as designed anywhere.
+ * The DOM tier is therefore the tier that actually runs. See amendment A10.
  */
 export async function probeRasterisation(): Promise<boolean> {
   if (canRasterise !== null) return canRasterise;

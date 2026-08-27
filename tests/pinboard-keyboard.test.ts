@@ -53,6 +53,8 @@ beforeEach(async () => {
   board.focusedId = null;
   document.body.appendChild(contentOf(board));
   await board.render();
+  // The board claims focus one frame after the first render; see `focusRow`.
+  await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
 });
 
 afterEach(() => uninstallWorld());
@@ -69,8 +71,11 @@ async function press(key: string, target: HTMLElement = root(), init: KeyboardEv
 
 describe("the Pinboard's keyboard surface", () => {
   it("focuses the first row on the initial render, so a keystroke has a target", () => {
-    expect(document.activeElement).toBe(rows()[0]);
+    // Deferred by a frame — ApplicationV2 attaches the window AFTER building its content,
+    // and `focus()` on a detached element does nothing at all — so the wait is in the
+    // shared setup above.
     expect(rows()[0].tabIndex).toBe(0);
+    expect(document.activeElement).toBe(rows()[0]);
   });
 
   it("moves the focus one row down and takes the DOM focus with it", async () => {

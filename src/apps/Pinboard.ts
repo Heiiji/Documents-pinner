@@ -334,13 +334,24 @@ export function definePinboard(): any {
       // drive — which is the whole promise of "one-handed from the keyboard".
       if (hadRowFocus || !this.hasFocusedList) {
         this.hasFocusedList = true;
-        this.focusRow(content);
+        this.focusRow(content, !hadRowFocus);
       }
     }
 
-    /** Put the DOM focus on whichever row the model says is focused. */
-    focusRow(root: ParentNode) {
-      root.querySelector<HTMLElement>('.dp-row[tabindex="0"]')?.focus({ preventScroll: true });
+    /**
+     * Put the DOM focus on whichever row the model says is focused.
+     *
+     * The first render needs a frame. ApplicationV2 builds the content and only THEN
+     * attaches the window to the document, and `focus()` on a detached element is a
+     * silent no-op — so the board opened with the row correctly marked `tabindex="0"`
+     * and the focus still on `<body>`, which is precisely the state this was written to
+     * prevent.
+     */
+    focusRow(root: ParentNode, deferred = false) {
+      const focus = () =>
+        root.querySelector<HTMLElement>('.dp-row[tabindex="0"]')?.focus({ preventScroll: true });
+      if (deferred) requestAnimationFrame(focus);
+      else focus();
     }
 
     #wire(root: HTMLElement) {

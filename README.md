@@ -1,13 +1,16 @@
 # Documents Pinner
 
 Pin any journal, page or image onto the map — as a small icon players click, or as a
-full-size **readable prop lying on the scene**, darkened by the room's lighting, hidden by
-unexplored fog, and behind the token standing on it.
+full-size **readable prop lying on the scene**.
 
 Per-pin visibility the GM changes in one click. Foundry VTT **v14+**.
 
-> **Beta.** Everything here is implemented and covered by 500+ tests, but it has not yet
-> been watched working on a real scene. Keep a backup.
+> **Beta, and one headline feature does not work.** Props are drawn as an HTML layer over
+> the canvas, not into it, so they are **not lit, fogged or occluded** and do not sort
+> behind tokens. That was the plan, and it turns out not to be possible: an SVG containing
+> a `foreignObject` taints the canvas in every current browser, so the texture upload the
+> canvas path needs is refused outright. Verified on Chromium 144, not just Safari. See
+> [`docs/DESIGN.md`](docs/DESIGN.md) A10. Everything else below works; keep a backup.
 
 *Version française plus bas.*
 
@@ -68,7 +71,7 @@ Anything about your machine is per-client; anything about how the table plays is
 
 | | Scope | |
 |---|---|---|
-| Prop rendering | client | Canvas (lit, fogged, occluded) or DOM (compatibility) |
+| Prop rendering | client | DOM is the working path; Canvas is probed and refused by the browser |
 | Effect level | client | Auto, full, reduced, off |
 | Texture memory budget | client | Past it, the least-recently-seen props drop detail |
 | Reduce detail automatically | client | One step down if the frame rate will not hold |
@@ -91,12 +94,15 @@ If you need real secrecy, keep the document out of the world until you want it s
 
 ## Known limitations
 
-1. Prop text is a rasterised picture — not selectable, not screen-readable, links not
-   clickable. Clicking the prop opens the focus reader, which restores all three.
-2. Rasterisation inlines fonts and images; exotic CSS inside journal HTML will not survive.
-3. Video renders as a single frame.
-4. WebKit (Safari) refuses to rasterise an SVG `foreignObject`. Those clients fall back to
-   DOM rendering automatically: props still work, but they are not lit, fogged or occluded.
+1. Video renders as a single frame.
+2. A PDF page shows a "this is a PDF, open it to read" card — a PDF cannot be laid out
+   inside a prop.
+3. Images referenced by a journal page are inlined; anything the module cannot fetch is
+   dropped rather than left broken.
+4. **Props are not lit, fogged, occluded, or sorted behind tokens.** Drawing them into the
+   scene needs an HTML-to-texture step that every current browser refuses — an SVG with a
+   `foreignObject` taints the canvas, so the WebGL upload throws. The module detects this
+   at startup and draws props as an HTML layer over the canvas instead.
 5. Deleting a pinned document leaves the pin showing a placeholder — never auto-deleted.
 6. Compendium ownership is pack-wide, so there is no per-user grant for a compendium
    source. The pin still reveals its content.
@@ -124,14 +130,17 @@ MIT — see [LICENSE](LICENSE).
 # Documents Pinner (français)
 
 Épinglez n'importe quel journal, page ou image sur la carte — sous forme d'une petite icône
-sur laquelle les joueurs cliquent, ou d'un **accessoire lisible posé à même la scène**,
-assombri par l'éclairage de la pièce, masqué par le brouillard non exploré, et derrière le
-pion qui se tient dessus.
+sur laquelle les joueurs cliquent, ou d'un **accessoire lisible posé à même la scène**.
 
 Une visibilité que le MJ change en un clic. Foundry VTT **v14+**.
 
-> **Bêta.** Tout est implémenté et couvert par plus de 500 tests, mais rien n'a encore été
-> observé sur une scène réelle. Gardez une sauvegarde.
+> **Bêta, et une fonctionnalité phare ne marche pas.** Les accessoires sont dessinés en
+> HTML par-dessus le canevas, pas dedans : ils ne sont donc **ni éclairés, ni embrumés, ni
+> occultés**, et ne passent pas derrière les pions. C'était le plan, et il s'avère
+> impossible : un SVG contenant un `foreignObject` « contamine » le canevas dans tous les
+> navigateurs actuels, si bien que l'envoi de la texture est refusé. Vérifié sur
+> Chromium 144, pas seulement Safari. Voir [`docs/DESIGN.md`](docs/DESIGN.md) A10. Tout le
+> reste fonctionne ; gardez une sauvegarde.
 
 ## Installation
 
@@ -191,7 +200,7 @@ monde.
 
 | | Portée | |
 |---|---|---|
-| Rendu des accessoires | client | Canvas (éclairé, embrumé, occulté) ou DOM (compatibilité) |
+| Rendu des accessoires | client | DOM est le chemin fonctionnel ; Canvas est testé puis refusé par le navigateur |
 | Niveau d'effets | client | Auto, complet, réduit, désactivé |
 | Budget mémoire des textures | client | Au-delà, les accessoires les plus anciens perdent en détail |
 | Réduire le détail automatiquement | client | Un cran plus bas si la fluidité ne tient pas |
@@ -216,15 +225,16 @@ voulu.
 
 ## Limitations connues
 
-1. Le texte d'un accessoire est une image rastérisée — ni sélectionnable, ni lisible par un
-   lecteur d'écran, liens non cliquables. Un clic ouvre le lecteur de mise au point, qui
-   restitue les trois.
-2. La rastérisation intègre polices et images ; du CSS exotique dans le HTML d'un journal ne
-   survivra pas.
-3. Une vidéo n'affiche qu'une seule image.
-4. WebKit (Safari) refuse de rastériser un `foreignObject` SVG. Ces clients basculent seuls
-   sur le rendu DOM : les accessoires fonctionnent, mais ne sont ni éclairés, ni embrumés,
-   ni occultés.
+1. Une vidéo n'affiche qu'une seule image.
+2. Une page PDF affiche une carte « ceci est un PDF, ouvrez-le pour le lire » : un PDF ne
+   peut pas être mis en page dans un accessoire.
+3. Les images référencées par une page de journal sont intégrées ; ce que le module ne peut
+   pas récupérer est retiré plutôt que laissé cassé.
+4. **Les accessoires ne sont ni éclairés, ni embrumés, ni occultés, ni placés derrière les
+   pions.** Les dessiner dans la scène exige une conversion HTML → texture que tous les
+   navigateurs actuels refusent : un SVG avec `foreignObject` contamine le canevas, et
+   l'envoi WebGL échoue. Le module le détecte au démarrage et dessine les accessoires en
+   HTML par-dessus le canevas.
 5. Supprimer un document épinglé laisse l'épingle sur un substitut — jamais supprimée
    automatiquement.
 6. Les permissions d'un compendium valent pour tout le pack : pas d'octroi par joueur. Le

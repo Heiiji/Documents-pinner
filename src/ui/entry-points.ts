@@ -207,7 +207,10 @@ export function onRenderConfig(app: any, element: HTMLElement): void {
   if (element.querySelector(".dp-scope")) return;
 
   if (doc.documentName === "Note") {
-    injectSection(element, noteSection(doc));
+    // Only for a note that actually exists. The config sheet also opens for the preview
+    // document created by dropping a journal on the map, which has no id yet and cannot
+    // be converted or deleted.
+    if (doc.id) injectSection(element, noteSection(doc));
     return;
   }
   if (doc.documentName !== "Tile") return;

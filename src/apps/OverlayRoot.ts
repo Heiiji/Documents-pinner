@@ -33,8 +33,21 @@ const ROOT_ID = "documents-pinner-overlay";
 let root: HTMLElement | null = null;
 let lastMatrix: Mat = { ...IDENTITY };
 let frame = 0;
-/** Style writes queued for the next frame, keyed so a later write wins. */
-const pending = new Map<HTMLElement, () => void>();
+/**
+ * Style writes queued for the next frame, in order, per element.
+ *
+ * A LIST and not a single callback. Keying one callback per element silently dropped
+ * every write but the last, and two different callers write to the same element in the
+ * same frame all the time: `alignToBoard` sizes the overlay and `syncTransform` transforms
+ * it, back to back on `canvasReady`; `DomPropTier.place` sets a card's geometry and
+ * `setDomPropAlpha` sets its opacity, back to back in one LOD pass.
+ *
+ * The result was an overlay that was never sized — 0x0 with `overflow: hidden`, which
+ * hides the ENTIRE DOM tier — and prop cards with no position or size at all. Running the
+ * callbacks in order keeps the intended "a later write to the same property wins" while
+ * losing nothing.
+ */
+const pending = new Map<HTMLElement, (() => void)[]>();
 
 /**
  * Where the overlay attaches.
@@ -104,19 +117,26 @@ export function syncTransform(force = false): boolean {
 }
 
 /**
- * Size the overlay to the canvas.
+ * Size the overlay to the SCENE, not to the screen.
  *
- * Separate from `syncTransform` because it changes only when the window resizes,
- * whereas the transform changes on every pan.
+ * The overlay carries the stage matrix, so everything inside it is positioned in scene
+ * coordinates — a prop at `x: 1900` is at 1900 in the overlay's own box. Sizing that box
+ * to the renderer's screen (1400x900, say) while `overflow: hidden` is set therefore
+ * clipped away every prop past the screen's width in SCENE space, which on any real map
+ * is almost all of them. Two different coordinate systems, one box.
+ *
+ * `canvas.dimensions` is the padded scene rect, which is the space `TileDocument#x/y`
+ * live in, and it changes only when the scene does — so this stays a `canvasReady` job
+ * rather than a per-pan one.
  */
 export function alignToBoard(): void {
   const element = overlay();
-  const screen = cv()?.app?.renderer?.screen;
-  if (!element || !screen) return;
+  const dimensions = cv()?.dimensions;
+  if (!element || !dimensions?.width || !dimensions?.height) return;
 
   write(element, () => {
-    element.style.width = `${screen.width}px`;
-    element.style.height = `${screen.height}px`;
+    element.style.width = `${dimensions.width}px`;
+    element.style.height = `${dimensions.height}px`;
   });
 }
 
@@ -128,14 +148,17 @@ export function alignToBoard(): void {
  * immediately would interleave our writes with canvas reads elsewhere in the frame.
  */
 export function write(element: HTMLElement, apply: () => void): void {
-  pending.set(element, apply);
+  const queued = pending.get(element);
+  if (queued) queued.push(apply);
+  else pending.set(element, [apply]);
+
   if (frame) return;
 
   frame = requestAnimationFrame(() => {
     frame = 0;
     const work = [...pending.values()];
     pending.clear();
-    for (const apply of work) apply();
+    for (const applies of work) for (const apply of applies) apply();
   });
 }
 

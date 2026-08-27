@@ -1,6 +1,6 @@
 # Documents Pinner — Design
 
-**Status:** Pre-release hardening complete; §11's manual column still unverified
+**Status:** Beta. §11 criteria 2, 3 and 4 are UNREACHABLE — see amendment A10
 **Target:** Foundry VTT v14, `compatibility: { minimum: "14", verified: "14.365" }`
 **Last updated:** 2026-08-27
 
@@ -600,3 +600,86 @@ Everything above was found by reading and proved by executing. **None of it repl
 manual acceptance table**, which remains exactly as unverified as A8 said. The value of
 this pass is that the table can now be run at all: before it, nine of the nineteen criteria
 were untestable because no prop had ever appeared on a scene.
+
+### A10 — The canvas tier cannot work. Found by running it. (2026-08-27)
+
+A9 ended by saying the value of that pass was that §11's manual table could now be run at
+all. It was run, in a live v14 world on Chromium 144, and the first criterion killed the
+design's central mechanism.
+
+#### The finding
+
+**An SVG image containing a `foreignObject` taints the canvas it is drawn into, and a
+tainted canvas cannot be uploaded to WebGL.** Measured in the world, not reasoned about:
+
+| | |
+|---|---|
+| plain SVG → canvas → `texImage2D` | **OK** |
+| SVG with `foreignObject` → canvas → `getImageData` | `SecurityError: tainted by cross-origin data` |
+| SVG with `foreignObject` → canvas → `texImage2D` | `SecurityError: Tainted canvases may not be loaded` |
+| `createImageBitmap(svgBlob)` | `InvalidStateError: source image could not be decoded` |
+
+The control matters: the *same* pipeline with a plain `<rect>` SVG uploads fine. It is the
+`foreignObject` — the one thing the whole approach depends on — that taints, and there is
+no route around it along this path.
+
+**A2 read this as a WebKit quirk.** It is not. It is what every current browser does, and
+the probe was right to fail; it simply had no idea it would be failing everywhere. The
+comment in `Rasterizer.probeRasterisation` claiming the readback "fails in exactly the same
+circumstances the WebGL upload does" turned out to be exactly true, which is why the
+fallback worked — but the fallback is now the only tier, not the compatibility path.
+
+#### What this costs
+
+§6 chose the Tile anchor substantially so props would live in `canvas.primary` and get
+darkness tinting, per-light illumination, the fog mask, roof occlusion and correct z-order
+against tokens **for free**. None of that is reachable. Acceptance criteria 2, 3 and 4
+cannot be met by this architecture in any browser tested, and the README and CHANGELOG now
+say so at the top rather than promising it.
+
+**The Tile anchor itself is still right**, for every reason in §2 that is not about
+rendering: lossless mode switching, `hidden` enforced by core, visibility decoupled from
+journal ownership, a real placeable other tooling can act on. Only the rendering premise
+was wrong.
+
+#### The honest route forward, not taken here
+
+The only way to get a journal page into a WebGL texture without `foreignObject` is to stop
+using HTML: lay the card out with Canvas2D primitives — measured text runs, rects,
+gradients — and upload *that* canvas, which is never tainted. That is a real renderer, it
+loses arbitrary journal HTML and every CSS-based effect, and it is a larger project than
+this module has so far been. It is not attempted here, and nothing pretends it is.
+
+#### Four defects the same session found
+
+The DOM tier had never been seen either, and it was invisible for reasons that had nothing
+to do with the above. All four were found by reading live DOM state, and all four are the
+kind that only a running world shows.
+
+1. **`OverlayRoot.write()` kept ONE callback per element**, so any two callers writing
+   different properties of the same element in the same frame lost the first. `canvasReady`
+   calls `alignToBoard()` then `syncTransform()` back to back — the overlay's size write was
+   replaced by its transform write, leaving it **0×0 with `overflow: hidden`, which hides the
+   entire DOM tier**: every prop, the placement ghost and the focus reader. The same
+   clobbering made `DomPropTier.place()`'s geometry lose to `setDomPropAlpha()`'s opacity, so
+   each card carried `style="opacity: 0.25"` and nothing else.
+2. **The overlay was sized to the renderer's SCREEN while its children are positioned in
+   SCENE coordinates.** Two different spaces, one box: with `overflow: hidden`, every prop
+   past the screen's width on the map was clipped away. Now sized to `canvas.dimensions`.
+3. **The Pinboard's first-render focus was a no-op.** ApplicationV2 builds the content and
+   attaches the window afterwards, and `focus()` on a detached element does nothing — so the
+   board opened with the row correctly marked `tabindex="0"` and the focus still on `<body>`,
+   which is the exact state A9's fix was written to prevent. Deferred by a frame.
+4. **`adoptNote` threw on a Note that did not exist yet.** `renderNoteConfig` also fires for
+   the preview document Foundry opens when a journal is dropped on the map; it has `id: null`,
+   so `delete()` raised `undefined id [null] does not exist in the EmbeddedCollection` as an
+   unhandled rejection — after an anchor had already been created, leaving the GM with both a
+   pin and the note it was meant to replace. Observed in the wild before it was reproduced.
+
+#### The lesson, again
+
+A9 said the pattern mattered more than any individual defect: tests over pure functions and
+markup strings, none over the seams. A10 says the same thing one level out. **The seam
+tests were right and still could not have found any of this**, because the questions here
+were "what does this browser actually permit" and "what is the computed size of that
+element" — and there is no substitute for putting the thing on a screen.

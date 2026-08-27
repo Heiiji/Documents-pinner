@@ -9,6 +9,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Nothing yet.
 
+## [0.1.2] — unreleased
+
+First release tested in a live Foundry world. Four defects that only a running world could
+show, and one finding that changes what the module claims to be.
+
+### Fixed
+
+- **Nothing in the DOM tier was visible at all** — no props, no placement ghost, no focus
+  reader. `OverlayRoot.write()` kept one queued callback per element, so `canvasReady`'s
+  `syncTransform()` silently discarded `alignToBoard()`'s size write and the overlay stayed
+  0×0 with `overflow: hidden`. The same clobbering left every prop card with an opacity and
+  no position or size.
+- **The overlay was sized to the screen while its contents are positioned in scene
+  coordinates**, so even once sized it clipped away every prop past the screen's width on
+  the map. It is now sized to the scene.
+- **The Pinboard's first-render focus did nothing**: ApplicationV2 attaches the window
+  after building its content, and `focus()` on a detached element is a no-op.
+- **Converting a map note threw and left the note behind.** The note config also opens for
+  the unsaved preview document Foundry creates when a journal is dropped on the map; it has
+  no id, so the delete raised an unhandled rejection after the pin had already been made.
+
+### Changed
+
+- **Props are not lit, fogged, occluded or sorted behind tokens, and cannot be.** An SVG
+  containing a `foreignObject` taints the canvas in every current browser, so the WebGL
+  upload the canvas path depends on is refused — verified on Chromium 144, not just Safari,
+  with a plain-SVG control that uploads fine. The module already detected this and fell
+  back to drawing props as an HTML layer; what has changed is that the README, the settings
+  copy and `docs/DESIGN.md` now say so plainly instead of promising the opposite. See
+  amendment A10.
+
 ## [0.1.1] — unreleased
 
 ### Fixed
@@ -168,6 +199,7 @@ occluded. The module detects this at startup rather than failing visibly.
 
 The full list is in the README and in `docs/DESIGN.md` §10.
 
-[Unreleased]: https://github.com/Heiiji/Documents-pinner/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/Heiiji/Documents-pinner/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/Heiiji/Documents-pinner/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/Heiiji/Documents-pinner/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/Heiiji/Documents-pinner/releases/tag/v0.1.0

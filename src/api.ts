@@ -440,6 +440,16 @@ export async function adoptTile(tileDoc: any, source: DpSource): Promise<void> {
 export async function adoptNote(noteDoc: any, source?: DpSource | null): Promise<any> {
   if (!isGM() || !noteDoc) return null;
 
+  // A Note that has not been created yet. `renderNoteConfig` fires for the PREVIEW
+  // document Foundry opens when you drop a journal on the map — it has `id: null`, and
+  // `delete()` on it throws `undefined id [null] does not exist in the EmbeddedCollection`
+  // as an unhandled rejection, after an anchor has already been created. The GM was left
+  // with both a pin and the note it was supposed to replace.
+  if (!noteDoc.id) {
+    notify({ key: "DP.notice.noteNotSaved" }, "warn");
+    return null;
+  }
+
   const resolved = source ?? sourceFromNote(noteDoc);
   if (!resolved) {
     notify({ key: "DP.notice.noteNoSource" }, "warn");

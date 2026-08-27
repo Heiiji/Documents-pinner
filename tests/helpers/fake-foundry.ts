@@ -369,6 +369,9 @@ export function installWorld(world: FakeWorld = {}): InstalledWorld {
     },
     tokens: { placeables: [], zIndex: 30 },
     notes: { zIndex: 40 },
+    // The padded scene rect, which is the space TileDocument x/y live in — and a
+    // different space from the renderer's screen.
+    dimensions: { width: 3840, height: 1920, sceneX: 0, sceneY: 0 },
     app: { renderer: { resolution: 1, screen: { width: 1920, height: 1080 } }, ticker: null },
     stage: { worldTransform: { a: 1, b: 0, c: 0, d: 1, tx: 0, ty: 0 }, scale: { x: 1, y: 1 } },
     visibility: { testVisibility: () => true },
