@@ -32,7 +32,11 @@ const presets: DpPreset[] = [
       // Entirely bakeable into the texture: zero per-frame cost, and it survives a
       // future PIXI major version untouched. The best quality/effort ratio we ship.
       tint: { color: "#c8a86a", amount: 0.35, blend: "multiply" },
-      surface: { texture: "papers/parchment-01.webp", blend: "multiply", opacity: 0.65 },
+      // Procedural, not a file: an SVG rendered as an image cannot fetch anything,
+      // so a real texture would appear in the reader and be missing from the prop.
+      // `textures.ts` generates it from these parameters instead.
+      surface: { texture: null, blend: "multiply", opacity: 0.35 },
+      noise: { amount: 0.5, scale: 1.1 },
       edge: { style: "deckled", amount: 0.5 },
       frame: { style: "none", thickness: 0, radius: 2, color: "#8a6a3a" },
       shadow: { x: 0, y: 3, blur: 10, opacity: 0.45 },
@@ -56,7 +60,8 @@ const presets: DpPreset[] = [
     motion: "none",
     reveal: { animation: "materialise", durationMs: 700, sound: null },
     params: {
-      surface: { texture: "papers/vellum-01.webp", blend: "multiply", opacity: 0.4 },
+      surface: { texture: null, blend: "multiply", opacity: 0.2 },
+      noise: { amount: 0.35, scale: 1.6 },
       edge: { style: "deckled", amount: 0.3 },
       frame: { style: "plain", thickness: 1, radius: 2, color: "#6b2f2f" },
       shadow: { x: 1, y: 4, blur: 12, opacity: 0.5 },
@@ -70,7 +75,8 @@ const presets: DpPreset[] = [
     reveal: { animation: "materialise", durationMs: 800, sound: null },
     params: {
       tint: { color: "#7a1f1f", amount: 0.22, blend: "multiply" },
-      surface: { texture: "papers/stain-blood.webp", blend: "multiply", opacity: 0.7 },
+      surface: { texture: null, blend: "multiply", opacity: 0.7 },
+      noise: { amount: 0.3, scale: 1 },
       edge: { style: "torn", amount: 0.5 },
       shadow: { x: 0, y: 2, blur: 8, opacity: 0.45 },
     },

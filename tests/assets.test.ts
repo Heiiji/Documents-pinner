@@ -54,7 +54,10 @@ describe("stylesheets", () => {
   });
 
   it("give every @import an explicit layer so cascade order cannot depend on load order", () => {
-    const entry = readFileSync(join(ROOT, "styles", manifest.styles[0].replace(/^styles\//, "")), "utf8");
+    const entry = readFileSync(
+      join(ROOT, "styles", manifest.styles[0].replace(/^styles\//, "")),
+      "utf8"
+    );
     for (const m of entry.matchAll(/@import[^;]+;/g)) {
       expect(m[0], m[0]).toMatch(/layer\(/);
     }
@@ -76,6 +79,10 @@ describe("stylesheets", () => {
     for (const file of files) {
       const css = readFileSync(file, "utf8")
         .replace(/\/\*[\s\S]*?\*\//g, "")
+        // @keyframes blocks are stripped whole: their contents are timeline offsets
+        // ("50%", "from"), not selectors, and they cannot leak anywhere. Their NAMES
+        // are global, and are checked separately below.
+        .replace(/@keyframes[^{]*\{(?:[^{}]*\{[^{}]*\})*[^{}]*\}/g, "")
         .replace(/@(?:import|layer|property|media|supports)[^;{]*[;{]/g, "");
       for (const m of css.matchAll(/(^|\})\s*([^{}@]+)\{/g)) {
         for (const sel of m[2].split(",")) {
@@ -87,5 +94,18 @@ describe("stylesheets", () => {
       }
     }
     expect(offenders, `un-namespaced selectors:\n${offenders.join("\n")}`).toEqual([]);
+  });
+
+  // Keyframe names live in a single global namespace shared with Foundry and every
+  // other module, so a generic name like `fade` would be a silent collision that only
+  // shows up as someone else's animation behaving strangely.
+  it("prefix every @keyframes name, which shares one global namespace", () => {
+    const offenders: string[] = [];
+    for (const file of files) {
+      for (const m of readFileSync(file, "utf8").matchAll(/@keyframes\s+([\w-]+)/g)) {
+        if (!m[1].startsWith("dp-")) offenders.push(`${file.slice(ROOT.length + 1)}: ${m[1]}`);
+      }
+    }
+    expect(offenders, `un-prefixed keyframes:\n${offenders.join("\n")}`).toEqual([]);
   });
 });

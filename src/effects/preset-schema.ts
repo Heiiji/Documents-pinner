@@ -211,7 +211,8 @@ function normaliseParams(raw: unknown, warnings: DpNotice[]): DpPresetParams {
       color: colour(grp("frame").color, d.frame.color, warnings, "params.frame.color"),
     },
     surface: {
-      texture: typeof grp("surface").texture === "string" ? (grp("surface").texture as string) : null,
+      texture:
+        typeof grp("surface").texture === "string" ? (grp("surface").texture as string) : null,
       blend: oneOf(
         grp("surface").blend,
         BLEND_MODES,

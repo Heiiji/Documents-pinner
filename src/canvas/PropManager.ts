@@ -54,6 +54,7 @@ import { resolveCard } from "../render/ContentResolver";
 import { svgDocument } from "../render/CardTemplate";
 import { inlineFonts, inlineImages } from "../render/AssetInliner";
 import { TextureCache, cacheKey } from "../render/TextureCache";
+import { currentLevel, sampleFrame } from "../effects/level";
 
 interface PropRecord {
   id: string;
@@ -165,6 +166,7 @@ class Manager {
 
   #onFrame(): void {
     const started = performance.now();
+    sampleFrame(started);
 
     const matrix = stageMatrix();
     if (!this.#matrix || !sameMat(matrix, this.#matrix)) {
@@ -265,7 +267,7 @@ class Manager {
       // Removing this would let a GM's texture be served to a player.
       userId: g()?.user?.id ?? "",
       resTier: longEdge,
-      presetBake: `${pin.effect.id}:${pin.effect.intensity}:${pin.display.paper}`,
+      presetBake: `${pin.effect.id}:${pin.effect.intensity}:${pin.effect.seed}:${pin.display.paper}:${currentLevel()}`,
       docHash: String(tile.document.width) + "x" + String(tile.document.height),
     });
   }
@@ -321,7 +323,7 @@ class Manager {
       return;
     }
 
-    const card = await resolveCard(pin, size);
+    const card = await resolveCard(pin, size, { tier: record.tier, baked: true });
     const [css, fonts, body] = await Promise.all([
       loadCardCss(),
       inlineFonts(),

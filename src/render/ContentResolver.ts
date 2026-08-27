@@ -21,6 +21,10 @@ import { t } from "../i18n";
 import { escapeHtml } from "../html";
 import * as api from "../api";
 import { cardHtml } from "./CardTemplate";
+import { dressing } from "../effects/EffectRegistry";
+import { currentLevel } from "../effects/level";
+import { getCorePreset } from "../effects/presets/core-presets";
+import type { LodTier } from "../canvas/lod";
 import { enrichFor } from "./enrich";
 import { hashContent } from "./TextureCache";
 import type { DpPinFlags } from "../types/dp";
@@ -72,11 +76,31 @@ function rawContentOf(source: any): { text: string; kind: string } {
   }
 }
 
+export interface ResolveOptions {
+  /** Which rung this is being drawn for. Decides the effect's strength. */
+  tier?: LodTier;
+  /** Whether the result is going into a texture, which cannot animate. */
+  baked?: boolean;
+}
+
 /** Build the card for a pin, as this client's user would see it. */
 export async function resolveCard(
   pin: DpPinFlags,
-  size: { width: number; height: number }
+  size: { width: number; height: number },
+  options: ResolveOptions = {}
 ): Promise<ResolvedCard> {
+  const preset = getCorePreset(pin.effect.id);
+  const dressed = preset
+    ? dressing({
+        preset,
+        intensity: pin.effect.intensity,
+        seed: pin.effect.seed,
+        tier: options.tier ?? "L2b",
+        level: currentLevel(),
+        baked: options.baked ?? false,
+      })
+    : null;
+
   const common = {
     showTitle: pin.display.showTitle,
     paper: pin.display.paper,
@@ -84,6 +108,8 @@ export async function resolveCard(
     width: size.width,
     height: size.height,
     effectId: pin.effect.id,
+    effectStyle: dressed?.style,
+    effectAttrs: dressed?.attrs,
   };
 
   if (pin.source.kind === "image") {

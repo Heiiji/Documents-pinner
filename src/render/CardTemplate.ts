@@ -45,6 +45,10 @@ export interface CardOptions {
   height: number;
   /** Effect id, exposed as a data attribute for the CSS renditions to key off. */
   effectId: string;
+  /** The effect's custom properties, from `EffectRegistry.dressing`. */
+  effectStyle?: string;
+  /** The effect's data attributes, which the stylesheet selects on. */
+  effectAttrs?: Record<string, string>;
   /** Placeholder mode: the source is gone, so say so instead of drawing a blank sheet. */
   missing?: boolean;
 }
@@ -79,7 +83,12 @@ export function cardHtml(options: CardOptions): string {
     `font-size:${font}px`,
     `width:${options.width}px`,
     `height:${options.height}px`,
-  ].join(";");
+    // The effect's own properties last, so a preset can override a paper default
+    // rather than the other way round.
+    options.effectStyle ?? "",
+  ]
+    .filter(Boolean)
+    .join(";");
 
   const title =
     options.showTitle && options.title
@@ -90,8 +99,12 @@ export function cardHtml(options: CardOptions): string {
     ? `<p class="dp-card__missing">${escapeHtml(options.title)}</p>`
     : `<div class="dp-card__body">${options.bodyHtml}</div>`;
 
+  const attrs = Object.entries(options.effectAttrs ?? {})
+    .map(([key, value]) => ` ${escapeAttr(key)}="${escapeAttr(value)}"`)
+    .join("");
+
   return (
-    `<div class="dp-card" data-dp-fx="${escapeAttr(options.effectId)}"` +
+    `<div class="dp-card" data-dp-fx="${escapeAttr(options.effectId)}"${attrs}` +
     `${options.missing ? ' data-dp-missing="true"' : ""} style="${escapeAttr(style)}">` +
     `<div class="dp-card__sheet">${title}${body}</div>` +
     `</div>`

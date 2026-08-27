@@ -59,7 +59,7 @@ export async function openReader(tileDoc: any): Promise<void> {
   if (!pin) return;
 
   const size = { width: tileDoc.width, height: tileDoc.height };
-  const card = await resolveCard(pin, size);
+  const card = await resolveCard(pin, size, { tier: "L3", baked: false });
   if (!card.readable && !g()?.user?.isGM) return;
 
   element = document.createElement("div");
