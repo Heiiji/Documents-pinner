@@ -26,6 +26,7 @@ import { definePinHUD, refreshPinHUD } from "./apps/PinHUD";
 import { openStudio, refreshStudios } from "./apps/PinStudio";
 import { openPinboard, refreshPinboard } from "./apps/Pinboard";
 import { openPicker } from "./apps/DocumentPicker";
+import { openPresetStudio } from "./apps/PresetStudio";
 import { alignToBoard, destroyOverlay, syncTransform } from "./apps/OverlayRoot";
 import { closeReader, openReader, repositionReader } from "./apps/ReaderOverlay";
 import { disarm } from "./apps/PlacementGhost";
@@ -59,6 +60,7 @@ const POINTER_BUSY_HOOKS: [string, boolean][] = [
 
 Hooks.once("init", () => {
   settings.register();
+  settings.registerPresetMenu(() => openPresetStudio());
   definePinData();
   definePinnedTile();
   registerPropHitLayer();
@@ -120,6 +122,7 @@ Hooks.on(`${MODULE_ID}.openPicker`, () => openPicker());
 Hooks.on(`${MODULE_ID}.openBoard`, () => openPinboard());
 Hooks.on(`${MODULE_ID}.openReader`, (doc: any) => void openReader(doc));
 Hooks.on(`${MODULE_ID}.openStudio`, (doc: any, tab?: any) => openStudio(doc, tab));
+Hooks.on(`${MODULE_ID}.openPresets`, () => openPresetStudio());
 Hooks.on(`${MODULE_ID}.peek`, (active: boolean) => propManager().setPeeking(active));
 
 // --- Keeping surfaces in step with the world --------------------------------

@@ -1,0 +1,194 @@
+/*
+ * Preset Studio.
+ *
+ * Three panes side by side, because authoring an effect is a loop between the three:
+ * pick, look, adjust. Stacking them would put the preview off-screen at exactly the
+ * moment a slider is being dragged.
+ *
+ * The backdrop swatches are the part that earns its space. An effect authored against
+ * a light panel is invisible on a dark dungeon map, and there is no way to discover
+ * that from inside a settings window — so the preview can be put on the map, on dark,
+ * on light and on a checker, and switching is one click.
+ */
+
+.dp-presets {
+  display: grid;
+  grid-template-columns: 12rem 1fr 14rem;
+  gap: 0.75rem;
+  block-size: 100%;
+  color: var(--color-text-primary, #eee);
+}
+
+.dp-presets__pane {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-inline-size: 0;
+  overflow-y: auto;
+}
+
+.dp-presets__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  flex: 1;
+}
+
+.dp-presets__item {
+  inline-size: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.25rem 0.45rem;
+  border: none;
+  border-inline-start: 3px solid transparent;
+  border-radius: 0.2rem;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  text-align: start;
+
+  &:hover {
+    background: color-mix(in oklab, var(--color-warm-1, #c9ad6a) 12%, transparent);
+  }
+
+  &[aria-pressed="true"] {
+    border-inline-start-color: var(--color-warm-1, #c9ad6a);
+    background: color-mix(in oklab, var(--color-warm-1, #c9ad6a) 18%, transparent);
+  }
+
+  & i {
+    margin-inline-start: auto;
+    opacity: 0.5;
+    font-size: 0.8em;
+  }
+}
+
+.dp-presets__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dp-presets__actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.25rem;
+}
+
+.dp-presets__preview {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  border-radius: 0.35rem;
+  min-block-size: 12rem;
+
+  /* The map swatch approximates a lit dungeon floor rather than showing the real one:
+     the real scene is behind this window, and a live capture of it would need the
+     backdrop-filter that is banned everywhere in this module. */
+  &[data-dp-bg="map"] {
+    background:
+      radial-gradient(60% 60% at 30% 30%, #6b5a44 0%, #3a3128 60%, #221d18 100%);
+  }
+  &[data-dp-bg="dark"] {
+    background: #101014;
+  }
+  &[data-dp-bg="light"] {
+    background: #f2f2f0;
+  }
+  &[data-dp-bg="checker"] {
+    background-color: #808080;
+    background-image:
+      linear-gradient(45deg, #666 25%, transparent 25%, transparent 75%, #666 75%),
+      linear-gradient(45deg, #666 25%, transparent 25%, transparent 75%, #666 75%);
+    background-size: 20px 20px;
+    background-position:
+      0 0,
+      10px 10px;
+  }
+
+  & .dp-card {
+    inline-size: 11rem;
+    block-size: 15rem;
+    font-size: 0.6rem;
+  }
+}
+
+.dp-presets__bgs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+
+  & button {
+    flex: 1;
+    padding: 0.15rem 0.4rem;
+    border: 1px solid var(--color-border-light-1, #7a7971);
+    border-radius: 999px;
+    background: transparent;
+    color: inherit;
+    font-size: 0.8em;
+    cursor: pointer;
+  }
+
+  & button[aria-pressed="true"] {
+    background: var(--color-warm-1, #c9ad6a);
+    color: #1b1b23;
+    border-color: transparent;
+  }
+}
+
+.dp-presets__params {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.dp-presets__param {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-areas:
+    "name value"
+    "slider slider";
+  align-items: center;
+  gap: 0.1rem 0.4rem;
+  font-size: 0.82em;
+
+  & > span {
+    grid-area: name;
+  }
+  & > output {
+    grid-area: value;
+    font-variant-numeric: tabular-nums;
+    opacity: 0.7;
+  }
+  & > input {
+    grid-area: slider;
+    inline-size: 100%;
+  }
+  &:has(input:disabled) {
+    opacity: 0.55;
+  }
+}
+
+.dp-presets__locked {
+  margin: 0;
+  padding: 0.35rem 0.5rem;
+  border-radius: 0.3rem;
+  background: color-mix(in oklab, var(--color-bg-option, #1b1b23) 70%, transparent);
+  font-size: 0.8em;
+  opacity: 0.85;
+}
+
+.dp-presets__cost {
+  margin: 0.4rem 0 0;
+  font-size: 0.85em;
+  font-variant-numeric: tabular-nums;
+
+  &[data-dp-cost="medium"] {
+    color: var(--color-warm-1, #c9ad6a);
+  }
+  &[data-dp-cost="high"] {
+    color: #e08a72;
+  }
+}

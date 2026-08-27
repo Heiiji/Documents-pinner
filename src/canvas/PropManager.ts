@@ -21,7 +21,7 @@
  */
 
 import { DEFAULTS, MODULE_ID } from "../const";
-import { cancelIdle, cv, g, notify, onIdle, rendererResolution } from "../fvtt";
+import { cancelIdle, cv, g, notify, ns, onIdle, rendererResolution } from "../fvtt";
 import * as settings from "../settings";
 import { readPin } from "../data/PinData";
 import * as api from "../api";
@@ -55,6 +55,7 @@ import { svgDocument } from "../render/CardTemplate";
 import { inlineFonts, inlineImages } from "../render/AssetInliner";
 import { TextureCache, cacheKey } from "../render/TextureCache";
 import { currentLevel, sampleFrame } from "../effects/level";
+import { getCorePreset } from "../effects/presets/core-presets";
 
 interface PropRecord {
   id: string;
@@ -65,6 +66,8 @@ interface PropRecord {
   originalTexture: any;
   generating: boolean;
   lastSeen: number;
+  /** Whether this client could see it last time we looked, for the reveal animation. */
+  wasVisible: boolean;
 }
 
 class Manager {
@@ -136,6 +139,8 @@ class Manager {
           originalTexture: tile.mesh?.texture ?? null,
           generating: false,
           lastSeen: 0,
+          // Assume visible, so props already on screen at load do not all animate in.
+          wasVisible: true,
         });
       }
     }
@@ -277,6 +282,10 @@ class Manager {
       // half are mush looks broken, one that is uniformly softer looks deliberate.
       for (let i = 0; i < this.#globalDemotions; i++) tier = demote(tier);
 
+      const visible = tile.isVisible === true;
+      if (visible && !record.wasVisible) this.#playReveal(tile, pin);
+      record.wasVisible = visible;
+
       record.tier = tier;
       record.lastSeen = ++this.#clock;
 
@@ -304,6 +313,40 @@ class Manager {
     this.applyAlpha();
     this.#trim();
     this.#pump();
+  }
+
+  /**
+   * The reveal.
+   *
+   * A prop appearing instantly reads as a rendering glitch; the same prop fading up
+   * over half a second reads as something being revealed, which is the entire moment
+   * the module exists for. Driven by core's own animation so it shares the ticker and
+   * is cancelled correctly when the scene is torn down mid-animation.
+   */
+  #playReveal(tile: any, pin: any): void {
+    const mesh = tile.mesh;
+    if (!mesh) return;
+
+    const preset = getCorePreset(pin.effect.id);
+    const animation = preset?.reveal.animation ?? "fade";
+    const target = tile.document.alpha ?? 1;
+    if (animation === "none" || currentLevel() !== "full") {
+      mesh.alpha = target;
+      return;
+    }
+
+    const duration = Math.max(0, preset?.reveal.durationMs ?? 400);
+    const CanvasAnimation = ns("canvas.animation.CanvasAnimation");
+    mesh.alpha = 0;
+
+    if (!CanvasAnimation?.animate) {
+      mesh.alpha = target;
+      return;
+    }
+    void CanvasAnimation.animate([{ parent: mesh, attribute: "alpha", to: target }], {
+      duration,
+      name: `${MODULE_ID}.reveal.${tile.id}`,
+    });
   }
 
   #keyFor(tile: any, pin: any, longEdge: number): string {

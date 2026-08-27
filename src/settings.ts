@@ -127,6 +127,19 @@ export const SETTINGS = {
     type: Boolean,
     default: true,
   },
+  /**
+   * User-authored presets, as an array of raw objects.
+   *
+   * World-scoped and stored raw rather than validated: a preset written by a future
+   * version must survive being read by an older one, so validation happens on read
+   * where unknown parameters can be dropped with a warning instead of destroyed.
+   */
+  userPresets: {
+    scope: "world",
+    config: false,
+    type: Object,
+    default: [],
+  },
   /** Bumped by `migrations.ts` after a world-wide sweep completes. */
   schemaVersion: {
     scope: "world",
@@ -161,6 +174,7 @@ interface SettingTypes {
   defaultAudience: "everyone" | "hidden";
   defaultOwnershipSync: boolean;
   schemaVersion: number;
+  userPresets: unknown[];
   lastPreset: string;
   lastSourceUuid: string;
 }
@@ -207,6 +221,37 @@ export function register(): void {
       ...(def.range ? { range: def.range } : {}),
     });
   }
+}
+
+/**
+ * A button in the module settings that opens the Preset Studio.
+ *
+ * Registered separately from the settings themselves because it needs an application
+ * class, and the class cannot exist before `init` — passing the opener in keeps
+ * `settings.ts` from importing an app and creating a cycle.
+ */
+export function registerPresetMenu(open: () => void): void {
+  const settings = g()?.settings;
+  const ApplicationV2 = (globalThis as any).foundry?.applications?.api?.ApplicationV2;
+  if (!settings?.registerMenu || !ApplicationV2) return;
+
+  // registerMenu wants a class it can construct; the smallest honest one opens the
+  // real studio and closes itself immediately.
+  class PresetMenuShim extends ApplicationV2 {
+    render() {
+      open();
+      return this;
+    }
+  }
+
+  settings.registerMenu(MODULE_ID, "presetStudio", {
+    name: "DP.presets.title",
+    label: "DP.presets.title",
+    hint: "DP.presets.menuHint",
+    icon: "fa-solid fa-wand-magic-sparkles",
+    type: PresetMenuShim,
+    restricted: true,
+  });
 }
 
 /** The VRAM budget in bytes, which is the unit the texture cache actually works in. */
