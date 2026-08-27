@@ -204,6 +204,20 @@ export async function setAudience(anchorDoc: any, next: DpAudience): Promise<voi
   await syncAnchor(anchorDoc);
 }
 
+/**
+ * Patch a pin and, if the patch touched its audience, bring ownership in line.
+ *
+ * The single entry point for a form or an API caller editing audience fields by path.
+ * It deep-merges through `PinStore.update` rather than spreading, because a shallow
+ * spread of `{ ownershipSync: { level } }` would replace the whole group and silently
+ * re-enable a sync the GM had turned off.
+ */
+export async function patchAndSync(anchorDoc: any, changes: PinPatch): Promise<void> {
+  if (!isGM()) return;
+  await store.update(anchorDoc, changes);
+  if (changes.audience) await syncAnchor(anchorDoc);
+}
+
 function withAudience(
   anchorDoc: any,
   change: (current: DpAudience) => DpAudience
@@ -411,6 +425,7 @@ export function publicApi() {
     pinAt,
     adoptTile,
     setAudience,
+    patchAndSync,
     toggleVisibility,
     cycleAudience,
     setUserVisible,

@@ -376,13 +376,18 @@ class Manager {
     if (this.#working || !this.#queue.length) return;
     if (rasterisationAvailable() === false || settings.get("rendering") === "dom") return;
 
-    const next = this.#queue.shift()!;
-    const record = this.#records.get(next.id);
-    const tile = cv()?.tiles?.get(next.id);
-    if (!record || !tile) {
-      this.#pump();
-      return;
+    // Drain stale entries in a loop rather than by recursing: a queue built just before
+    // a dozen tiles were deleted would otherwise recurse once per dead entry.
+    let record: PropRecord | undefined;
+    let tile: any;
+    while (this.#queue.length) {
+      const next = this.#queue.shift()!;
+      record = this.#records.get(next.id);
+      tile = cv()?.tiles?.get(next.id);
+      if (record && tile) break;
+      record = undefined;
     }
+    if (!record || !tile) return;
 
     this.#working = true;
     record.generating = true;

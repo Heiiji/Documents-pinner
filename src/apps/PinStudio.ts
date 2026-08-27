@@ -365,13 +365,10 @@ export function definePinStudio(): any {
         return;
       }
 
-      const patch = formToPatch([[target.name, valueOf(target)]]);
-      if (patch.audience) {
-        const pin = readPin(this.doc);
-        if (pin) await api.setAudience(this.doc, { ...pin.audience, ...patch.audience });
-      } else {
-        await api.patch(this.doc, patch);
-      }
+      // Deep-merged and ownership-synced in one call: spreading the patch here would
+      // replace a whole group, and `{ ownershipSync: { level } }` would then wipe the
+      // `enabled` flag beside it.
+      await api.patchAndSync(this.doc, formToPatch([[target.name, valueOf(target)]]));
     }
   };
 

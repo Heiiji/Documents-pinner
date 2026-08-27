@@ -131,6 +131,27 @@ describe("update", () => {
     expect(doc.writes).toEqual([]);
   });
 
+  it("deep-merges a nested group instead of replacing it", async () => {
+    // The regression this guards: editing only the ownership LEVEL used to replace the
+    // whole ownershipSync group, silently switching sync back on for a GM who had
+    // turned it off.
+    const doc = fakeDoc();
+    await update(doc, { audience: { ownershipSync: { enabled: false, level: 2 } } });
+    await update(doc, { audience: { ownershipSync: { level: 1 } } as any });
+
+    expect(currentPin(doc).audience.ownershipSync).toEqual({ enabled: false, level: 1 });
+  });
+
+  it("keeps sibling audience fields when patching one of them", async () => {
+    const doc = fakeDoc();
+    await update(doc, { audience: { kind: "selected", users: ["a", "b"] } });
+    await update(doc, { audience: { sticky: false } });
+
+    expect(currentPin(doc).audience.users).toEqual(["a", "b"]);
+    expect(currentPin(doc).audience.kind).toBe("selected");
+    expect(currentPin(doc).audience.sticky).toBe(false);
+  });
+
   it("re-validates, so a patch cannot persist an out-of-range value", async () => {
     const doc = fakeDoc();
     await update(doc, { display: { padding: 99 } });
