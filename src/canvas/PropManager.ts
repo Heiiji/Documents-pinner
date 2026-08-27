@@ -708,7 +708,35 @@ class Manager {
     // prop's own texture is bound it has something worth showing. `#recomputeLod` runs
     // this before the queue drains, so the bind has to say so itself.
     this.applyAlpha();
+    this.#fadeIn(tile);
     this.#trim();
+  }
+
+  /**
+   * Ease a freshly drawn prop up to its alpha instead of popping it on.
+   *
+   * The mesh is held at zero while a readable-sized prop is still being rasterised, so
+   * without this the moment the texture lands is a hard cut from nothing to a full
+   * letter — which reads as a glitch for exactly the same reason a reveal does.
+   *
+   * Short and only on a real draw, not on a cache rebind: a GM panning back over a prop
+   * they have already seen should find it there, not watch it arrive again.
+   */
+  #fadeIn(tile: any): void {
+    const mesh = tile.mesh;
+    if (!mesh || this.#level !== "full") return;
+
+    const target = mesh.alpha;
+    if (!target) return;
+
+    const CanvasAnimation = ns("canvas.animation.CanvasAnimation");
+    if (!CanvasAnimation?.animate) return;
+
+    mesh.alpha = 0;
+    void CanvasAnimation.animate([{ parent: mesh, attribute: "alpha", to: target }], {
+      duration: 200,
+      name: `${MODULE_ID}.draw.${tile.id}`,
+    });
   }
 
   // -------------------------------------------------------------------------

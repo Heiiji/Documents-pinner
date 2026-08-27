@@ -117,6 +117,12 @@
     border-color: var(--color-warm-1, #c9ad6a);
     background: color-mix(in oklab, var(--color-warm-1, #c9ad6a) 16%, transparent);
   }
+
+  /* The gallery is walked with Tab as often as it is clicked. */
+  &:focus-visible {
+    outline: 2px solid var(--color-warm-1, #c9ad6a);
+    outline-offset: 1px;
+  }
 }
 
 .dp-studio__swatch-preview {

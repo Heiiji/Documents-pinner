@@ -191,3 +191,14 @@
     color: #e08a72;
   }
 }
+
+/*
+ * The Preset Studio is a keyboard surface too: its list is walked with Tab and its
+ * parameter sliders with the arrow keys, and neither is usable without a visible focus.
+ */
+.dp-presets button:focus-visible,
+.dp-presets input:focus-visible,
+.dp-presets [tabindex]:focus-visible {
+  outline: 2px solid var(--color-warm-1, #c9ad6a);
+  outline-offset: 1px;
+}

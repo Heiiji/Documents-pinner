@@ -160,6 +160,13 @@
     border-color: var(--color-warm-1, #c9ad6a);
     background: color-mix(in oklab, var(--color-warm-1, #c9ad6a) 18%, transparent);
   }
+
+  /* The palette is opened from the keyboard as often as from the pointer, and the
+     disclosure moves focus into it — so the landing spot has to be visible. */
+  &:focus-visible {
+    outline: 2px solid var(--color-warm-1, #c9ad6a);
+    outline-offset: 1px;
+  }
 }
 
 .dp-hud__swatch-preview {
