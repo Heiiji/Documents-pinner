@@ -26,6 +26,16 @@ export const MAX_ASSET_BYTES = 2 * 1024 * 1024;
 /** 8 MB total. Inlined bytes live in JS heap, not VRAM, and are cheap to re-fetch. */
 export const MAX_TOTAL_BYTES = 8 * 1024 * 1024;
 
+/**
+ * A ceiling on ENTRIES as well as on bytes.
+ *
+ * A failed fetch is cached as a failure so a missing file is not re-requested per render,
+ * and a failure entry weighs zero bytes — so the byte budget could never evict one, and a
+ * world with a lot of broken image paths grew this map without bound for the whole
+ * session.
+ */
+export const MAX_ENTRIES = 512;
+
 interface Entry {
   dataUri: string | null;
   bytes: number;
@@ -43,10 +53,10 @@ function tick(): number {
 }
 
 function evictTo(limit: number): void {
-  if (totalBytes <= limit) return;
+  if (totalBytes <= limit && cache.size <= MAX_ENTRIES) return;
   const entries = [...cache.entries()].sort((a, b) => a[1].lastUsed - b[1].lastUsed);
   for (const [key, entry] of entries) {
-    if (totalBytes <= limit) break;
+    if (totalBytes <= limit && cache.size <= MAX_ENTRIES) break;
     cache.delete(key);
     totalBytes -= entry.bytes;
   }

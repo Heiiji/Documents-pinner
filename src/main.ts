@@ -107,6 +107,11 @@ Hooks.on("canvasPan", () => {
 
 for (const [hook, busy] of POINTER_BUSY_HOOKS) Hooks.on(hook, () => suspendHits(busy));
 
+// Core redrew a pin's tile, so the texture we captured to restore later is stale and the
+// binding we recorded belongs to a mesh that no longer exists. `PinnedTile` has fired this
+// since it was written; nothing listened.
+Hooks.on(`${MODULE_ID}.tileDrawn`, (tile: any) => propManager().onTileDrawn(tile));
+
 // --- Entry points -----------------------------------------------------------
 
 Hooks.on("getSceneControlButtons", onGetSceneControlButtons);
@@ -134,16 +139,43 @@ Hooks.on(`${MODULE_ID}.peek`, (active: boolean) => propManager().setPeeking(acti
 // sidebar — and every one of those must give back the ownership it granted.
 Hooks.on("preDeleteTile", onPreDeleteTile);
 
-for (const hook of ["createTile", "updateTile", "deleteTile"]) {
-  Hooks.on(hook, (doc: any) => {
+/**
+ * Tile changes, coalesced.
+ *
+ * Foundry fires `updateTile` once per document, so a correctly-batched fifty-pin "Reveal
+ * all" arrives as fifty hook calls — and each one did O(all placeables) work: a full
+ * `PropManager.refresh`, a full hit-layer rebuild (a `PIXI.Container` and a `Polygon`
+ * allocated and destroyed per prop), a full Pinboard render and up to N `testVisibility`
+ * calls. Fifty of those in one tick is ~2500 allocations and fifty renders for one
+ * gesture.
+ *
+ * The ids are gathered and the refresh runs ONCE from a microtask, so a batch of any size
+ * costs one pass. Everything here was already idempotent; only the arithmetic changes.
+ */
+const changedTiles = new Set<string>();
+let tileRefreshQueued = false;
+
+function onTileChanged(doc: any): void {
+  if (doc?.id) changedTiles.add(doc.id);
+  if (tileRefreshQueued) return;
+  tileRefreshQueued = true;
+
+  void Promise.resolve().then(() => {
+    tileRefreshQueued = false;
+    const ids = [...changedTiles];
+    changedTiles.clear();
+
     propManager().refresh();
     syncHitLayer();
     repositionReader();
-    refreshPinHUD(doc);
+    // The HUD is bound to at most one anchor, so it only cares whether that one moved.
+    for (const id of ids) refreshPinHUD({ id });
     refreshStudios();
     refreshPinboard();
   });
 }
+
+for (const hook of ["createTile", "updateTile", "deleteTile"]) Hooks.on(hook, onTileChanged);
 
 // A token moving is what makes a prop underneath it fade, so props never obscure the
 // thing the fade exists to protect.

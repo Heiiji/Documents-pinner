@@ -27,7 +27,7 @@ import { escapeAttr, escapeHtml } from "../html";
 import * as api from "../api";
 import * as store from "../data/PinStore";
 import { readPin } from "../data/PinData";
-import { syncAnchor } from "../data/ownership-sync";
+import { releaseAnchor, syncAnchor } from "../data/ownership-sync";
 import { allPresets, findPreset } from "../effects/preset-library";
 import { chipsMarkup } from "./chips";
 import { chipUsersFor } from "./PinHUD";
@@ -617,7 +617,16 @@ async function onBulkDelete(this: any) {
     : false;
   if (!confirmed) return;
 
-  for (const doc of docs) await api.deletePin(doc);
+  // Release every grant first, then delete in ONE scene write. `api.deletePin` per row is
+  // N round trips, which for a dozen selected pins is a visible stagger on every client
+  // and N separate undo entries.
+  for (const doc of docs) await releaseAnchor(doc);
+  await this.scene?.deleteEmbeddedDocuments(
+    "Tile",
+    docs.map((doc: any) => doc.id),
+    internal()
+  );
+
   this.selected = [];
   this.render();
 }

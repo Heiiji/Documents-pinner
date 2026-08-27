@@ -130,7 +130,9 @@ export function fakeTile(options: FakeDocOptions = {}): any {
     id: doc.id,
     document: doc,
     isVisible: true,
-    mesh: { texture: null, alpha: 1, visible: true },
+    // A real tile always has a texture — see PLACEHOLDER_TEXTURE — and the manager
+    // captures it to restore later.
+    mesh: { texture: { id: "core-texture" }, alpha: 1, visible: true },
     renderFlags: { set: () => {} },
   };
   return doc;
@@ -188,7 +190,7 @@ export function fakePixi(): any {
     UPDATE_PRIORITY: { LOW: -1 },
     MIPMAP_MODES: { ON: 1 },
     SCALE_MODES: { LINEAR: 1 },
-    Texture: { from: () => ({ destroy: () => {} }) },
+    Texture: { from: () => ({ destroy: () => {} }), EMPTY: { id: "PIXI.Texture.EMPTY" } },
   };
 }
 

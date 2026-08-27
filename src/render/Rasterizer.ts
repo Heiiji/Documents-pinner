@@ -132,9 +132,24 @@ export function tierFor(pixels: number): number {
   return RES_TIERS[RES_TIERS.length - 1];
 }
 
-/** The VRAM an RGBA8 texture occupies, including the mip chain's extra third. */
+/**
+ * The memory a rasterised texture actually costs, on BOTH sides of the bus.
+ *
+ * `PIXI.Texture.from(canvas)` keeps the `OffscreenCanvas` alive as the base texture's
+ * resource, so every prop carries its RGBA8 backing store in system memory for as long as
+ * the texture exists — roughly doubling the real cost of a prop. Counting only the GPU
+ * side made a 2048² prop look like ~22 MB when the true figure is closer to 38 MB, and at
+ * the 256 MB default the real footprint was approaching half a gigabyte.
+ *
+ * The honest number is counted here rather than the retention being removed, because
+ * releasing the canvas means handing PIXI an `ImageBitmap` instead, and that could not be
+ * verified against a live v14 renderer in this pass. The budget therefore now means what
+ * a user reads it as — total memory, not just VRAM. See DESIGN A9.
+ */
 export function textureBytes(width: number, height: number): number {
-  return Math.round(width * height * 4 * 1.34);
+  const pixels = width * height;
+  // GPU: RGBA8 plus the mip chain's extra third. CPU: the canvas backing store, no mips.
+  return Math.round(pixels * 4 * 1.34 + pixels * 4);
 }
 
 function decodeSvg(svg: string): Promise<HTMLImageElement> {

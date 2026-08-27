@@ -120,10 +120,26 @@ describe("tierFor", () => {
 });
 
 describe("textureBytes", () => {
-  it("accounts for RGBA plus the mip chain", () => {
+  it("accounts for RGBA plus the mip chain on the GPU", () => {
     // 2048² RGBA8 is 16 MB before mips, ~21 MB with them.
-    expect(textureBytes(2048, 2048)).toBeGreaterThan(16 * 1024 * 1024);
-    expect(textureBytes(2048, 2048)).toBeLessThan(24 * 1024 * 1024);
+    const gpuOnly = 2048 * 2048 * 4 * 1.34;
+    expect(textureBytes(2048, 2048)).toBeGreaterThan(gpuOnly);
+  });
+
+  it("also counts the canvas backing store the base texture keeps alive", () => {
+    // `PIXI.Texture.from(canvas)` retains the OffscreenCanvas as its resource, so every
+    // prop costs its pixels twice — once in VRAM and once in system memory. Counting one
+    // side made a 2048² prop look like ~22 MB against a true ~38 MB, and at the 256 MB
+    // default the real footprint was approaching half a gigabyte.
+    const pixels = 2048 * 2048;
+    expect(textureBytes(2048, 2048)).toBeCloseTo(pixels * 4 * 1.34 + pixels * 4, -3);
+    expect(textureBytes(2048, 2048)).toBeGreaterThan(36 * 1024 * 1024);
+    expect(textureBytes(2048, 2048)).toBeLessThan(40 * 1024 * 1024);
+  });
+
+  it("scales with area", () => {
+    // Rounded to whole bytes, so compare within one.
+    expect(textureBytes(1024, 1024) * 4).toBeCloseTo(textureBytes(2048, 2048), -1);
   });
 });
 

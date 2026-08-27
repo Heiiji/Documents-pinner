@@ -32,6 +32,17 @@ import { mount, write } from "./OverlayRoot";
 let element: HTMLElement | null = null;
 let openId: string | null = null;
 let listeners: (() => void)[] = [];
+/**
+ * Which open attempt is the current one.
+ *
+ * `openReader` awaits before it assigns `element`, so two clicks in quick succession both
+ * got past the guard, both mounted a card, and the first was orphaned in the overlay
+ * permanently — a second copy of a prop that nothing could close.
+ */
+let openToken = 0;
+/** The geometry the reader was last placed at, so a pan writes nothing. */
+let placedAt: { x: number; y: number; width: number; height: number; rotation: number } | null =
+  null;
 
 export function focusedPinId(): string | null {
   return openId;
@@ -58,8 +69,12 @@ export async function openReader(tileDoc: any): Promise<void> {
   const pin = readPin(tileDoc);
   if (!pin) return;
 
+  // Claimed before the first await; anything older than this stops when it comes back.
+  const token = ++openToken;
+
   const size = { width: tileDoc.width, height: tileDoc.height };
   const card = await resolveCard(pin, size, { tier: "L3", baked: false });
+  if (token !== openToken) return;
 
   // NOT gated on permission. With ownership sync off — a documented setting, and the
   // whole point of DESIGN §3.1 — a player can see a prop without holding OBSERVER on the
@@ -105,6 +120,10 @@ export async function openReader(tileDoc: any): Promise<void> {
 }
 
 export function closeReader(): void {
+  // Supersede any open still in flight, so it cannot mount after this.
+  openToken++;
+  placedAt = null;
+
   for (const off of listeners) off();
   listeners = [];
 
@@ -137,12 +156,34 @@ export function repositionReader(): void {
  * prop through any pan or zoom without a single per-frame write.
  */
 function place(node: HTMLElement, doc: any): void {
+  // Dirty-checked, as `canvasPan`'s comment in `main.ts` already claimed it was. Without
+  // this it wrote five style values on every tick of an animated pan, for a rectangle
+  // that had not moved in scene space at all.
+  const next = {
+    x: doc.x,
+    y: doc.y,
+    width: doc.width,
+    height: doc.height,
+    rotation: doc.rotation ?? 0,
+  };
+  if (
+    placedAt &&
+    placedAt.x === next.x &&
+    placedAt.y === next.y &&
+    placedAt.width === next.width &&
+    placedAt.height === next.height &&
+    placedAt.rotation === next.rotation
+  ) {
+    return;
+  }
+  placedAt = next;
+
   write(node, () => {
-    node.style.left = `${doc.x}px`;
-    node.style.top = `${doc.y}px`;
-    node.style.width = `${doc.width}px`;
-    node.style.height = `${doc.height}px`;
-    node.style.transform = `rotate(${doc.rotation ?? 0}deg)`;
+    node.style.left = `${next.x}px`;
+    node.style.top = `${next.y}px`;
+    node.style.width = `${next.width}px`;
+    node.style.height = `${next.height}px`;
+    node.style.transform = `rotate(${next.rotation}deg)`;
   });
 }
 

@@ -186,16 +186,33 @@ function legendMarkup(current: GhostState): string {
   );
 }
 
-function render(): void {
-  if (!state || !element) return;
-  const current = state;
-  const size = sizeOf(current, gridSize());
-  const k = scaleOf(stageMatrix());
-  const preset = CORE_PRESETS[current.effectIndex];
+/** The legend as last drawn, so a pointer move does not rebuild it. */
+let lastChip = "";
 
+/**
+ * The chip, which changes only when the GM changes something.
+ *
+ * Split from the position write because it was `innerHTML`, synchronously, inside the
+ * `pointermove` handler — a full parse and layout of the legend on every mouse movement,
+ * for markup that only changes on a scale, effect, audience or mode step.
+ */
+function renderChip(current: GhostState): void {
+  if (!element) return;
+  const preset = CORE_PRESETS[current.effectIndex];
   element.dataset.dpFx = preset.id;
   element.dataset.dpMode = current.mode;
-  element.innerHTML = legendMarkup(current);
+
+  const markup = legendMarkup(current);
+  if (markup === lastChip) return;
+  lastChip = markup;
+  element.innerHTML = markup;
+}
+
+/** The position, which changes on every pointer move and is a batched style write only. */
+function renderPosition(current: GhostState): void {
+  if (!element) return;
+  const size = sizeOf(current, gridSize());
+  const k = scaleOf(stageMatrix());
 
   write(element, () => {
     if (!element) return;
@@ -208,6 +225,12 @@ function render(): void {
     element.style.transform = `rotate(${current.rotation}deg)`;
     element.style.setProperty("--dp-ghost-zoom", String(1 / (k || 1)));
   });
+}
+
+function render(): void {
+  if (!state || !element) return;
+  renderChip(state);
+  renderPosition(state);
 }
 
 /** Arm placement. Returns false when there is nothing to place onto. */
@@ -240,6 +263,7 @@ export function disarm(): void {
   element?.remove();
   element = null;
   state = null;
+  lastChip = "";
 }
 
 function on<K extends keyof WindowEventMap>(
@@ -271,9 +295,12 @@ function attach(): void {
   on(board, "pointermove", (event: PointerEvent) => {
     if (!state) return;
     const point = snap(pointerScenePoint(event), gridSize(), state.freePlace);
+    if (point.x === state.x && point.y === state.y) return;
+
     state = { ...state, x: point.x, y: point.y };
     syncTransform();
-    render();
+    // Position only: nothing in the legend can have changed by moving the mouse.
+    renderPosition(state);
   });
 
   on(

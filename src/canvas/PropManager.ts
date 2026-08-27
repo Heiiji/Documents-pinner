@@ -55,7 +55,7 @@ import { resolveCard } from "../render/ContentResolver";
 import { svgDocument } from "../render/CardTemplate";
 import { inlineFonts, inlineImages } from "../render/AssetInliner";
 import { TextureCache, cacheKey } from "../render/TextureCache";
-import { currentLevel, sampleFrame } from "../effects/level";
+import { currentLevel, sampleFrame, sampledFps } from "../effects/level";
 import { findPreset } from "../effects/preset-library";
 import {
   clearDomTier,
@@ -63,6 +63,14 @@ import {
   syncDomTier,
   type DomPropEntry,
 } from "./DomPropTier";
+
+/**
+ * The frame time above which the scene counts as struggling.
+ *
+ * 45 fps rather than 60: a scene that dips below 60 on a wheel scroll is normal, and one
+ * that holds under 45 for a solid second is not going to recover on its own.
+ */
+export const DEGRADE_FRAME_MS = 1000 / 45;
 
 interface PropRecord {
   id: string;
@@ -73,6 +81,16 @@ interface PropRecord {
   originalTexture: any;
   generating: boolean;
   lastSeen: number;
+  /**
+   * The content hash of the card last drawn for this prop.
+   *
+   * The cache key had NO content signal at all — `docHash` was `width + "x" + height` —
+   * so a pin anchored to a whole JournalEntry never invalidated when one of its pages was
+   * edited: `keysFor` prefix-matches the page uuid against the entry uuid and finds
+   * nothing, and the prop stayed stale for the rest of the session. `ResolvedCard` had
+   * been computing `contentHash` all along and nothing read it.
+   */
+  contentHash: string;
   /** Whether this client could see it last time we looked, for the reveal animation. */
   wasVisible: boolean;
 }
@@ -96,8 +114,26 @@ class Manager {
    */
   #failedKeys = new Set<string>();
   #working = false;
+  /**
+   * Bumped whenever everything in flight becomes irrelevant.
+   *
+   * `#generate` awaits five times and then wrote into the cache and onto a mesh with no
+   * check that any of it still existed. `stop()` cleared the records but cancelled
+   * nothing, so a pending generate resolved into the NEW scene's cache under the OLD
+   * scene's key and assigned `mesh.texture` on a destroyed mesh.
+   */
+  #epoch = 0;
   /** Whether the "no mesh to bind to" fault has already been reported this session. */
   #warnedNoMesh = false;
+  /**
+   * Settings read once per LOD pass rather than per prop or per frame.
+   *
+   * `currentLevel()` costs a settings read plus a fresh `window.matchMedia` every time,
+   * and it was called once per prop inside `#keyFor`; `autoDegrade` was read inside the
+   * ticker.
+   */
+  #level = currentLevel();
+  #autoDegrade = true;
   #clock = 0;
   #focusedId: string | null = null;
   /** Alt-peek: every prop drops towards transparent so the map can be read. */
@@ -135,6 +171,10 @@ class Manager {
   }
 
   stop(): void {
+    // Everything in flight is now about a scene that is going away.
+    this.#epoch++;
+    this.#working = false;
+
     const ticker = cv()?.app?.ticker;
     if (this.#ticker && ticker) ticker.remove(this.#ticker, this);
     this.#ticker = null;
@@ -171,6 +211,7 @@ class Manager {
           originalTexture: tile.mesh?.texture ?? null,
           generating: false,
           lastSeen: 0,
+          contentHash: "",
           // Assume visible, so props already on screen at load do not all animate in.
           wasVisible: true,
         });
@@ -186,15 +227,70 @@ class Manager {
     this.#scheduleLod(0);
   }
 
-  /** Drop a document's textures after an edit, so the next frame redraws it. */
+  /**
+   * Drop a document's textures after an edit, so the next frame redraws it.
+   *
+   * RESTORE BEFORE DESTROY, and only for the props that actually reference this source.
+   * It used to destroy through the cache and then null `boundKey` on EVERY record, which
+   * made the later `#unbind` early-return and never put core's own texture back — so
+   * editing a page ten props referenced left ten meshes pointing at destroyed textures
+   * for 250 ms plus however long the serialised regeneration took.
+   */
   invalidate(uuid: string): void {
-    this.#cache.invalidate(uuid);
+    const affected = [...this.#records.values()].filter((record) =>
+      this.#referencesSource(record, uuid)
+    );
+
+    for (const record of affected) {
+      this.#restore(record);
+      // Forget the content signal so the next pass builds a key this cache cannot serve.
+      record.contentHash = "";
+    }
+
+    // Both directions: a pin on a whole JournalEntry must be invalidated by an edit to
+    // one of its PAGES, whose uuid is longer than the entry's.
+    const sources = new Set<string>([uuid]);
+    for (const record of affected) {
+      const source = this.#sourceUuidOf(record);
+      if (source) sources.add(source);
+    }
+    for (const source of sources) this.#cache.invalidate(source);
+
     // A card that failed to draw deserves another go once its content has changed.
     for (const key of [...this.#failedKeys]) {
-      if (key.startsWith(`${uuid}|`)) this.#failedKeys.delete(key);
+      for (const source of sources) {
+        if (key.startsWith(`${source}|`)) this.#failedKeys.delete(key);
+      }
     }
-    for (const record of this.#records.values()) record.boundKey = null;
     this.#scheduleLod(DEFAULTS.editDebounce);
+  }
+
+  /** The source uuid a prop draws from, which is the first field of its cache key. */
+  #sourceUuidOf(record: PropRecord): string | null {
+    const tile = cv()?.tiles?.get(record.id);
+    const pin = tile ? readPin(tile.document) : null;
+    return pin?.source.uuid ?? pin?.source.src ?? record.id;
+  }
+
+  #referencesSource(record: PropRecord, uuid: string): boolean {
+    const source = this.#sourceUuidOf(record);
+    if (!source) return false;
+    return source === uuid || source.startsWith(uuid) || uuid.startsWith(source);
+  }
+
+  /**
+   * Core redrew a tile, so the texture we captured to restore later is stale.
+   *
+   * `PinnedTile` has been firing this since it was written and nothing listened, so a
+   * redraw left `originalTexture` pointing at a texture core had already replaced — and
+   * `boundKey` claiming a binding the new mesh does not have.
+   */
+  onTileDrawn(tile: any): void {
+    const record = this.#records.get(tile?.id);
+    if (!record) return;
+    record.boundKey = null;
+    record.originalTexture = tile.mesh?.texture ?? null;
+    this.#scheduleLod(0);
   }
 
   /**
@@ -270,10 +366,16 @@ class Manager {
       this.#scheduleLod(DEFAULTS.lodDebounce);
     }
 
-    const elapsed = performance.now() - started;
-    if (!settings.get("autoDegrade")) return;
+    if (!this.#autoDegrade) return;
 
-    const { state, degrade } = stepPerf(this.#perf, elapsed);
+    // The SCENE's frame time, not ours. This used to time the six lines above it — a
+    // counter increment, a matrix read and six float compares, a few microseconds against
+    // a 4 ms budget — because every real cost in this module is deliberately off the
+    // ticker. The guard could therefore never fire and acceptance criterion 10 could
+    // never be observed. `sampledFps` is the rolling rate the effects level already
+    // trusts, so the two agree about what "slow" means.
+    const frameMs = 1000 / Math.max(1, sampledFps());
+    const { state, degrade } = stepPerf(this.#perf, frameMs, DEGRADE_FRAME_MS);
     this.#perf = state;
     if (degrade) this.#degrade();
   }
@@ -301,6 +403,11 @@ class Manager {
   #recomputeLod(): void {
     const canvas = cv();
     if (!canvas?.ready) return;
+
+    // Hoisted out of the per-prop and per-frame paths: both of these cost a settings
+    // read, and `currentLevel` also builds a fresh `window.matchMedia` every call.
+    this.#level = currentLevel();
+    this.#autoDegrade = settings.get("autoDegrade");
 
     const matrix = stageMatrix();
     const viewport = visibleSceneRect(0);
@@ -361,7 +468,7 @@ class Manager {
         Math.max(tile.document.width, tile.document.height) * scaleOf(matrix),
         resolution
       );
-      const key = this.#keyFor(tile, pin, longEdge);
+      const key = this.#keyFor(tile, pin, longEdge, record.contentHash);
 
       const cached = this.#cache.get(key);
       if (cached) {
@@ -394,7 +501,7 @@ class Manager {
     const preset = findPreset(pin.effect.id);
     const animation = preset?.reveal.animation ?? "fade";
     const target = tile.document.alpha ?? 1;
-    if (animation === "none" || currentLevel() !== "full") {
+    if (animation === "none" || this.#level !== "full") {
       mesh.alpha = target;
       return;
     }
@@ -413,15 +520,29 @@ class Manager {
     });
   }
 
-  #keyFor(tile: any, pin: any, longEdge: number): string {
+  /**
+   * The cache key for a prop.
+   *
+   * `docHash` carries the CONTENT hash as well as the geometry. It used to be
+   * `width + "x" + height` alone, so nothing in the key ever changed when a document
+   * did — and a pin on a whole JournalEntry stayed stale for the session when one of its
+   * pages was edited, because `keysFor` prefix-matches the page uuid against the entry
+   * uuid and finds nothing to drop.
+   *
+   * The hash comes from the record rather than from a fresh resolve, because this runs
+   * synchronously for every prop on every LOD pass and resolving a card enriches a
+   * document. `#generate` writes the real hash back after resolving, so the first draw
+   * costs one provisional key and every later pass agrees with the cache.
+   */
+  #keyFor(tile: any, pin: any, longEdge: number, contentHash: string): string {
     return cacheKey({
       uuid: pin.source.uuid ?? pin.source.src ?? tile.id,
       // The viewing user is in the key because enrichment strips secrets per viewer.
       // Removing this would let a GM's texture be served to a player.
       userId: g()?.user?.id ?? "",
       resTier: longEdge,
-      presetBake: `${pin.effect.id}:${pin.effect.intensity}:${pin.effect.seed}:${pin.display.paper}:${currentLevel()}`,
-      docHash: String(tile.document.width) + "x" + String(tile.document.height),
+      presetBake: `${pin.effect.id}:${pin.effect.intensity}:${pin.effect.seed}:${pin.display.paper}:${this.#level}`,
+      docHash: `${tile.document.width}x${tile.document.height}:${contentHash}`,
     });
   }
 
@@ -468,6 +589,23 @@ class Manager {
     const pin = readPin(tile.document);
     if (!pin) return;
 
+    /**
+     * Whether this work still matters.
+     *
+     * Five awaits separate the decision to draw from the write, and nothing checked any
+     * of it: not that the record still existed, not that the tile did, not that the scene
+     * had not changed, not that the prop had not left the viewport. A pending generate
+     * resolved into the new scene's cache under the old scene's key and then assigned
+     * `mesh.texture` on a destroyed mesh.
+     */
+    const epoch = this.#epoch;
+    const alive = () =>
+      this.#epoch === epoch &&
+      this.#records.get(record.id) === record &&
+      cv()?.tiles?.get(record.id) === tile &&
+      record.tier !== "L0" &&
+      record.tier !== "L1";
+
     const size = { width: tile.document.width, height: tile.document.height };
     const longEdge = textureLongEdge(
       record.tier,
@@ -476,23 +614,44 @@ class Manager {
     );
     if (!longEdge) return;
 
-    const key = this.#keyFor(tile, pin, longEdge);
-    if (this.#cache.has(key)) {
-      this.#bind(record, tile, this.#cache.get(key), key);
+    const provisional = this.#keyFor(tile, pin, longEdge, record.contentHash);
+    if (this.#cache.has(provisional)) {
+      this.#bind(record, tile, this.#cache.get(provisional), provisional);
       return;
     }
 
     const card = await resolveCard(pin, size, { tier: record.tier, baked: true });
+    if (!alive()) return;
+
+    // The real content signal, now that the card exists. Written back so the next LOD
+    // pass builds the same key synchronously and hits the cache.
+    record.contentHash = card.contentHash;
+    const key = this.#keyFor(tile, pin, longEdge, card.contentHash);
+
+    const cached = this.#cache.get(key);
+    if (cached) {
+      this.#bind(record, tile, cached, key);
+      return;
+    }
+    if (this.#failedKeys.has(key)) return;
+
     const [css, fonts, body] = await Promise.all([
       loadCardCss(),
       inlineFonts(),
       inlineImages(card.html),
     ]);
+    if (!alive()) return;
 
     const svg = svgDocument(body, `${fonts}\n${css}`, size.width, size.height);
     const result = await rasterise(svg, size.width, size.height, longEdge);
     if (!result) {
       this.#failedKeys.add(key);
+      return;
+    }
+    if (!alive()) {
+      // Drawn for a scene that is gone: free it here rather than caching it under a key
+      // nothing will ever ask for again.
+      releaseTexture(result.texture);
       return;
     }
 
@@ -538,9 +697,20 @@ class Manager {
     this.#restore(record, tile);
   }
 
+  /**
+   * Put core's own texture back on the mesh.
+   *
+   * The fallback matters: with no captured texture this used to leave OUR texture in
+   * place, and every caller here is on its way to destroying it — so the mesh would be
+   * pointing at a destroyed texture. An empty texture draws nothing, which is the correct
+   * "not currently ours" state.
+   */
   #restore(record: PropRecord, tile?: any): void {
     const mesh = (tile ?? cv()?.tiles?.get(record.id))?.mesh;
-    if (mesh && record.originalTexture) mesh.texture = record.originalTexture;
+    if (mesh) {
+      const empty = (globalThis as any).PIXI?.Texture?.EMPTY ?? null;
+      mesh.texture = record.originalTexture ?? empty ?? mesh.texture;
+    }
     record.boundKey = null;
   }
 
