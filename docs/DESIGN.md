@@ -1,7 +1,7 @@
 # Documents Pinner — Design
 
-**Status:** In progress
-**Target:** Foundry VTT v14 (verified 14.365), `compatibility: { minimum: "14", verified: "14" }`
+**Status:** Pre-release hardening complete; §11's manual column still unverified
+**Target:** Foundry VTT v14, `compatibility: { minimum: "14", verified: "14.365" }`
 **Last updated:** 2026-08-27
 
 ---
@@ -343,11 +343,11 @@ src/
   main.ts            hook registration only, no logic
   const.ts  i18n.ts  api.ts  settings.ts
   data/       PinData  PinStore  audience*  ownership-plan*  migrations*
-  canvas/     PinnedTile  PropRecord  PropManager  PropHitLayer  transform*
+  canvas/     PinnedTile  PropRecord  PropManager  PropHitLayer  DomPropTier  transform*
   render/     ContentResolver  enrich  CardTemplate  AssetInliner  Rasterizer  TextureCache
   effects/    EffectRegistry  preset-schema*  preset-css*  presets/*  shaders/*
   apps/       DocumentPicker  PlacementGhost  PinStudio  Pinboard  PinHUD
-              PresetStudio  ReaderOverlay  OverlayRoot
+              PresetStudio  ReaderOverlay  PropTooltip  OverlayRoot
   ui/         controls  keybindings
 styles/       documents-pinner.css (entry) + base, theme, fx/*, ui/*
 templates/  lang/  assets/  tests/  docs/  .github/workflows/
@@ -473,3 +473,130 @@ fog and roof occlusion, token z-order, the live audience toggle, secret absence 
 player's own texture, the ownership round-trip with a manual edit in between, mode
 switching, fifty props at 60 fps, and one-handed Pinboard operation. The README says so
 too.
+
+### A9 — Pre-release hardening: what A8 cost (2026-08-27)
+
+A8 said plainly that nothing in §11's manual column had been watched working on a real
+scene. A four-reviewer council then read the code against that admission, and found that
+**several headline features had never executed at all** — not "behaved subtly wrong", but
+never ran. This amendment records what that turned out to be, because the pattern matters
+more than any individual defect.
+
+**The pattern.** 403 tests, all green, over code where no prop had ever rendered. Every
+one of them covered a pure function's return value or a markup string's contents, and
+every blocking defect lived in the seam between two of those: an SVG string handed to an
+XML parser, an ApplicationV2 action handler's `this`, a `Document#update` that merges, a
+listener attached to an element that is not replaced. §12's pure/impure split is still the
+right architecture — but it made the impure half look tested when the pure half was.
+
+`tests/helpers/fake-foundry.ts` now provides the missing seam: the real ApplicationV2
+render and action-dispatch contracts, Foundry's own document merge semantics, and enough
+PIXI for the canvas layers. Every fix below is anchored by a test that failed before it.
+
+#### What had never run
+
+| | |
+|---|---|
+| **Nothing rendered, ever** | An SVG loaded through `Blob -> img.src` is parsed by the XML parser. `card.css` uses native nesting, so 13 bare `&` characters went into a `<style>` element XML gives no implicit CDATA — and the stylesheet is always inlined, so **every prop failed on every client**. `sanitise` and `inlineImages` both returned `body.innerHTML`, leaving void elements unclosed and `&nbsp;` undefined. 5 of 6 representative cards failed to parse. |
+| **Nothing to bind to** | Document-backed anchors were written with `texture: { src: null }`. Core does not add a tile with no valid texture to `canvas.primary`, so there was no mesh, and `#bind` returned silently — indistinguishable from "still loading". |
+| **The DOM tier did not exist** | `rendering: "dom"` and the WebKit fallback both bailed out of `#pump`, and `OverlayRoot.mount` had two callers, neither a prop. Every Safari user got invisible props while three documents said otherwise. |
+| **Players could not click a pin** | `PropHitLayer.sync` filtered to prop mode. The Tiles layer is GM-only — that is §2's premise and this layer's whole reason to exist — so the brief's first promise was unreachable for everyone it was written for. |
+| **The Pinboard's bulk buttons** | Four action handlers read the PointerEvent as the application. Two threw; the two global ones failed silently, because `store.all(event)` finds no tiles. |
+| **The keyboard** | No row was ever focused, so DoD #12 was unmet on every path while `DP.board.help` advertised ten unreachable shortcuts. |
+| **User presets** | The render pipeline and both galleries called `getCorePreset`, so the Preset Studio produced artefacts the module could not consume. |
+
+#### Corrections to earlier amendments
+
+**A6 was half right, and the half that was wrong could not have been caught by its own
+method.** The tag-name fix genuinely works — `<scr<script>ipt>` is removed, verified. But
+the round-trip cannot catch a `<noscript>` mutation by construction: `DOMParser` parses
+with scripting *disabled*, so the scrub reaches a fixpoint of the **wrong parser** on the
+first pass and then agrees with itself forever. Confirmed with parse5: the same string
+yields `noscript p[title]` to the sanitiser and `noscript img[src,onerror] p` to the
+browser, and the same trick resurrects a stripped `.secret` section. `noscript` is now
+removed outright, `scrub` and `stripSecrets` descend into `<template>` content, and
+`sanitise` **fails closed** rather than returning markup that never converged.
+
+The lesson generalises past this one element: **testing a sanitiser against the parser it
+uses tests it against its own assumptions.** The new tests re-parse with
+`scriptingEnabled: true`.
+
+**A7 described a setting that had nothing behind it.** The DOM path is now real:
+`src/canvas/DomPropTier.ts`, pointer-transparent so `PropHitLayer` keeps owning
+interaction on every tier, positioned in scene space so it costs no per-frame write. A7's
+statement of what is lost there — not lit, not fogged, not occluded — is now accurate
+rather than aspirational.
+
+**§4's ledger was correct and unreachable.** `ownership-plan.ts` computes its deletions
+exactly, and `applyPlan` wrote the whole ledger as a nested plain object, which
+`Document#update` deep-merges — so no key could ever leave the stored ledger. The module
+depends on that merge everywhere else, which is why the bug was invisible. The plan is
+untouched; the layer around it now unsets and re-sets the flag in one update. Dotted paths
+cannot express this, because `holders` sub-keys are anchor UUIDs and contain dots.
+
+*Reasoned from Foundry's documented merge semantics and modelled in `fake-foundry.ts`, not
+traced against Foundry's source. **Confirm in a live world.***
+
+**§4's invariant 2 did not hold for a raise.** `planRebase` adopted a manual raise into
+`granted` but left `baseline` behind, so the next release saw no override and restored the
+old value — and when the baseline was `null` because the key had not existed before us, it
+emitted `-=key` and **deleted the player's ownership outright**. The baseline now moves
+with the raise. `tests/ownership-plan.test.ts` previously locked in the old behaviour with
+a non-null baseline, where the damage was a silent revert rather than a deletion.
+
+#### Amendments to §6.2 and §11
+
+**The auto-degrade guard measured the wrong thing.** It timed one counter increment, a
+matrix read and six float compares — microseconds against a 4 ms budget — because every
+real cost in this module is deliberately off the ticker, which is exactly what §6.2 asked
+for. The guard could never fire and acceptance criterion 10 could never be observed. It
+now reads `sampledFps()`, the same rolling rate the effects level already trusts.
+
+**Ghost-placed props broke acceptance criterion 4.** `foregroundElevation` is the scene's
+foreground *threshold*, not an elevation to inherit: a tile at or above it is an overhead
+tile and sorts above tokens. Every ghost-placed prop therefore rendered in front of a token
+standing on it — one of the two visual claims the primary-group architecture was chosen
+for. Now placed at 0.
+
+**Async work had no liveness check.** Five awaits separated the decision to draw from the
+write, with nothing verifying the record, the tile, the scene or the tier still existed. A
+monotonic epoch now guards every await. This is the missing half of §6.2's frame
+discipline: the frame path was careful and the *off*-frame path was not.
+
+#### Deferred, deliberately
+
+Two Group 4 items are **not** fixed, for the same reason A3 gave for not shipping GLSL:
+shipping code that cannot be verified is worse than shipping none.
+
+1. **`PIXI.Texture.from(canvas)` retains the `OffscreenCanvas`**, so every prop carries its
+   pixels twice — a 2048² prop is ~22 MB of VRAM plus ~16 MB of system memory, and at the
+   256 MB default the true footprint approached half a gigabyte. The real fix is
+   `createImageBitmap` and releasing the canvas, which means handing PIXI a different
+   resource type and could not be verified against a live v14 renderer here. Instead
+   `textureBytes` now counts **both sides**, so the budget means total memory and the
+   accounting is honest while the retention stands.
+2. **`readPin` runs full schema validation on every read**, including from
+   `PinnedTile.isVisible`, a hot getter. Memoising on the raw flag object's identity is the
+   obvious fix and is **unsafe**: Foundry's `mergeObject` may mutate a nested flag object in
+   place rather than replacing it, and a memo that served a stale audience payload would be
+   exactly the failure class this pass exists to remove. Left as it is until the identity
+   question is settled against Foundry's source.
+
+#### Removed rather than left looking finished
+
+**The `discovered` audience is no longer offered by the Pin Studio.** Its visibility half
+works — every client evaluates its own line of sight — but the sticky half needs a
+*player's* discovery to be persisted, and §3 says players never write pin configuration
+while §8 says the module ships no socket. So `discovered` stayed permanently `[]`,
+`grantKeysFor` returned nothing, and ownership sync could never fire: a permanent "visible
+but won't open" for an audience kind the UI was advertising. `shouldRecordDiscovery` and
+`canSee`'s handling remain, because the route in is real — a GM-side sweep over each
+player's own tokens' vision polygons, which needs no socket — but it is future work, not a
+shipped feature.
+
+#### §11 is still the open question
+
+Everything above was found by reading and proved by executing. **None of it replaces the
+manual acceptance table**, which remains exactly as unverified as A8 said. The value of
+this pass is that the table can now be run at all: before it, nine of the nineteen criteria
+were untestable because no prop had ever appeared on a scene.
