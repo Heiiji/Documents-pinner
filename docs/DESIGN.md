@@ -774,3 +774,37 @@ the answer is now visibly shaped: lay the card out with drawing primitives rathe
 HTML. pdf.js is an existence proof that a complex, text-heavy, image-bearing document can
 be painted to an uploadable canvas — it just does not happen to be reading our HTML. That
 remains a larger project than this module has been, and it is still not attempted here.
+
+### A13 — §5.1 and §2 disagreed, and the GM paid (2026-08-27)
+
+"There is no way for me to resize or move the document." Measured on the pin in question,
+in the live world, on the layer the GM was actually standing on:
+
+```
+Notes layer   control() -> false   controlled: false
+Tiles layer   control() -> true    controlled: true
+```
+
+Nothing was broken. Two correct decisions simply did not know about each other:
+
+- **§2** anchors every pin on a `TileDocument`, for lossless mode switching and for
+  visibility decoupled from journal ownership. Both still right.
+- **§5.1** puts the module's tools under **Notes**, because the control rail is contested
+  and pins belong beside map notes. Also still right.
+
+But core only lets a Tile be selected while the **Tiles** layer is active, and it refuses
+by returning `false` — no exception, no notification, no cursor change. So the module
+placed a pin from Notes, left the GM on Notes, and every attempt to drag it did precisely
+nothing, with nothing anywhere to explain why. §2 lists "the Tiles layer is GM-only" as one
+of the two costs of the Tile anchor and solves it *for players* with `PropHitLayer`. It
+never noticed the same wall stands in front of the **GM**.
+
+Three exits, all cheap: a **Move and resize pins** tool beside the two that create the
+problem, `locate` switching layer and selecting the pin it just found, and both READMEs
+saying it outright.
+
+**The pattern worth keeping.** A9 was tests that never touched the seams. A10 and A11 were
+things only a browser could tell us. A13 is neither: every fact was in the design document
+the whole time, in two sections that were each individually correct. Nothing catches that
+except using the thing the way a user does — which is what "I feel like there is no way to
+move it" was, and why it was worth more than another reading of the code.

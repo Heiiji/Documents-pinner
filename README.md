@@ -53,6 +53,11 @@ follows the cursor; click to place. It stays hidden from players until you revea
 | `Enter` `L` `O` `S` `F` `M` | studio · locate · open · show to audience · flash · shape |
 | `/` `Esc` | search · clear |
 
+**To move, resize or rotate a pin, switch to the Tiles layer** — pins are Tiles, and
+Foundry only lets you grab one while that layer is active. The Notes controls have a
+**Move and resize pins** button that does it in one click, and the Pinboard's `L` (locate)
+takes you there and selects the pin for you.
+
 Also: a journal sheet header button, the Notes scene controls, sidebar context menus, a
 checkbox on any tile's config sheet to adopt it, and a button on a map note to convert it.
 
@@ -180,6 +185,11 @@ ce que vous le révéliez.
 | `↑↓` `Espace` | se déplacer · révéler |
 | `Entrée` `L` `O` `S` `F` `M` | studio · localiser · ouvrir · montrer au public · faire clignoter · forme |
 | `/` `Échap` | rechercher · effacer |
+
+**Pour déplacer, redimensionner ou pivoter une épingle, passez au calque Tuiles** — les
+épingles sont des tuiles, et Foundry ne permet de les saisir que depuis ce calque. Les
+contrôles Notes contiennent un bouton **Déplacer et redimensionner les épingles** qui le
+fait en un clic, et le `L` du tableau de bord vous y emmène en sélectionnant l'épingle.
 
 Également : un bouton dans l'en-tête d'une fiche de journal, les contrôles de scène Notes,
 les menus contextuels de la barre latérale, une case sur la fiche de n'importe quelle tuile

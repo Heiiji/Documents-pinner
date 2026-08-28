@@ -386,7 +386,13 @@ export function flash(anchorDoc: any): void {
   });
 }
 
-/** Pan and zoom to a pin, then flash it. The Pinboard's locate action. */
+/**
+ * Pan and zoom to a pin, then flash it. The Pinboard's locate action.
+ *
+ * A GM is told to activate the Tiles layer and the pin is selected for them, because
+ * "here it is" that leaves them unable to drag what was just found is half an answer:
+ * core refuses to control a Tile while another layer is active, silently.
+ */
 export async function locate(anchorDoc: any): Promise<void> {
   const canvas = cv();
   if (!canvas?.animatePan || !anchorDoc) return;
@@ -395,6 +401,15 @@ export async function locate(anchorDoc: any): Promise<void> {
     y: anchorDoc.y + anchorDoc.height / 2,
     scale: Math.min(1, canvas.stage?.scale?.x ?? 1) < 0.6 ? 0.8 : undefined,
   });
+
+  if (isGM()) {
+    canvas.tiles?.activate?.();
+    try {
+      anchorDoc.object?.control?.({ releaseOthers: true });
+    } catch {
+      /* a placeable mid-redraw; the pan and the flash still did their job */
+    }
+  }
   flash(anchorDoc);
 }
 

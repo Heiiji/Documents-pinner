@@ -53,6 +53,7 @@
   "DP.config.unpinBody": "La tuile reste sur la scène, mais ses réglages d'épingle sont abandonnés et les droits qu'elle accordait sont restitués.",
   "DP.config.unpinTitle": "Ne plus traiter cette tuile comme une épingle ?",
   "DP.controls.board": "Tableau des épingles",
+  "DP.controls.edit": "Déplacer et redimensionner les épingles (calque Tuiles)",
   "DP.controls.pin": "Épingler un document",
   "DP.controls.pinThis": "Épingler sur la scène",
   "DP.cost.high": "Lourd",

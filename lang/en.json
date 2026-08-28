@@ -53,6 +53,7 @@
   "DP.config.unpinBody": "The tile stays on the scene, but its pin settings are discarded and any ownership it granted is released.",
   "DP.config.unpinTitle": "Stop treating this tile as a pin?",
   "DP.controls.board": "Pinboard",
+  "DP.controls.edit": "Move and resize pins (Tiles layer)",
   "DP.controls.pin": "Pin a document",
   "DP.controls.pinThis": "Pin to scene",
   "DP.cost.high": "Heavy",

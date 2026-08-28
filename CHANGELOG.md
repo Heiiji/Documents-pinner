@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Nothing yet.
 
+## [0.1.5] — unreleased
+
+### Fixed
+
+- **A pin could not be moved, resized or rotated from the Notes layer**, which is the layer
+  the module's own tools leave you on. Pins are Tiles, and core only lets a Tile be
+  selected while the Tiles layer is active — `control()` returns `false` otherwise, with no
+  error, no notification and no cursor change to explain it. Measured on a live world:
+  `false` on Notes, `true` on Tiles. The Notes controls now carry a **Move and resize pins**
+  button, the Pinboard's locate action switches layer and selects the pin it just found,
+  and both READMEs say so.
+
 ## [0.1.4] — unreleased
 
 ### Added
@@ -242,7 +254,8 @@ occluded. The module detects this at startup rather than failing visibly.
 
 The full list is in the README and in `docs/DESIGN.md` §10.
 
-[Unreleased]: https://github.com/Heiiji/Documents-pinner/compare/v0.1.4...HEAD
+[Unreleased]: https://github.com/Heiiji/Documents-pinner/compare/v0.1.5...HEAD
+[0.1.5]: https://github.com/Heiiji/Documents-pinner/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/Heiiji/Documents-pinner/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/Heiiji/Documents-pinner/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/Heiiji/Documents-pinner/compare/v0.1.1...v0.1.2
