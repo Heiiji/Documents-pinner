@@ -26,6 +26,7 @@ import { readPin } from "../data/PinData";
 import { PAPERS } from "../render/CardTemplate";
 import { allPresets } from "../effects/preset-library";
 import { swatchStyle } from "../effects/preset-css";
+import { pdfSourceOf } from "../render/PdfPage";
 import { chipsMarkup, describeChips } from "./chips";
 import { chipUsersFor } from "./PinHUD";
 import type { DpPinFlags } from "../types/dp";
@@ -122,6 +123,18 @@ function contentTab(pin: DpPinFlags): string {
   );
 }
 
+/**
+ * A PDF page is painted by pdf.js straight into a texture — no card, no paper, no CSS.
+ *
+ * So every appearance control below is inert for one: the paper stock, the padding, the
+ * effect, the intensity, the speed and the animation all describe a card that a PDF prop
+ * does not have. Offering controls that cannot be honoured is worse than not offering
+ * them, so they are disabled and the reason is stated where the GM is looking.
+ */
+function isPdfPin(pin: DpPinFlags): boolean {
+  return pdfSourceOf(api.resolveSourceSync(pin)) !== null;
+}
+
 function appearanceTab(pin: DpPinFlags): string {
   // The whole library, so a preset a GM authored can actually be assigned to a pin.
   // The preset's OWN variables, so a GM can tell Glitch from Torn Edges without applying
@@ -135,15 +148,24 @@ function appearanceTab(pin: DpPinFlags): string {
         ` data-dp-preset="${escapeAttr(preset.id)}" aria-pressed="${pin.effect.id === preset.id}">` +
         `<span class="dp-studio__swatch-preview dp-card" data-dp-fx="${escapeAttr(preset.id)}"` +
         ` aria-hidden="true" style="${escapeAttr(swatchStyle(preset))}"></span>` +
-        `<span>${escapeHtml(t(preset.label))}</span>` +
+        // Named, because the grid declares a `name` area. Without the class this span was
+        // auto-placed, landed on top of the cost label, and every swatch read as
+        // "LégerSceau de cire" with the two strings overlapping.
+        `<span class="dp-studio__swatch-name">${escapeHtml(t(preset.label))}</span>` +
         `<span class="dp-studio__cost" data-dp-cost="${escapeAttr(preset.cost)}">` +
         `${escapeHtml(t(`DP.cost.${preset.cost}`))}</span>` +
         `</button>`
     )
     .join("");
 
+  const pdf = isPdfPin(pin);
+  const inert = pdf
+    ? `<p class="dp-studio__note">${escapeHtml(t("DP.studio.pdfAppearance"))}</p>`
+    : "";
+
   return (
-    `<section class="dp-studio__tab" data-dp-tab="appearance">` +
+    `<section class="dp-studio__tab" data-dp-tab="appearance"${pdf ? ' data-dp-pdf="true"' : ""}>` +
+    inert +
     field(
       "DP.studio.mode",
       select("mode", pin.mode, [
@@ -167,9 +189,11 @@ function appearanceTab(pin: DpPinFlags): string {
     field("DP.studio.speed", range("effect.speed", pin.effect.speed, 0, 4, 0.1)) +
     field(
       "DP.studio.motion",
-      select("effect.motion", pin.effect.motion, [
+      // `onReveal` is not offered: nothing implements a play-once animation, and the
+      // renderer treats it exactly as `loop`. A third choice that behaves like the first
+      // is a control that does not work.
+      select("effect.motion", pin.effect.motion === "none" ? "none" : "loop", [
         { value: "loop", label: t("DP.studio.motionLoop") },
-        { value: "onReveal", label: t("DP.studio.motionReveal") },
         { value: "none", label: t("DP.studio.motionNone") },
       ])
     ) +

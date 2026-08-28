@@ -125,3 +125,25 @@ describe("studioMarkup", () => {
     expect(markup).not.toContain('<option value="3"');
   });
 });
+
+/**
+ * Controls that cannot be honoured must not be offered — the rule this module already
+ * applied to the `discovered` audience and to `interaction.tooltip`, arrived at again from
+ * the other direction: "we should not offer options we are not able to honor."
+ */
+describe("the appearance tab and what it can actually do", () => {
+  it("offers only the two motion choices the renderer implements", () => {
+    const markup = studioMarkup(doc, pin(), "appearance");
+    expect(markup).toContain('value="loop"');
+    expect(markup).toContain('value="none"');
+    // Nothing implements a play-once animation; the renderer treated `onReveal` exactly
+    // as `loop`, so a third choice behaved identically to the first.
+    expect(markup).not.toContain('value="onReveal"');
+  });
+
+  it("gives the effect name its own grid area, so it cannot land on the cost label", () => {
+    // Without the class the name span was auto-placed on top of `grid-area: cost`, and
+    // every swatch read as the two strings overlapping.
+    expect(studioMarkup(doc, pin(), "appearance")).toContain("dp-studio__swatch-name");
+  });
+});

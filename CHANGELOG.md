@@ -9,6 +9,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Nothing yet.
 
+## [0.1.6] — unreleased
+
+Re-releases the z-index fix, which shipped inside a re-pushed `v0.1.5` tag and so was
+never offered as an update to anyone who had already installed that version. Sorry —
+moving a published tag was a mistake.
+
+### Fixed
+
+- **Props painted over the interface.** See 0.1.5 below; this is the version that can
+  actually be installed over it.
+- **The Pin Studio's effect names overlapped their cost labels.** The swatch grid declares
+  a `name` area and the name span was never assigned to it, so it was auto-placed on top of
+  the cost and every swatch read as two strings on top of each other.
+- **`effect.speed` and `effect.motion` did nothing.** Both were written by the Studio,
+  validated by the schema and stored on every pin, and read by nothing at all — the
+  preset's own motion and frequencies decided everything. Speed now scales every duration
+  the preset emits, and `none` stops motion outright.
+
+### Changed
+
+- **The `onReveal` animation choice is gone.** Nothing implemented a play-once animation
+  and the renderer treated it exactly as `loop`, so it was a third option that behaved like
+  the first.
+- **A PDF pin's appearance controls are disabled, and say why.** A PDF page is painted
+  straight into a texture by pdf.js, so it has no card: paper, padding, effect, intensity,
+  speed and animation cannot apply to it. Leaving them live meant a GM moving sliders that
+  could never do anything.
+
 ## [0.1.5] — unreleased
 
 ### Fixed
@@ -262,7 +290,8 @@ occluded. The module detects this at startup rather than failing visibly.
 
 The full list is in the README and in `docs/DESIGN.md` §10.
 
-[Unreleased]: https://github.com/Heiiji/Documents-pinner/compare/v0.1.5...HEAD
+[Unreleased]: https://github.com/Heiiji/Documents-pinner/compare/v0.1.6...HEAD
+[0.1.6]: https://github.com/Heiiji/Documents-pinner/compare/v0.1.5...v0.1.6
 [0.1.5]: https://github.com/Heiiji/Documents-pinner/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/Heiiji/Documents-pinner/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/Heiiji/Documents-pinner/compare/v0.1.2...v0.1.3

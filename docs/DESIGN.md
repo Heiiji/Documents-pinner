@@ -846,3 +846,36 @@ Two things fell out of the same investigation:
 carried from a true statement about a different thing — ApplicationV2 windows really do sit
 at 100 — into a place where it governed nothing. Both are invisible to a test suite and
 obvious within one second of looking at the running application.
+
+### A15 — Controls that could not be honoured (2026-08-28)
+
+*"We should not offer options we are not able to honor."* That is the rule this document
+already reached twice from the inside — `interaction.tooltip` in A9, the `discovered`
+audience in A9 — and a user reached it from the outside, holding a slider that did nothing.
+
+Three of them, found by asking what actually reads each stored field:
+
+- **`effect.speed` and `effect.motion`** were written by the Studio, validated by the
+  schema and stored on every pin. Nothing read either. `presetToCssVars` takes its motion
+  from the PRESET's `motion` and its durations from the preset's own frequencies, so both
+  controls moved and nothing changed. Speed now scales every `-dur` the preset emits, and
+  `none` freezes exactly as a reduced-motion client does.
+- **`onReveal`** was a third motion choice that the renderer treated identically to `loop`.
+  Removed rather than faked.
+- **Every appearance control, for a PDF pin.** A PDF is painted by pdf.js straight into a
+  texture (A12), so it has no card at all: no paper stock, no padding, no effect layers, no
+  edge mask. The whole Appearance tab was inert for one, silently. It is now disabled with
+  the reason stated in the tab.
+
+That last one is the interesting one, because it is a **consequence of A12 that A12 did not
+notice**. Giving PDFs the canvas tier bought lighting, fog and occlusion — and paid for it
+by leaving behind the card, which is where every visual effect in this module lives. The
+tradeoff is real and probably the right one, but it was made silently, and a GM discovered
+it by moving sliders.
+
+**And a process failure worth writing down.** The z-index fix in A14 was folded into an
+already-published `v0.1.5` by force-moving the tag. Foundry compares version strings, so
+anyone who installed v0.1.5 in the window between the two pushes could never be offered the
+fix — which is exactly what happened, and cost a round trip to diagnose against a client
+running code that no longer existed anywhere. **A published tag is immutable.** The fix for
+a bad release is the next number, every time.

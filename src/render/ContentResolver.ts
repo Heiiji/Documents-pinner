@@ -106,6 +106,9 @@ export async function resolveCard(
         tier: options.tier ?? "L2b",
         level: currentLevel(),
         baked: options.baked ?? false,
+        // The pin's own motion, which nothing used to read.
+        speed: pin.effect.speed,
+        motion: pin.effect.motion === "none" ? "none" : "loop",
       })
     : null;
 

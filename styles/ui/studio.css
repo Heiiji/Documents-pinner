@@ -92,8 +92,11 @@
 
 .dp-studio__swatches {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(8rem, 1fr));
-  gap: 0.35rem;
+  /* Wide enough for the longest shipped label plus its preview and cost, so a name never
+     has to be clipped to fit; `auto-fill` still collapses to one column in a narrow window. */
+  grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+  gap: 0.4rem;
+  margin-block: 0.25rem;
 }
 
 .dp-studio__swatch {
@@ -125,6 +128,15 @@
   }
 }
 
+.dp-studio__swatch-name {
+  grid-area: name;
+  align-self: end;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
 .dp-studio__swatch-preview {
   grid-area: preview;
   inline-size: 1.8rem;
@@ -139,6 +151,7 @@
    is shown as a word and a colour rather than an unlabelled bar. */
 .dp-studio__cost {
   grid-area: cost;
+  align-self: start;
   font-size: 0.85em;
   opacity: 0.7;
 
@@ -186,4 +199,29 @@
   text-align: center;
   font-style: italic;
   opacity: 0.7;
+}
+
+/*
+ * The one place the Studio explains itself: a PDF prop is painted straight into a texture
+ * by pdf.js, so it has no card and every appearance control below is inert. Saying so is
+ * better than leaving a GM to discover it by moving sliders that do nothing.
+ */
+.dp-studio__note {
+  margin: 0 0 0.6rem;
+  padding: 0.45rem 0.6rem;
+  border-inline-start: 3px solid var(--color-warm-1, #c9ad6a);
+  border-radius: 0.2rem;
+  background: color-mix(in oklab, var(--color-warm-1, #c9ad6a) 10%, transparent);
+  font-size: 0.85em;
+  line-height: 1.4;
+}
+
+/* Everything below the note describes a card the PDF does not have. */
+.dp-studio__tab[data-dp-pdf="true"] .dp-studio__swatches,
+.dp-studio__tab[data-dp-pdf="true"] .dp-studio__field:has(input[name^="effect."]),
+.dp-studio__tab[data-dp-pdf="true"] .dp-studio__field:has(select[name^="effect."]),
+.dp-studio__tab[data-dp-pdf="true"] .dp-studio__field:has([name="display.paper"]),
+.dp-studio__tab[data-dp-pdf="true"] .dp-studio__field:has([name="display.padding"]) {
+  opacity: 0.45;
+  pointer-events: none;
 }

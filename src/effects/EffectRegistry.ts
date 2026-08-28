@@ -45,7 +45,14 @@ export interface EffectContext {
    * Baked output drops everything animated, because a texture cannot animate.
    */
   baked: boolean;
+  /** Per-pin animation rate, 0–4. Scales every duration the preset emits. */
+  speed?: number;
+  /** Per-pin motion choice. `none` is as still as a reduced-motion client. */
+  motion?: DpMotion;
 }
+
+/** What a pin may ask of a preset's motion. Mirrors `MOTIONS` in the pin schema. */
+export type DpMotion = "loop" | "none";
 
 export interface EffectDressing {
   vars: CssVars;
@@ -113,6 +120,30 @@ function proceduralLayers(context: EffectContext): CssVars {
 }
 
 /**
+ * The pin's OWN motion settings, applied on top of the preset's.
+ *
+ * `effect.speed` and `effect.motion` were offered by the Pin Studio, validated by the
+ * schema and stored on every pin — and read by nothing at all. The preset's `motion` and
+ * its own frequencies decided everything, so both sliders moved and nothing happened.
+ *
+ * `none` freezes, exactly as a reduced-motion client does. `speed` scales every duration:
+ * a preset that pulses once a second at speed 1 pulses twice at speed 2, and a speed of
+ * zero is simply another way to say "still".
+ */
+function applyPinMotion(vars: CssVars, speed: number, motion: DpMotion): CssVars {
+  if (motion === "none" || !(speed > 0)) return freeze(vars);
+  if (speed === 1) return vars;
+
+  const out: CssVars = { ...vars };
+  for (const [key, value] of Object.entries(out)) {
+    if (!key.endsWith("-dur")) continue;
+    const seconds = Number.parseFloat(value);
+    if (Number.isFinite(seconds)) out[key] = `${Math.round((seconds / speed) * 1e4) / 1e4}s`;
+  }
+  return out;
+}
+
+/**
  * Everything animated, silenced.
  *
  * Applied for `reduced`, for a baked texture, and for the coarse tier. It is the same
@@ -137,6 +168,9 @@ export function dressing(context: EffectContext): EffectDressing {
     ...presetToCssVars(context.preset, tierIntensity(context.tier, context.intensity)),
     ...proceduralLayers(context),
   };
+
+  // The pin's own motion choice, before the two rules that can override it.
+  vars = applyPinMotion(vars, context.speed ?? 1, context.motion ?? "loop");
 
   // A texture cannot animate, and neither can a reduced-motion client. Both take the
   // same static rendition, which is why a baked prop and a reduced one look alike.

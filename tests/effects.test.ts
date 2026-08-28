@@ -220,3 +220,49 @@ describe("resolveAutoLevel", () => {
     ).toBe("full");
   });
 });
+
+/**
+ * `effect.speed` and `effect.motion` were written by the Pin Studio, validated by the
+ * schema, stored on every pin — and read by nothing. The preset's own motion and
+ * frequencies decided everything, so both controls moved and nothing changed.
+ */
+describe("the pin's own motion settings", () => {
+  const animated = CORE_PRESETS.find((p) => p.motion === "loop")!;
+  const base = {
+    preset: animated,
+    intensity: 1,
+    seed: 1,
+    tier: "L2b" as const,
+    level: "full" as const,
+    baked: false,
+  };
+
+  const durations = (vars: Record<string, string>) =>
+    Object.entries(vars)
+      .filter(([k]) => k.endsWith("-dur"))
+      .map(([, v]) => Number.parseFloat(v))
+      .filter((n) => n > 0);
+
+  it("halves every duration at double speed", () => {
+    const normal = durations(dressing({ ...base, speed: 1 }).vars);
+    const fast = durations(dressing({ ...base, speed: 2 }).vars);
+
+    expect(normal.length).toBeGreaterThan(0);
+    expect(fast).toEqual(normal.map((d) => Math.round((d / 2) * 1e4) / 1e4));
+  });
+
+  it("stops motion entirely when the pin asks for none", () => {
+    const still = dressing({ ...base, motion: "none" }).vars;
+    expect(still["--dp-motion"]).toBe("0");
+  });
+
+  it("treats a speed of zero as still, rather than as an infinite duration", () => {
+    expect(dressing({ ...base, speed: 0 }).vars["--dp-motion"]).toBe("0");
+  });
+
+  it("leaves the preset alone at speed 1, so nothing drifts by default", () => {
+    const explicit = dressing({ ...base, speed: 1, motion: "loop" }).vars;
+    const implicit = dressing(base).vars;
+    expect(explicit).toEqual(implicit);
+  });
+});
