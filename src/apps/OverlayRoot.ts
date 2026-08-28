@@ -52,40 +52,56 @@ let timer = 0;
 const pending = new Map<HTMLElement, (() => void)[]>();
 
 /**
- * Where the overlay attaches.
+ * Where the overlay attaches, and — just as important — in what ORDER.
  *
- * `#board` is the canvas element; its parent is the positioned container core also
- * puts `#hud` in, which is exactly the coordinate space we want. Falls back to
- * `#interface` and then to `body` so a layout change downstream degrades to a
- * mispositioned overlay rather than none at all.
+ * v14's body is flat, and the numbers are its own:
+ *
+ *     #interface   position: relative, z-index: auto   (its #ui-left / #ui-right are z 30)
+ *     #hud         z-index: 1
+ *     #board       position: absolute, z-index: 0      <- the canvas
+ *
+ * `#ui-left` and `#ui-right` sit at z 30 inside a z-auto parent, so they compete in the
+ * ROOT stacking context. An overlay at z 90 therefore painted over the entire interface —
+ * the sidebar, the chat log, the scene controls, the hotbar — which is unusable, and was
+ * reported as a hard blocker.
+ *
+ * The right place is the same stacking level as the canvas, immediately after it: above
+ * `#board` by DOM order, below `#hud` and far below the interface by their own z-index.
+ * That uses Foundry's numbers instead of guessing at them.
  */
 function mountPoint(): HTMLElement | null {
   const board = document.getElementById("board");
-  return (
-    board?.parentElement ??
-    document.getElementById("interface") ??
-    document.getElementById("hud")?.parentElement ??
-    document.body ??
-    null
-  );
+  return board?.parentElement ?? document.body ?? null;
+}
+
+/** Put the overlay immediately after the canvas, wherever the canvas currently is. */
+function seat(element: HTMLElement, parent: HTMLElement): void {
+  const board = document.getElementById("board");
+  if (board?.parentElement === parent) {
+    if (element.previousElementSibling !== board) board.after(element);
+    return;
+  }
+  if (element.parentElement !== parent) parent.appendChild(element);
 }
 
 /** The overlay element, created on first use. */
 export function overlay(): HTMLElement | null {
-  if (root?.isConnected) return root;
-
   const parent = mountPoint();
   if (!parent) return null;
 
-  root = document.getElementById(ROOT_ID) as HTMLElement | null;
-  if (!root) {
-    root = document.createElement("div");
+  const existing = root?.isConnected ? root : null;
+  if (!existing) {
+    root =
+      (document.getElementById(ROOT_ID) as HTMLElement | null) ?? document.createElement("div");
     root.id = ROOT_ID;
     root.setAttribute("aria-hidden", "false");
+    lastMatrix = { ...IDENTITY };
   }
-  if (root.parentElement !== parent) parent.appendChild(root);
 
-  lastMatrix = { ...IDENTITY };
+  // Re-seated on EVERY call, not just on creation. `overlay()` can run before Foundry has
+  // built its canvas, and an overlay left wherever it first landed is an overlay painting
+  // in the wrong stacking order for the rest of the session.
+  seat(root!, parent);
   return root;
 }
 

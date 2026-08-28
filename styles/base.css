@@ -15,8 +15,15 @@
   /* The container must never swallow canvas pointer events: drag-to-pan, token drag
      and the ruler all start with a pointerdown on the board. Individual cards opt in. */
   pointer-events: none;
-  /* Below core's HUD, whose ApplicationV2 position.zIndex is 100. */
-  z-index: 90;
+  /*
+   * The SAME stacking level as the canvas, and mounted immediately after it — see
+   * `OverlayRoot.seat()`. v14's own numbers are `#board` z 0, `#hud` z 1, and the
+   * interface's `#ui-left` / `#ui-right` at z 30 inside a z-auto parent, so those compete
+   * in the ROOT stacking context. An overlay at z 90 painted over the sidebar, the chat
+   * log, the scene controls and the hotbar — reported as a hard blocker, and correctly so:
+   * the software is unusable when a prop covers the interface.
+   */
+  z-index: 0;
 }
 
 /*

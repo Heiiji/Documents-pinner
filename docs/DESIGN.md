@@ -808,3 +808,41 @@ things only a browser could tell us. A13 is neither: every fact was in the desig
 the whole time, in two sections that were each individually correct. Nothing catches that
 except using the thing the way a user does — which is what "I feel like there is no way to
 move it" was, and why it was worth more than another reading of the code.
+
+### A14 — z-index 90 was a guess, and it cost the whole interface (2026-08-27)
+
+`OverlayRoot`'s comment read: *"It sits at `z-index: 90`, below core's HUD at 100."* That
+number came from ApplicationV2's default `position.zIndex`, and it is not what governs
+here. Read off a live v14.365 client, the body is flat:
+
+```
+#interface   position: relative   z-index: auto    (its #ui-left / #ui-right are z 30)
+#hud                              z-index: 1
+#board       position: absolute   z-index: 0       <- the canvas
+```
+
+`#ui-left` and `#ui-right` carry z 30 inside a **z-auto** parent, which creates no stacking
+context — so they compete in the ROOT one. An overlay at 90 therefore painted above the
+sidebar, the chat log, the scene controls and the hotbar. Pointer events still passed
+through, so nothing was *unclickable*; it was simply invisible underneath a parchment card,
+which is worse in practice and was reported as a hard blocker. It is one.
+
+The fix uses Foundry's own numbers instead of a guess: **the same stacking level as the
+canvas, mounted immediately after it.** Above `#board` by DOM order, below `#hud` and far
+below the interface by their own z-index — and it stays correct if core renumbers, because
+it no longer asserts a number of its own.
+
+Two things fell out of the same investigation:
+
+- **`mountPoint()` believed `#board`'s parent was a positioned container** that also held
+  `#hud`. In v14 `#board` is a direct child of `<body>`, so the "fallback" to body was in
+  fact the normal path, and the overlay was appended at the END of the body — after
+  `#pause` and `#tooltip`. Order matters now, so it is inserted, not appended.
+- **The overlay was only ever seated once.** `overlay()` returned early whenever the
+  element was still connected, so an overlay created before Foundry built its canvas stayed
+  wherever it first landed for the rest of the session. It re-seats on every call.
+
+**The pattern.** A13 was two correct design decisions that never met. A14 is one number
+carried from a true statement about a different thing — ApplicationV2 windows really do sit
+at 100 — into a place where it governed nothing. Both are invisible to a test suite and
+obvious within one second of looking at the running application.

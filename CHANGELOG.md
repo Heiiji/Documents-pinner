@@ -13,6 +13,14 @@ Nothing yet.
 
 ### Fixed
 
+- **Props painted over the entire interface.** The overlay sat at `z-index: 90`, chosen
+  against an assumption about core's HUD that is not true in v14: `#board` is `z-index: 0`,
+  `#hud` is 1, and the interface's `#ui-left` / `#ui-right` are 30 inside a `z-index: auto`
+  parent, so those compete in the root stacking context. A prop card therefore covered the
+  sidebar, the chat log, the scene controls and the hotbar — a hard blocker, and correctly
+  reported as one. The overlay now sits at the canvas's own level, mounted immediately
+  after it, and re-seats itself if it was created before Foundry built the canvas.
+
 - **A pin could not be moved, resized or rotated from the Notes layer**, which is the layer
   the module's own tools leave you on. Pins are Tiles, and core only lets a Tile be
   selected while the Tiles layer is active — `control()` returns `false` otherwise, with no

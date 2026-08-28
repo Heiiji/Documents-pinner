@@ -162,3 +162,64 @@ describe("when the tab is hidden and rAF never fires", () => {
     expect(runs).toBe(1);
   });
 });
+
+/**
+ * Where the overlay sits in the stacking order, which turned out to be a hard blocker.
+ *
+ * v14's body is flat and its numbers are its own: `#board` is `z-index: 0`, `#hud` is 1,
+ * and the interface's `#ui-left` / `#ui-right` are 30 inside a `z-index: auto` parent — so
+ * those compete in the ROOT stacking context. The overlay was at 90, chosen against an
+ * assumption about core's HUD that is not true here, and it painted over the sidebar, the
+ * chat log, the scene controls and the hotbar.
+ *
+ * The right place is the canvas's own level, immediately after the canvas.
+ */
+describe("where the overlay sits", () => {
+  function foundryBody() {
+    document.body.innerHTML = "";
+    for (const id of ["interface", "hud", "board", "pause"]) {
+      const el = id === "board" ? document.createElement("canvas") : document.createElement("div");
+      el.id = id;
+      document.body.appendChild(el);
+    }
+  }
+
+  it("mounts immediately after the canvas, not at the end of the body", () => {
+    foundryBody();
+    overlayRoot.destroyOverlay();
+    const element = overlayRoot.overlay()!;
+
+    expect(element.previousElementSibling?.id).toBe("board");
+  });
+
+  it("re-seats itself once the canvas exists, having started without one", () => {
+    document.body.innerHTML = "";
+    overlayRoot.destroyOverlay();
+    const early = overlayRoot.overlay()!;
+    expect(early.parentElement).toBe(document.body);
+    expect(early.previousElementSibling).toBeNull();
+
+    // Foundry builds its canvas AROUND the overlay, which is already in the body — so the
+    // element survives and has to move itself, or it paints in the wrong order for the
+    // rest of the session.
+    for (const id of ["interface", "hud", "board"]) {
+      const el = id === "board" ? document.createElement("canvas") : document.createElement("div");
+      el.id = id;
+      document.body.insertBefore(el, early);
+    }
+
+    const later = overlayRoot.overlay()!;
+    expect(later).toBe(early);
+    expect(later.previousElementSibling?.id).toBe("board");
+  });
+
+  it("keeps the same element rather than making a second overlay", () => {
+    foundryBody();
+    overlayRoot.destroyOverlay();
+    overlayRoot.overlay();
+    overlayRoot.overlay();
+    overlayRoot.overlay();
+
+    expect(document.querySelectorAll("#documents-pinner-overlay")).toHaveLength(1);
+  });
+});
