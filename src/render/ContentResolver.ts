@@ -26,6 +26,7 @@ import { currentLevel } from "../effects/level";
 import { findPreset } from "../effects/preset-library";
 import type { LodTier } from "../canvas/lod";
 import { enrichFor } from "./enrich";
+import { pdfSourceOf, renderPdfPage } from "./PdfPage";
 import { hashContent } from "./TextureCache";
 import type { DpPinFlags } from "../types/dp";
 
@@ -65,6 +66,9 @@ function rawContentOf(source: any): { text: string; kind: string } {
         kind: "video",
       };
     case "pdf":
+      // The card body is a placeholder only until the page image arrives; `resolveCard`
+      // replaces it for a source this client can actually draw. A PDF the module cannot
+      // open — no pdf.js, a missing file — keeps saying so rather than showing a blank.
       return { text: `<p>${escapeHtml(t("DP.card.pdf"))}</p>`, kind: "pdf" };
     case "entry": {
       // A whole journal shows its first page, which is what a GM means by pinning one.
@@ -136,6 +140,31 @@ export async function resolveCard(
   const source = await api.resolveSource(pin);
   if (!source) return placeholder(common);
 
+  // A PDF is drawn, not enriched: pdf.js paints the page and the card carries the image.
+  // This is also the one source type that can reach the canvas tier — see `PdfPage.ts`.
+  const pdfSrc = pdfSourceOf(source);
+  if (pdfSrc) {
+    const longEdge = Math.max(size.width, size.height) * (options.tier === "L2a" ? 1 : 2);
+    const rendered = await renderPdfPage(pdfSrc, pageOf(pin), Math.round(longEdge));
+    if (rendered) {
+      const title = pin.display.label || source.name || "";
+      return {
+        html: cardHtml({
+          ...common,
+          title,
+          bodyHtml: `<img class="dp-card__page" src="${escapeHtml(rendered.canvas.toDataURL("image/png"))}" alt="">`,
+          showTitle: pin.display.showTitle && !!pin.display.label,
+        }),
+        title,
+        readable: source.testUserPermission?.(g()?.user, "OBSERVER") === true,
+        contentHash: hashContent(
+          `pdf|${pdfSrc}|${pageOf(pin)}|${rendered.width}x${rendered.height}`
+        ),
+        missing: false,
+      };
+    }
+  }
+
   const { text, kind } = rawContentOf(source);
   const { html, isOwner } = await enrichFor(source, text);
   const title = pin.display.label || source.name || "";
@@ -150,6 +179,12 @@ export async function resolveCard(
     contentHash: hashContent(`${kind}|${isOwner}|${html}`),
     missing: false,
   };
+}
+
+/** Which page of a multi-page PDF this pin shows. One-based, as pdf.js counts. */
+function pageOf(pin: DpPinFlags): number {
+  const raw = Number(pin.source.pageId);
+  return Number.isFinite(raw) && raw >= 1 ? Math.floor(raw) : 1;
 }
 
 function placeholder(common: any): ResolvedCard {

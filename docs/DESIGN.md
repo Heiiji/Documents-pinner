@@ -725,6 +725,52 @@ Canvas2D primitives, not `foreignObject`** — so unlike an HTML journal page, a
 rendered by pdf.js should produce an origin-clean canvas that CAN be uploaded to WebGL.
 
 If so, a pinned PDF could be the one prop type that genuinely *is* lit, fogged, occluded
-and correctly z-ordered, by the exact route A10 ruled out for everything else. The upload
-itself was not verified — the hidden test tab stalled pdf.js mid-render — so it stays a
-strong lead rather than a finding, and it is the first thing to check before building it.
+and correctly z-ordered, by the exact route A10 ruled out for everything else.
+
+**It was checked, and it holds.** See A12.
+
+### A12 — PDFs reach the canvas tier (2026-08-27)
+
+A11 left this as a lead. It is now measured, on a live v14.365 server against a real
+32-page document, and it is the best news this design has had:
+
+| | |
+|---|---|
+| pdf.js → canvas → `getImageData` | **clean**, 561 697 painted pixels |
+| pdf.js → canvas → `texImage2D` | **OK** |
+| that texture bound to a prop's mesh | **drew the page on the map** |
+
+Compare A10's table for HTML, where the same two calls both throw `SecurityError`. The
+difference is the whole story: **pdf.js paints with ordinary Canvas2D calls and never goes
+near a `foreignObject`**, so its output canvas is origin-clean and the WebGL upload is
+permitted. A10's finding was never about SVG or about canvases; it was about
+`foreignObject` specifically, and nothing else the module draws uses one.
+
+So §6's premise is not dead — it is **alive for exactly one source type**. A pinned PDF is
+a real object in `canvas.primary`: darkened by scene darkness, lit by torches, masked by
+fog, occluded by roofs, and correctly sorted against tokens. Acceptance criteria 2, 3 and 4
+are reachable for PDFs and remain unreachable for journal HTML.
+
+`render/PdfPage.ts` holds it, with three decisions worth keeping:
+
+- **`intent: "print"`, not `"display"`.** A display render drives itself through
+  `requestAnimationFrame`, which never fires while the document is hidden — a Foundry
+  window behind another app would hang mid-render forever. Observed exactly that while
+  testing; the print intent renders on promises and produces the same pixels.
+- **Cached per (file, page, size tier)**, because a LOD change asks again, and **one
+  in-flight parse per file**, because eight props of one document must not parse it eight
+  times.
+- **The library is injected for tests.** It is fetched by URL out of Foundry's own
+  `scripts/` directory, which no test environment can resolve, so the seam is explicit
+  rather than mocked at the import — which keeps the intent, the tiering and the caching
+  testable without pretending the pixels were.
+
+`PropManager` therefore decides the tier **per prop** rather than per client: a PDF takes
+the canvas path even where `rasterisationAvailable()` is false, because that latch is
+about HTML. A GM who deliberately chooses DOM rendering still gets DOM for everything.
+
+**The route this opens.** If the goal is a journal page that is genuinely lit and occluded,
+the answer is now visibly shaped: lay the card out with drawing primitives rather than
+HTML. pdf.js is an existence proof that a complex, text-heavy, image-bearing document can
+be painted to an uploadable canvas — it just does not happen to be reading our HTML. That
+remains a larger project than this module has been, and it is still not attempted here.

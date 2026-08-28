@@ -135,6 +135,18 @@
   border-style: dashed;
 }
 
+/*
+ * A rendered PDF page. It IS the card's content, so it fills the sheet rather than
+ * flowing inside it — a PDF page already has its own margins and typography, and letting
+ * the card add more would waste half the prop.
+ */
+.dp-card__page {
+  display: block;
+  inline-size: 100%;
+  block-size: 100%;
+  object-fit: contain;
+}
+
 .dp-card__missing {
   margin: 0;
   padding: 0 1em;

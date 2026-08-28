@@ -51,8 +51,10 @@ import {
   rasterise,
   rasterisationAvailable,
   releaseTexture,
+  textureFromCanvas,
 } from "../render/Rasterizer";
 import { resolveCard } from "../render/ContentResolver";
+import { pdfSourceOf, renderPdfPage } from "../render/PdfPage";
 import { svgDocument } from "../render/CardTemplate";
 import { inlineFonts, inlineImages } from "../render/AssetInliner";
 import { TextureCache, cacheKey } from "../render/TextureCache";
@@ -91,6 +93,8 @@ interface PropRecord {
   contentHash: string;
   /** Whether this client could see it last time we looked, for the reveal animation. */
   wasVisible: boolean;
+  /** Whether the key this prop currently wants is one that already failed to draw. */
+  lastKeyFailed: boolean;
 }
 
 class Manager {
@@ -149,6 +153,28 @@ class Manager {
    */
   #domMode(): boolean {
     return rasterisationAvailable() === false || settings.get("rendering") === "dom";
+  }
+
+  /**
+   * Whether THIS prop has to be drawn as DOM.
+   *
+   * A PDF is the exception, and it is the interesting one. `rasterisationAvailable()`
+   * being false means the HTML pipeline cannot reach a texture — an SVG `foreignObject`
+   * taints the canvas, see DESIGN A10 — but pdf.js paints with Canvas2D and its output
+   * uploads fine. So a pinned PDF still gets the canvas tier, and with it the lighting,
+   * fog, occlusion and token z-order that no other source type can have.
+   *
+   * A GM who deliberately chose DOM rendering still gets DOM, for everything.
+   */
+  #domModeFor(pin: any): boolean {
+    if (settings.get("rendering") === "dom") return true;
+    if (rasterisationAvailable() !== false) return false;
+    // HTML cannot reach a texture on this client, but a PDF still can.
+    return !this.#isPdf(pin);
+  }
+
+  #isPdf(pin: any): boolean {
+    return pdfSourceOf(api.resolveSourceSync(pin)) !== null;
   }
 
   // -------------------------------------------------------------------------
@@ -212,6 +238,7 @@ class Manager {
           contentHash: "",
           // Assume visible, so props already on screen at load do not all animate in.
           wasVisible: true,
+          lastKeyFailed: false,
         });
       }
     }
@@ -316,7 +343,6 @@ class Manager {
     if (!canvas?.ready) return;
 
     const tokens = visibleTokens();
-    const dom = this.#domMode();
 
     for (const record of this.#records.values()) {
       const tile = canvas.tiles?.get(record.id);
@@ -326,6 +352,7 @@ class Manager {
       // The reader dims its own prop; leaving that alone keeps the two from fighting.
       if (this.#focusedId === record.id) continue;
 
+      const dom = this.#domModeFor(pin);
       const alpha = this.#alphaFor(tile, pin, tokens);
       if (dom) setDomPropAlpha(record.id, alpha);
       if (tile.mesh) tile.mesh.alpha = this.#meshAlphaFor(record, alpha, dom);
@@ -359,8 +386,15 @@ class Manager {
    */
   #meshAlphaFor(record: PropRecord, alpha: number, dom: boolean): number {
     if (dom) return 0;
+    // "Waiting" only counts while there is still something to wait FOR. A prop whose card
+    // has already failed to draw is never going to get a texture, and holding it at zero
+    // then means an invisible prop with nothing on screen to explain it — strictly worse
+    // than the stretched placeholder this hold exists to avoid.
     const awaitingTexture =
-      record.boundKey === null && record.tier !== "L0" && record.tier !== "L1";
+      record.boundKey === null &&
+      record.tier !== "L0" &&
+      record.tier !== "L1" &&
+      !record.lastKeyFailed;
     return awaitingTexture ? 0 : alpha;
   }
 
@@ -438,9 +472,9 @@ class Manager {
     const centre = { x: viewport.x + viewport.width / 2, y: viewport.y + viewport.height / 2 };
     const resolution = rendererResolution();
     const queue: { id: string; priority: number }[] = [];
-    const dom = this.#domMode();
+    const anyDom = this.#domMode();
     const domEntries: DomPropEntry[] = [];
-    const tokens = dom ? visibleTokens() : [];
+    const tokens = anyDom ? visibleTokens() : [];
 
     for (const record of this.#records.values()) {
       const tile = canvas.tiles?.get(record.id);
@@ -459,6 +493,8 @@ class Manager {
       // The perf guard demotes uniformly: a scene where half the props are sharp and
       // half are mush looks broken, one that is uniformly softer looks deliberate.
       for (let i = 0; i < this.#globalDemotions; i++) tier = demote(tier);
+
+      const dom = this.#domModeFor(pin);
 
       const visible = tile.isVisible === true;
       if (visible && !record.wasVisible) this.#playReveal(tile, pin, record, dom);
@@ -494,19 +530,20 @@ class Manager {
       );
       const key = this.#keyFor(tile, pin, longEdge, record.contentHash);
 
+      record.lastKeyFailed = this.#failedKeys.has(key);
+
       const cached = this.#cache.get(key);
       if (cached) {
         this.#bind(record, tile, cached, key);
-      } else if (!record.generating && !this.#failedKeys.has(key)) {
+      } else if (!record.generating && !record.lastKeyFailed) {
         queue.push({ id: record.id, priority: priorityOf(bounds, centre) });
       }
     }
 
-    // Both branches, always: a GM switching the rendering setting back to canvas
-    // mid-session would otherwise leave every mounted card in the overlay forever, on top
-    // of the meshes now drawing the same props.
-    if (dom) syncDomTier(domEntries);
-    else clearDomTier();
+    // Always reconcile: a GM switching the rendering setting back to canvas mid-session
+    // would otherwise leave every mounted card in the overlay forever, on top of the
+    // meshes now drawing the same props. An empty list clears them all.
+    syncDomTier(domEntries);
     this.#queue = queue.sort((a, b) => a.priority - b.priority);
     this.applyAlpha();
     this.#trim();
@@ -606,8 +643,9 @@ class Manager {
    */
   #pump(): void {
     if (this.#working || !this.#queue.length) return;
-    // Nothing to rasterise on the DOM path; `DomPropTier` has already drawn these.
-    if (this.#domMode()) return;
+    // Nothing to rasterise on the DOM path — `DomPropTier` has already drawn those — but
+    // a PDF prop still has canvas work to do even when HTML rasterisation is unavailable.
+    if (settings.get("rendering") === "dom") return;
 
     // Drain stale entries in a loop rather than by recursing: a queue built just before
     // a dozen tiles were deleted would otherwise recurse once per dead entry.
@@ -669,6 +707,42 @@ class Manager {
       return;
     }
 
+    // A PDF skips the HTML pipeline entirely: pdf.js paints the page onto a canvas that
+    // is not tainted, so it uploads to WebGL and the prop becomes a real scene object —
+    // lit, fogged, occluded, behind tokens. The one source type that can do that.
+    const pdfSrc = pdfSourceOf(api.resolveSourceSync(pin));
+    if (pdfSrc) {
+      const rendered = await renderPdfPage(pdfSrc, pdfPageOf(pin), longEdge);
+      if (!alive()) return;
+
+      const key = this.#keyFor(tile, pin, longEdge, `pdf:${pdfPageOf(pin)}`);
+      const cachedPdf = this.#cache.get(key);
+      if (cachedPdf) {
+        this.#bind(record, tile, cachedPdf, key);
+        this.applyAlpha();
+        return;
+      }
+
+      const result = rendered
+        ? textureFromCanvas(rendered.canvas, rendered.width, rendered.height)
+        : null;
+      if (!result) {
+        log.warn(`could not draw the PDF behind ${tile.id}`);
+        this.#failedKeys.add(key);
+        record.lastKeyFailed = true;
+        this.applyAlpha();
+        return;
+      }
+
+      record.contentHash = `pdf:${pdfPageOf(pin)}`;
+      this.#cache.set(key, result.texture, result.bytes);
+      this.#bind(record, tile, result.texture, key);
+      this.applyAlpha();
+      this.#fadeIn(tile);
+      this.#trim();
+      return;
+    }
+
     const card = await resolveCard(pin, size, { tier: record.tier, baked: true });
     if (!alive()) return;
 
@@ -699,6 +773,8 @@ class Manager {
       // key encodes — so say so once rather than going quiet.
       log.warn(`could not draw ${tile.id}; it will not be retried until its content changes`);
       this.#failedKeys.add(key);
+      record.lastKeyFailed = true;
+      this.applyAlpha();
       return;
     }
     if (!alive()) {
@@ -877,6 +953,12 @@ function playRevealSound(src: string | null): void {
   } catch (error) {
     log.warn(`could not play reveal sound ${src}`, error);
   }
+}
+
+/** Which page of a multi-page PDF a pin shows. One-based, as pdf.js counts. */
+function pdfPageOf(pin: any): number {
+  const raw = Number(pin?.source?.pageId);
+  return Number.isFinite(raw) && raw >= 1 ? Math.floor(raw) : 1;
 }
 
 /** Every token a player can currently see, which is what a prop fades underneath. */

@@ -5,12 +5,12 @@ full-size **readable prop lying on the scene**.
 
 Per-pin visibility the GM changes in one click. Foundry VTT **v14+**.
 
-> **Beta, and one headline feature does not work.** Props are drawn as an HTML layer over
-> the canvas, not into it, so they are **not lit, fogged or occluded** and do not sort
-> behind tokens. That was the plan, and it turns out not to be possible: an SVG containing
-> a `foreignObject` taints the canvas in every current browser, so the texture upload the
-> canvas path needs is refused outright. Verified on Chromium 144, not just Safari. See
-> [`docs/DESIGN.md`](docs/DESIGN.md) A10. Everything else below works; keep a backup.
+> **Beta.** Journal props are drawn as an HTML layer over the canvas, not into it, so they
+> are **not lit, fogged or occluded** and do not sort behind tokens. That was the plan, and
+> it is not possible: an SVG containing a `foreignObject` taints the canvas in every
+> current browser, so the texture upload is refused. Verified on Chromium 144, not just
+> Safari — see [`docs/DESIGN.md`](docs/DESIGN.md) A10. **Pinned PDFs are the exception**
+> and *are* drawn into the scene. Keep a backup.
 
 *Version française plus bas.*
 
@@ -95,8 +95,9 @@ If you need real secrecy, keep the document out of the world until you want it s
 ## Known limitations
 
 1. Video renders as a single frame.
-2. A PDF page shows a "this is a PDF, open it to read" card — a PDF cannot be laid out
-   inside a prop.
+2. A pinned **PDF** renders its page, and is the one prop type drawn *into* the scene —
+   so it is lit, fogged, occluded and behind tokens, unlike a journal page. Multi-page
+   PDFs show page 1.
 3. Images referenced by a journal page are inlined; anything the module cannot fetch is
    dropped rather than left broken.
 4. **Props are not lit, fogged, occluded, or sorted behind tokens.** Drawing them into the
@@ -134,13 +135,13 @@ sur laquelle les joueurs cliquent, ou d'un **accessoire lisible posé à même l
 
 Une visibilité que le MJ change en un clic. Foundry VTT **v14+**.
 
-> **Bêta, et une fonctionnalité phare ne marche pas.** Les accessoires sont dessinés en
-> HTML par-dessus le canevas, pas dedans : ils ne sont donc **ni éclairés, ni embrumés, ni
-> occultés**, et ne passent pas derrière les pions. C'était le plan, et il s'avère
-> impossible : un SVG contenant un `foreignObject` « contamine » le canevas dans tous les
-> navigateurs actuels, si bien que l'envoi de la texture est refusé. Vérifié sur
-> Chromium 144, pas seulement Safari. Voir [`docs/DESIGN.md`](docs/DESIGN.md) A10. Tout le
-> reste fonctionne ; gardez une sauvegarde.
+> **Bêta.** Les accessoires issus d'un journal sont dessinés en HTML par-dessus le canevas,
+> pas dedans : ils ne sont donc **ni éclairés, ni embrumés, ni occultés**, et ne passent pas
+> derrière les pions. C'était le plan, et c'est impossible : un SVG contenant un
+> `foreignObject` « contamine » le canevas dans tous les navigateurs actuels, si bien que
+> l'envoi de la texture est refusé. Vérifié sur Chromium 144, pas seulement Safari — voir
+> [`docs/DESIGN.md`](docs/DESIGN.md) A10. **Les PDF épinglés font exception** et sont bien
+> dessinés dans la scène. Gardez une sauvegarde.
 
 ## Installation
 
@@ -226,8 +227,9 @@ voulu.
 ## Limitations connues
 
 1. Une vidéo n'affiche qu'une seule image.
-2. Une page PDF affiche une carte « ceci est un PDF, ouvrez-le pour le lire » : un PDF ne
-   peut pas être mis en page dans un accessoire.
+2. Un **PDF** épinglé affiche sa page, et c'est le seul type d'accessoire dessiné *dans*
+   la scène : il est donc éclairé, embrumé, occulté et passe derrière les pions,
+   contrairement à une page de journal. Les PDF multipages affichent la page 1.
 3. Les images référencées par une page de journal sont intégrées ; ce que le module ne peut
    pas récupérer est retiré plutôt que laissé cassé.
 4. **Les accessoires ne sont ni éclairés, ni embrumés, ni occultés, ni placés derrière les

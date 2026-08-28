@@ -9,6 +9,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Nothing yet.
 
+## [0.1.4] — unreleased
+
+### Added
+
+- **PDFs render, and they render on the CANVAS.** A pinned PDF page is drawn by pdf.js —
+  which Foundry already ships — and pdf.js paints with Canvas2D rather than through an SVG
+  `foreignObject`, so its canvas is not tainted and uploads to WebGL. That makes a pinned
+  PDF the one prop type that genuinely *is* lit by torches, hidden by fog, occluded by
+  roofs and sorted behind tokens: the thing the whole primary-group architecture was chosen
+  for, reachable for exactly one source type. Verified end to end in a live world before it
+  was built. It falls back to the DOM tier like everything else when the GM asks for DOM.
+
+### Fixed
+
+- **Props were invisible after a fresh scene load.** The rasterisation probe is
+  asynchronous, so the first LOD pass usually ran while the answer was still unknown — read
+  as "canvas is fine", which held every prop's mesh at zero waiting for a texture that would
+  never arrive and mounted no DOM card either. They stayed invisible until something
+  unrelated happened to trigger another pass. The probe now recomputes when it resolves.
+- **A prop whose card can never be drawn no longer hides itself.** Holding the mesh
+  invisible is right while a texture is still coming; once the key is known to have failed
+  it just means an invisible prop with nothing to explain it, so the placeholder comes
+  back.
+
 ## [0.1.3] — unreleased
 
 ### Fixed
@@ -218,7 +242,8 @@ occluded. The module detects this at startup rather than failing visibly.
 
 The full list is in the README and in `docs/DESIGN.md` §10.
 
-[Unreleased]: https://github.com/Heiiji/Documents-pinner/compare/v0.1.3...HEAD
+[Unreleased]: https://github.com/Heiiji/Documents-pinner/compare/v0.1.4...HEAD
+[0.1.4]: https://github.com/Heiiji/Documents-pinner/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/Heiiji/Documents-pinner/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/Heiiji/Documents-pinner/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/Heiiji/Documents-pinner/compare/v0.1.0...v0.1.1

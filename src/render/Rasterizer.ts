@@ -242,6 +242,34 @@ export async function rasterise(
 }
 
 /**
+ * A texture from a canvas that is ALREADY drawn.
+ *
+ * The PDF path uses this: pdf.js paints with Canvas2D rather than through an SVG
+ * `foreignObject`, so its canvas is origin-clean and uploads fine — which is why a pinned
+ * PDF can reach the canvas tier when a journal page cannot. See `render/PdfPage.ts` and
+ * DESIGN A11.
+ *
+ * Deliberately does NOT touch `canRasterise`: that latch is about the HTML pipeline, and a
+ * client that cannot draw HTML can still draw PDFs perfectly well.
+ */
+export function textureFromCanvas(source: any, width: number, height: number): RasterResult | null {
+  const PIXI = (globalThis as any).PIXI;
+  if (!PIXI || !source) return null;
+
+  try {
+    const texture = PIXI.Texture.from(source, {
+      resolution: rendererResolution(),
+      mipmap: PIXI.MIPMAP_MODES?.ON,
+      scaleMode: PIXI.SCALE_MODES?.LINEAR,
+    });
+    return { texture, width, height, bytes: textureBytes(width, height) };
+  } catch (error) {
+    log.warn("could not upload a pre-drawn canvas", error);
+    return null;
+  }
+}
+
+/**
  * Release a texture and the GPU memory behind it.
  *
  * `destroy(true)` destroys the base texture as well. Without it, `PIXI.Texture.from`

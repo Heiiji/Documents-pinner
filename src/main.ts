@@ -84,6 +84,13 @@ Hooks.once("ready", () => {
       `ready | props render on the ${canRasterise ? "canvas" : "DOM"} path` +
         `${settings.get("rendering") === "dom" ? " (chosen in settings)" : ""}`
     );
+    // AND recompute. The probe is asynchronous, so `canvasReady` usually runs its first
+    // LOD pass while the answer is still `null` — which reads as "canvas is fine", takes
+    // the canvas path, holds every prop's mesh invisible waiting for a texture that will
+    // never arrive, and mounts no DOM card either. The props were then invisible until
+    // something unrelated happened to schedule another pass. Measured on a fresh load:
+    // zero cards; one forced recompute and all three appeared, correctly placed.
+    propManager().refresh();
   });
   warmFontCache();
   void reconcile();
