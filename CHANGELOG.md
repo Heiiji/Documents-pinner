@@ -9,6 +9,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Nothing yet.
 
+## [0.1.7] — unreleased
+
+### Added
+
+- **Effects apply to a pinned PDF after all**, painted rather than styled. A PDF has no
+  card for CSS to reach, so the static half of the preset — tint, stains, grain,
+  scanlines, frame, blur and the torn edge silhouette — is composited onto the page with
+  Canvas2D before it becomes a texture. Safe for the same reason the HTML path is not:
+  there is no `foreignObject` anywhere in it, only fills and plain SVG images, and a plain
+  SVG image was measured uploading to WebGL without complaint.
+
+  Only what genuinely cannot apply is still disabled for a PDF: the paper stock and the
+  padding, which describe a card it does not have, and anything that moves, because a
+  texture cannot animate.
+
+### Fixed
+
+- **A generated texture that never decoded hung the whole scene.** The bake awaits inside
+  the concurrency-1 generation queue, so one undecodable stain would have stopped every
+  prop from ever drawing, silently. There is now a decode timeout: a missing layer is a
+  cosmetic loss, a stuck queue is not.
+
 ## [0.1.6] — unreleased
 
 Re-releases the z-index fix, which shipped inside a re-pushed `v0.1.5` tag and so was
@@ -290,7 +312,8 @@ occluded. The module detects this at startup rather than failing visibly.
 
 The full list is in the README and in `docs/DESIGN.md` §10.
 
-[Unreleased]: https://github.com/Heiiji/Documents-pinner/compare/v0.1.6...HEAD
+[Unreleased]: https://github.com/Heiiji/Documents-pinner/compare/v0.1.7...HEAD
+[0.1.7]: https://github.com/Heiiji/Documents-pinner/compare/v0.1.6...v0.1.7
 [0.1.6]: https://github.com/Heiiji/Documents-pinner/compare/v0.1.5...v0.1.6
 [0.1.5]: https://github.com/Heiiji/Documents-pinner/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/Heiiji/Documents-pinner/compare/v0.1.3...v0.1.4

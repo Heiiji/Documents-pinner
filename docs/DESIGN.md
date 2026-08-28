@@ -879,3 +879,43 @@ anyone who installed v0.1.5 in the window between the two pushes could never be 
 fix — which is exactly what happened, and cost a round trip to diagnose against a client
 running code that no longer existed anywhere. **A published tag is immutable.** The fix for
 a bad release is the next number, every time.
+
+### A16 — The effects come back, painted (2026-08-28)
+
+A15 disabled a PDF pin's appearance controls because a PDF has no card for CSS to reach.
+That was honest and it was also giving up too early, as the user pointed out: *"I think we
+should be able to do some visual process on the pdf too … but maybe you need to filter what
+we can do."* Both halves of that are right.
+
+**What can be painted.** A10's finding was about `foreignObject` specifically — and there
+is none in an effect layer. The tint is a `fillRect`, the stains and grain are plain
+`feTurbulence` SVGs, and a plain SVG image was already measured uploading to WebGL without
+complaint. So the static rendition composites onto the pdf.js page with ordinary Canvas2D,
+and the result is still origin-clean:
+
+| Layer | How |
+|---|---|
+| tint | `fillRect` under the preset's own blend mode |
+| stains, grain | `drawImage` / `createPattern` of the generated SVGs |
+| scanlines | stroked directly — the CSS value is a gradient, not an image |
+| frame | `roundRect` + `stroke` |
+| blur | `ctx.filter` through a copy, since a canvas cannot filter itself in place |
+| torn edge | `destination-in` with the mask, last, so it carves everything above it |
+
+**What cannot, and is therefore not offered.** Everything that moves: flicker, jitter,
+chromatic drift, warp, the scanline roll. A texture has no motion and faking a still frame
+of a moving effect would be a worse lie than saying so. That is exactly the line
+`dressing({ baked: true })` already drew for the rasterised HTML tier, which is why this
+takes its variables from there rather than inventing a second policy. Paper stock and
+padding stay disabled too: they describe a card the PDF does not have.
+
+**The bug the tests found while writing it.** The bake awaits image decodes, and it runs
+inside the concurrency-1 generation queue. An `Image` that neither loads nor errors leaves
+its promise pending forever — so one undecodable stain would have stopped every prop on
+the scene from drawing, with nothing anywhere to explain it. A decode timeout now bounds
+it: a missing layer is cosmetic, a stuck queue is not.
+
+**The pattern.** A15 was "do not offer what you cannot honour" — the right rule, applied by
+removing. A16 is the same rule applied the other way: find out what you can honour first,
+and only then decide what to remove. The first reading cost a working feature for a week;
+the second was one user sentence away.

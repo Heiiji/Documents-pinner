@@ -246,7 +246,7 @@
   "DP.studio.openSingle": "Single click",
   "DP.studio.padding": "Margins",
   "DP.studio.paper": "Paper",
-  "DP.studio.pdfAppearance": "This pin shows a PDF page, painted straight into the scene — so it is lit and occluded like the map itself, but it has no card: paper, padding and effects do not apply to it.",
+  "DP.studio.pdfAppearance": "This pin shows a PDF page, painted straight into the scene — so it is lit and occluded like the map itself. Effects apply to it, baked into the page; the paper stock, the padding and anything that moves do not, because it has no card and a texture cannot animate.",
   "DP.studio.rotation": "Rotation",
   "DP.studio.showTitle": "Show the title on the card",
   "DP.studio.sourceMissing": "No source",

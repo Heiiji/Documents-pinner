@@ -55,6 +55,8 @@ import {
 } from "../render/Rasterizer";
 import { resolveCard } from "../render/ContentResolver";
 import { pdfSourceOf, renderPdfPage } from "../render/PdfPage";
+import { bakeEffects, copyCanvas } from "../render/BakeEffects";
+import { dressing } from "../effects/EffectRegistry";
 import { svgDocument } from "../render/CardTemplate";
 import { inlineFonts, inlineImages } from "../render/AssetInliner";
 import { TextureCache, cacheKey } from "../render/TextureCache";
@@ -723,9 +725,28 @@ class Manager {
         return;
       }
 
-      const result = rendered
-        ? textureFromCanvas(rendered.canvas, rendered.width, rendered.height)
-        : null;
+      // The effects, painted on. A PDF has no card for CSS to reach, so the static half
+      // of the preset is composited onto a COPY of the page — the page cache must never
+      // be painted over, or the next preset would inherit this one's stains.
+      let surface = rendered?.canvas ?? null;
+      const preset = findPreset(pin.effect.id);
+      if (surface && preset) {
+        const dressed = dressing({
+          preset,
+          intensity: pin.effect.intensity,
+          seed: pin.effect.seed,
+          tier: record.tier,
+          level: this.#level,
+          // A texture cannot animate, so this is the static rendition by construction —
+          // which is exactly the set of layers Canvas2D can paint.
+          baked: true,
+        });
+        surface = copyCanvas(surface);
+        await bakeEffects(surface, dressed.vars);
+        if (!alive()) return;
+      }
+
+      const result = surface ? textureFromCanvas(surface, rendered!.width, rendered!.height) : null;
       if (!result) {
         log.warn(`could not draw the PDF behind ${tile.id}`);
         this.#failedKeys.add(key);

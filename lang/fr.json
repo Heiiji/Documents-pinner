@@ -246,7 +246,7 @@
   "DP.studio.openSingle": "Clic simple",
   "DP.studio.padding": "Marges",
   "DP.studio.paper": "Papier",
-  "DP.studio.pdfAppearance": "Cette épingle affiche une page PDF, dessinée directement dans la scène : elle est donc éclairée et occultée comme la carte elle-même, mais elle n'a pas de fiche — papier, marges et effets ne s'y appliquent pas.",
+  "DP.studio.pdfAppearance": "Cette épingle affiche une page PDF, dessinée directement dans la scène : elle est donc éclairée et occultée comme la carte. Les effets s'y appliquent, intégrés à la page ; le papier, les marges et tout ce qui bouge non, car elle n'a pas de fiche et une texture ne peut pas s'animer.",
   "DP.studio.rotation": "Rotation",
   "DP.studio.showTitle": "Afficher le titre sur la carte",
   "DP.studio.sourceMissing": "Aucune source",

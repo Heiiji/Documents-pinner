@@ -216,12 +216,18 @@
   line-height: 1.4;
 }
 
-/* Everything below the note describes a card the PDF does not have. */
-.dp-studio__tab[data-dp-pdf="true"] .dp-studio__swatches,
-.dp-studio__tab[data-dp-pdf="true"] .dp-studio__field:has(input[name^="effect."]),
-.dp-studio__tab[data-dp-pdf="true"] .dp-studio__field:has(select[name^="effect."]),
+/*
+ * Only what genuinely cannot apply.
+ *
+ * The effect itself DOES apply to a PDF — its static half is composited onto the page with
+ * Canvas2D, see `render/BakeEffects.ts`. What a PDF has no use for is the paper stock and
+ * the padding, which describe a card it does not have, and anything that moves, because a
+ * texture cannot animate.
+ */
 .dp-studio__tab[data-dp-pdf="true"] .dp-studio__field:has([name="display.paper"]),
-.dp-studio__tab[data-dp-pdf="true"] .dp-studio__field:has([name="display.padding"]) {
+.dp-studio__tab[data-dp-pdf="true"] .dp-studio__field:has([name="display.padding"]),
+.dp-studio__tab[data-dp-pdf="true"] .dp-studio__field:has([name="effect.speed"]),
+.dp-studio__tab[data-dp-pdf="true"] .dp-studio__field:has([name="effect.motion"]) {
   opacity: 0.45;
   pointer-events: none;
 }
