@@ -730,7 +730,7 @@ class Manager {
       // be painted over, or the next preset would inherit this one's stains.
       let surface = rendered?.canvas ?? null;
       const preset = findPreset(pin.effect.id);
-      if (surface && preset) {
+      if (surface && preset && !bakedTaints) {
         const dressed = dressing({
           preset,
           intensity: pin.effect.intensity,
@@ -746,7 +746,20 @@ class Manager {
         if (!alive()) return;
       }
 
-      const result = surface ? textureFromCanvas(surface, rendered!.width, rendered!.height) : null;
+      let result = surface ? textureFromCanvas(surface, rendered!.width, rendered!.height) : null;
+
+      // Baking taints the canvas on some browsers — WebKit does for an SVG source,
+      // Chromium does not — and a tainted canvas cannot be uploaded. Fall back to the page
+      // exactly as pdf.js drew it, which is known to upload, rather than losing the prop
+      // for the sake of some stains. Latched: the answer is a property of the browser.
+      if (!result && rendered && surface !== rendered.canvas) {
+        if (!bakedTaints) {
+          bakedTaints = true;
+          log.warn("effects cannot be baked on this browser; drawing PDF pages unadorned");
+        }
+        result = textureFromCanvas(copyCanvas(rendered.canvas), rendered.width, rendered.height);
+      }
+
       if (!result) {
         log.warn(`could not draw the PDF behind ${tile.id}`);
         this.#failedKeys.add(key);
@@ -975,6 +988,14 @@ function playRevealSound(src: string | null): void {
     log.warn(`could not play reveal sound ${src}`, error);
   }
 }
+
+/**
+ * Whether baking effects onto a page taints the canvas on this browser.
+ *
+ * Latched after the first failure, because the answer is a property of the browser and
+ * retrying it once per prop per LOD pass would waste a full composite every time.
+ */
+let bakedTaints = false;
 
 /** Which page of a multi-page PDF a pin shows. One-based, as pdf.js counts. */
 function pdfPageOf(pin: any): number {

@@ -919,3 +919,41 @@ it: a missing layer is cosmetic, a stuck queue is not.
 removing. A16 is the same rule applied the other way: find out what you can honour first,
 and only then decide what to remove. The first reading cost a working feature for a week;
 the second was one user sentence away.
+
+### A17 — A deferred upload is an uncatchable upload (2026-08-28)
+
+A16 shipped effect baking for PDFs after checking, in Chromium, that a generated
+`feTurbulence` SVG drawn onto a canvas leaves it origin-clean and uploads to WebGL. It
+does. **WebKit does not agree**, and the consequence was not a missing effect — it was the
+entire scene going blank on Safari, reported as "completely broken, full red background".
+
+The mechanism is the part worth remembering. `PIXI.Texture.from(canvas)` **does not
+upload**; it registers a resource and the upload happens on the next render. So:
+
+1. `bakeEffects` draws an SVG layer → in WebKit the canvas is now tainted.
+2. `textureFromCanvas` succeeds, because nothing has touched the GPU yet.
+3. PIXI uploads during its render loop → `texImage2D` throws `SecurityError`.
+4. That throw is **inside PIXI's loop**, where the module has no `try` — the frame dies,
+   and the renderer paints only its clear colour, which Foundry sets from the scene's
+   `backgroundColor`. `#25070d`. Flat red.
+
+A10 had already measured this exact error text and reasoned about it correctly; what was
+missed is that **where** an exception is thrown decides how much it costs. The same
+`SecurityError` caught in our own code is one prop without stains; uncaught in the
+renderer's loop it is the whole canvas.
+
+Three rules now, in `Rasterizer`:
+
+- **Ask the canvas.** `getImageData(0, 0, 1, 1)` in a `try` before PIXI is handed anything.
+  Browsers disagree about what taints and will keep disagreeing, so the canvas is asked
+  rather than a browser matrix being encoded and going stale.
+- **Force the upload inside our own `try`.** `renderer.texture.bind` immediately after
+  `Texture.from`, so any failure is ours to handle and never reaches a frame.
+- **Fall back rather than fail.** A PDF whose effects cannot be baked here is drawn exactly
+  as pdf.js produced it, which is known to upload. Latched per session.
+
+**The pattern.** A15 was "do not offer what you cannot honour". A16 was "find out what you
+can honour first". A17 is the one underneath both: **verify the failure MODE, not just the
+failure.** Knowing that WebKit taints was not enough — what mattered was that the taint
+surfaced somewhere the module could not catch it, and that was never checked because in
+Chromium it never surfaced at all.

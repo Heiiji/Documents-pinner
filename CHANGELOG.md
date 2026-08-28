@@ -9,6 +9,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Nothing yet.
 
+## [0.1.8] — unreleased
+
+### Fixed
+
+- **The whole scene stopped drawing on Safari, leaving a flat background colour.** A
+  regression from 0.1.7. `PIXI.Texture.from(canvas)` does not upload — the upload happens
+  during the next render — so a tainted source throws `SecurityError` from inside PIXI's
+  own loop, where nothing can catch it, and a renderer that throws mid-frame stops drawing
+  entirely. Browsers disagree about what taints: Chromium keeps a canvas clean when the
+  generated `feTurbulence` effect layers are drawn onto it, WebKit does not. Baking
+  effects onto a PDF page therefore worked in Chromium and destroyed the canvas in Safari.
+
+  Three changes, so this class of failure cannot recur: a canvas is asked whether it is
+  still readable before PIXI ever sees it, the upload is forced inside our own `try`, and
+  a PDF whose effects cannot be baked on this browser falls back to the page exactly as
+  pdf.js drew it — unadorned, but drawn.
+
 ## [0.1.7] — unreleased
 
 ### Added
@@ -312,7 +329,8 @@ occluded. The module detects this at startup rather than failing visibly.
 
 The full list is in the README and in `docs/DESIGN.md` §10.
 
-[Unreleased]: https://github.com/Heiiji/Documents-pinner/compare/v0.1.7...HEAD
+[Unreleased]: https://github.com/Heiiji/Documents-pinner/compare/v0.1.8...HEAD
+[0.1.8]: https://github.com/Heiiji/Documents-pinner/compare/v0.1.7...v0.1.8
 [0.1.7]: https://github.com/Heiiji/Documents-pinner/compare/v0.1.6...v0.1.7
 [0.1.6]: https://github.com/Heiiji/Documents-pinner/compare/v0.1.5...v0.1.6
 [0.1.5]: https://github.com/Heiiji/Documents-pinner/compare/v0.1.4...v0.1.5

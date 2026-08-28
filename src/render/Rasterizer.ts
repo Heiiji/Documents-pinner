@@ -27,7 +27,7 @@
 
 import { MODULE_ID, RES_TIERS } from "../const";
 import { logger } from "../log";
-import { rendererResolution } from "../fvtt";
+import { cv, rendererResolution } from "../fvtt";
 
 const log = logger("render");
 
@@ -217,6 +217,10 @@ export async function rasterise(
       scaleMode: PIXI.SCALE_MODES?.LINEAR,
     });
 
+    // Upload here, where the catch below still applies. Left to the next render, a
+    // tainted source throws inside PIXI's loop and stops the whole canvas drawing.
+    forceUpload(texture);
+
     consecutiveFailures = 0;
     return {
       texture,
@@ -256,17 +260,56 @@ export function textureFromCanvas(source: any, width: number, height: number): R
   const PIXI = (globalThis as any).PIXI;
   if (!PIXI || !source) return null;
 
+  // Refuse a tainted canvas BEFORE PIXI ever sees it. `Texture.from` does not upload; the
+  // upload happens during the next render, so a SecurityError there is thrown inside
+  // PIXI's own loop where nothing can catch it — and a renderer that throws mid-frame
+  // stops drawing entirely, leaving the scene's clear colour and nothing else. That is
+  // what "completely broken, full red background" was.
+  if (!isOriginClean(source)) {
+    log.warn("refusing a tainted canvas; it would break the renderer, not just this prop");
+    return null;
+  }
+
+  let texture: any = null;
   try {
-    const texture = PIXI.Texture.from(source, {
+    texture = PIXI.Texture.from(source, {
       resolution: rendererResolution(),
       mipmap: PIXI.MIPMAP_MODES?.ON,
       scaleMode: PIXI.SCALE_MODES?.LINEAR,
     });
+    // Upload NOW, inside our own try/catch, so any failure belongs to us.
+    forceUpload(texture);
     return { texture, width, height, bytes: textureBytes(width, height) };
   } catch (error) {
     log.warn("could not upload a pre-drawn canvas", error);
+    releaseTexture(texture);
     return null;
   }
+}
+
+/**
+ * Whether a canvas can still be read, which is the same question as whether it can be
+ * uploaded to WebGL.
+ *
+ * Browsers disagree about what taints. Chromium keeps a canvas clean when a generated
+ * `feTurbulence` SVG is drawn onto it; WebKit does not. Rather than encode a browser
+ * matrix that will be wrong next year, the canvas is simply asked.
+ */
+export function isOriginClean(source: any): boolean {
+  try {
+    const ctx = source?.getContext?.("2d");
+    if (!ctx?.getImageData) return true;
+    ctx.getImageData(0, 0, 1, 1);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Push the texture to the GPU while we can still catch what happens. */
+function forceUpload(texture: any): void {
+  const renderer = cv()?.app?.renderer;
+  renderer?.texture?.bind?.(texture.baseTexture, 0);
 }
 
 /**

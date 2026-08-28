@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { baseFontSize, cardHtml, paperOf, svgDocument } from "../src/render/CardTemplate";
-import { tierFor, textureBytes } from "../src/render/Rasterizer";
+import { textureBytes, textureFromCanvas, tierFor } from "../src/render/Rasterizer";
 import { TextureCache, cacheKey, hashContent, plan } from "../src/render/TextureCache";
 
 const card = (over: Record<string, any> = {}) =>
@@ -256,5 +256,71 @@ describe("TextureCache", () => {
     cache.clear();
     expect(cache.size).toBe(0);
     expect(cache.bytes).toBe(0);
+  });
+});
+
+/**
+ * The regression that broke a live game, and the rule that prevents it recurring.
+ *
+ * `PIXI.Texture.from(canvas)` does NOT upload — the upload happens during the next render.
+ * So a tainted source throws `SecurityError` from inside PIXI's own render loop, where
+ * nothing can catch it, and a renderer that throws mid-frame stops drawing entirely: the
+ * scene collapsed to its clear colour, reported as "completely broken, full red
+ * background". The prop was never the casualty; the whole canvas was.
+ *
+ * Browsers disagree about what taints — Chromium keeps a canvas clean when a generated
+ * `feTurbulence` SVG is drawn onto it, WebKit does not — so the canvas is asked rather
+ * than a browser matrix being encoded.
+ */
+describe("textureFromCanvas and tainted sources", () => {
+  const PIXI = {
+    MIPMAP_MODES: { ON: 1 },
+    SCALE_MODES: { LINEAR: 1 },
+    Texture: { from: () => ({ baseTexture: {}, destroy: () => {} }) },
+  };
+
+  function withCanvas(getImageData: () => void, bind?: () => void) {
+    (globalThis as any).PIXI = PIXI;
+    (globalThis as any).canvas = {
+      app: { renderer: { resolution: 1, texture: { bind: bind ?? (() => {}) } } },
+    };
+    return { getContext: () => ({ getImageData }) } as never;
+  }
+
+  afterEach(() => {
+    delete (globalThis as any).PIXI;
+    delete (globalThis as any).canvas;
+  });
+
+  it("refuses a tainted canvas outright", () => {
+    const tainted = withCanvas(() => {
+      throw new Error("SecurityError: tainted");
+    });
+    expect(textureFromCanvas(tainted, 100, 100)).toBeNull();
+  });
+
+  it("accepts a clean one", () => {
+    const clean = withCanvas(() => undefined);
+    expect(textureFromCanvas(clean, 100, 100)).not.toBeNull();
+  });
+
+  it("uploads inside its own catch, so a failure is ours and not the renderer's", () => {
+    const clean = withCanvas(
+      () => undefined,
+      () => {
+        throw new Error("SecurityError: Tainted canvases may not be loaded");
+      }
+    );
+    // The throw must be swallowed here rather than surfacing during a later frame.
+    expect(() => textureFromCanvas(clean, 100, 100)).not.toThrow();
+    expect(textureFromCanvas(clean, 100, 100)).toBeNull();
+  });
+
+  it("treats a source with no 2d context as usable rather than refusing it", () => {
+    (globalThis as any).PIXI = PIXI;
+    (globalThis as any).canvas = {
+      app: { renderer: { resolution: 1, texture: { bind: () => {} } } },
+    };
+    expect(textureFromCanvas({ getContext: () => null } as never, 10, 10)).not.toBeNull();
   });
 });
