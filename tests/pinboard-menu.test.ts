@@ -141,3 +141,12 @@ describe("reordering", () => {
     expect(target.dataset.dpDrop).toBeUndefined();
   });
 });
+
+describe("an empty scene", () => {
+  it("says what to do and offers to place a pin, rather than just that there is nothing", async () => {
+    const { boardMarkup } = await import("../src/apps/Pinboard");
+    const markup = boardMarkup([], { filter: "all", search: "", level: null }, [], null, "Keep");
+    expect(markup).toContain("DP.board.emptyHint");
+    expect(markup).toMatch(/dp-board__empty[\s\S]*data-action="place"/);
+  });
+});

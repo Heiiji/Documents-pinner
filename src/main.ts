@@ -44,6 +44,7 @@ import {
 } from "./ui/entry-points";
 import { readPin } from "./data/PinData";
 import { followDomProp, setDomPropHover } from "./canvas/DomPropTier";
+import { onboardingReady } from "./ui/onboarding";
 
 const log = logger("boot");
 
@@ -96,6 +97,7 @@ Hooks.once("ready", () => {
   });
   warmFontCache();
   void reconcile();
+  void onboardingReady();
 
   Hooks.callAll(`${MODULE_ID}.ready`, module?.api);
 });

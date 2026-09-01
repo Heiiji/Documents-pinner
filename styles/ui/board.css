@@ -113,8 +113,18 @@
 .dp-board__empty {
   padding: 1.5rem;
   text-align: center;
-  opacity: 0.7;
-  font-style: italic;
+  opacity: 0.85;
+
+  & p {
+    margin: 0 0 0.4rem;
+    font-style: italic;
+  }
+
+  & .dp-board__empty-hint {
+    font-style: normal;
+    font-size: 0.85em;
+    opacity: 0.75;
+  }
 }
 
 .dp-row {

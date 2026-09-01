@@ -216,9 +216,18 @@ export function boardMarkup(
   const visible = filterRows(rows, query);
   const counts = summarise(rows);
 
+  // An empty scene says what to do, not just that there is nothing: the gesture that
+  // places a pin is Alt-drag from the sidebar, which nothing on screen suggests.
+  const empty = rows.length
+    ? `<li class="dp-board__empty">${escapeHtml(t("DP.board.noMatches"))}</li>`
+    : `<li class="dp-board__empty">` +
+      `<p>${escapeHtml(t("DP.board.noPins"))}</p>` +
+      `<p class="dp-board__empty-hint">${escapeHtml(t("DP.board.emptyHint"))}</p>` +
+      `<button type="button" data-action="place">${escapeHtml(t("DP.board.place"))}</button>` +
+      `</li>`;
   const list = visible.length
     ? visible.map((row) => rowMarkup(row, selected.includes(row.id), row.id === focusedId)).join("")
-    : `<li class="dp-board__empty">${escapeHtml(t(rows.length ? "DP.board.noMatches" : "DP.board.noPins"))}</li>`;
+    : empty;
 
   // Always rendered, with nothing selected as a state of its own: a bar that appears on
   // the first shift-click steals a row's height from the list at the moment the GM is

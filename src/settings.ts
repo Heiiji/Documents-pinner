@@ -17,6 +17,7 @@
 import { DEFAULTS, MODULE_ID } from "./const";
 import { g } from "./fvtt";
 import { setLogLevel, type LogLevel } from "./log";
+import { DEFAULT_PRESET_ID } from "./effects/presets/core-presets";
 
 export type RenderingMode = "canvas" | "dom";
 export type EffectsLevel = "auto" | "full" | "reduced" | "off";
@@ -170,11 +171,23 @@ export const SETTINGS = {
     type: Number,
     default: 0,
   },
+  /**
+   * The effect the ghost starts with. The module's signature look, not "none": a GM's
+   * first prop used to have no effect at all, while the default preset was referenced
+   * only by tests.
+   */
   lastPreset: {
     scope: "client",
     config: false,
     type: String,
-    default: "none",
+    default: DEFAULT_PRESET_ID,
+  },
+  /** The module version this client has been welcomed to, for the once-only dialogs. */
+  seenVersion: {
+    scope: "client",
+    config: false,
+    type: String,
+    default: "",
   },
   lastSourceUuid: {
     scope: "client",
@@ -209,6 +222,7 @@ interface SettingTypes {
   lastPreset: string;
   lastSourceUuid: string;
   lastTypeSize: number;
+  seenVersion: string;
 }
 
 /**

@@ -265,11 +265,9 @@ function audienceTab(doc: any, pin: DpPinFlags): string {
       ]),
       "DP.studio.syncLevelHint"
     ) +
-    field(
-      "DP.studio.sticky",
-      checkbox("audience.sticky", pin.audience.sticky),
-      "DP.studio.stickyHint"
-    ) +
+    // No "remember who has discovered it": `audience.sticky` is read only under the
+    // `discovered` kind, which this tab deliberately does not offer (A9), so the box was
+    // a control that could not be honoured.
     `</section>`
   );
 }

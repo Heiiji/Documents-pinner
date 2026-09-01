@@ -135,6 +135,10 @@ describe("studioMarkup", () => {
     }
   });
 
+  it("does not offer 'remember who has discovered it', which only the unoffered kind reads", () => {
+    expect(studioMarkup(doc, pin(), "audience")).not.toContain('name="audience.sticky"');
+  });
+
   it("does not offer `discovered`, which cannot sync ownership or stick", () => {
     // Its visibility half works — each client tests its own line of sight — but the
     // sticky half needs a PLAYER's discovery to be persisted, and players never write
