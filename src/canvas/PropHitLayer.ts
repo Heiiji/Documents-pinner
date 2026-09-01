@@ -213,12 +213,15 @@ function belowTokens(): number {
   return candidates.length ? Math.min(...candidates) - 1 : 0;
 }
 
-/** The prop's footprint in scene space, rotated about its centre. */
+/**
+ * The prop's footprint in scene space, rotated about its centre — which is the document's
+ * own point on v14 (see `tileRect` in `transform.ts`), so the corners are laid out around
+ * `x, y` directly. Deriving a corner from the point first is what put every player's hit
+ * area half a card down and right of the paper.
+ */
 export function rotatedPolygon(doc: any, PIXI: any): any {
-  const { x, y, width, height } = doc;
+  const { x: cx, y: cy, width, height } = doc;
   const rotation = ((doc.rotation ?? 0) * Math.PI) / 180;
-  const cx = x + width / 2;
-  const cy = y + height / 2;
   const cos = Math.cos(rotation);
   const sin = Math.sin(rotation);
 

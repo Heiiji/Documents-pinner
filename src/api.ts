@@ -29,6 +29,7 @@ import {
 import { releaseAnchor, syncAnchor } from "./data/ownership-sync";
 import { resolveCard } from "./render/ContentResolver";
 import * as settings from "./settings";
+import { centreOf, docPositionFor } from "./canvas/transform";
 import type { DpAudience, DpMode, DpPinFlags, DpSource } from "./types/dp";
 
 declare const Hooks: any;
@@ -136,7 +137,10 @@ export interface PinPlacement {
   typeSize?: number;
   /** Margin in em of the type size. */
   margin?: number;
-  /** Place centred on (x, y) rather than with its top-left corner there. */
+  /**
+   * `x, y` name the centre — which is the point a TileDocument stores on v14 — rather
+   * than the top-left corner. The ghost and a Note both hand over a centre.
+   */
   centred?: boolean;
 }
 
@@ -178,9 +182,15 @@ export async function pinAt(scene: any, source: DpSource, at: PinPlacement): Pro
     effect: { ...defaultPin().effect, id: at.effectId ?? settings.get("lastPreset") },
   };
 
+  // The document's point is the tile's centre, so a centred placement stores the point
+  // as given and a corner placement moves in by half a box. It used to be the other way
+  // round, and every ghost-placed prop landed with its frame half a card from its paper.
+  const position = at.centred
+    ? { x: at.x, y: at.y }
+    : docPositionFor({ x: at.x, y: at.y, width, height });
   const anchor = await store.place(scene, pin, {
-    x: at.centred ? at.x - width / 2 : at.x,
-    y: at.centred ? at.y - height / 2 : at.y,
+    x: position.x,
+    y: position.y,
     width,
     height,
     rotation: at.rotation ?? 0,
@@ -422,6 +432,8 @@ export async function openLocally(anchorDoc: any): Promise<void> {
  * is the document's. A pin from before type sizes were stored is frozen first: fitting
  * is a resize, and a resize must never change the type, but a derived type follows the
  * short edge and would chase the new height. Prop mode only; a pin is one grid square.
+ * The top edge stays where it was: the sheet grows downward, as the store's `resize`
+ * guarantees for every caller.
  */
 export async function fitToContent(anchorDoc: any): Promise<boolean> {
   if (!isGM() || !anchorDoc) return false;
@@ -448,7 +460,10 @@ export async function fitToContent(anchorDoc: any): Promise<boolean> {
   return true;
 }
 
-/** Resize the anchor's box. The type size is on the pin and does not follow. */
+/**
+ * Resize the anchor's box, keeping its top-left corner where it was. The type size is on
+ * the pin and does not follow.
+ */
 export async function resize(
   anchorDoc: any,
   size: { width: number; height: number }
@@ -484,10 +499,7 @@ export async function resetSize(anchorDoc: any): Promise<boolean> {
 export function flash(anchorDoc: any): void {
   const canvas = cv();
   if (!canvas || !anchorDoc) return;
-  const origin = {
-    x: anchorDoc.x + anchorDoc.width / 2,
-    y: anchorDoc.y + anchorDoc.height / 2,
-  };
+  const origin = centreOf(anchorDoc);
 
   if (anchorDoc.hidden) {
     const controls = canvas.controls;
@@ -512,8 +524,7 @@ export async function locate(anchorDoc: any): Promise<void> {
   const canvas = cv();
   if (!canvas?.animatePan || !anchorDoc) return;
   await canvas.animatePan({
-    x: anchorDoc.x + anchorDoc.width / 2,
-    y: anchorDoc.y + anchorDoc.height / 2,
+    ...centreOf(anchorDoc),
     scale: Math.min(1, canvas.stage?.scale?.x ?? 1) < 0.6 ? 0.8 : undefined,
   });
 

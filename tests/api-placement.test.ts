@@ -48,6 +48,9 @@ describe("pinAt", () => {
     expect(created).toHaveLength(1);
     expect(created[0].width).toBe(400);
     expect(created[0].height).toBe(566);
+    // A corner placement: the stored point is the centre, half a box in from the corner.
+    expect(created[0].x).toBe(200);
+    expect(created[0].y).toBe(283);
     const pin = created[0][FLAG_PATH];
     expect(pin.display.typeSize).toBeCloseTo(400 / 26, 6);
     expect(pin.display.margin).toBe(DEFAULT_MARGIN_EM);
@@ -59,6 +62,14 @@ describe("pinAt", () => {
 
     expect(created[0].width).toBe(100);
     expect(created[0][FLAG_PATH].display.typeSize).toBeCloseTo(400 / 26, 6);
+  });
+
+  it("stores a centred placement's point as it is, because the point IS the centre", async () => {
+    const { pinAt } = await import("../src/api");
+    await pinAt(world.canvas.scene, source, { x: 640, y: 480, mode: "prop", centred: true });
+
+    expect(created[0].x).toBe(640);
+    expect(created[0].y).toBe(480);
   });
 
   it("honours a type size the caller chose", async () => {

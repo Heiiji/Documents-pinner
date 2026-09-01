@@ -5,9 +5,19 @@ import { cardMetrics, defaultPin, freezeMetrics, validatePin } from "../src/data
 
 const FLAG_PATH = `flags.${MODULE_ID}.${FLAGS.PIN}`;
 
-function tile(id: string, pin: unknown, size = { width: 400, height: 560 }) {
+function tile(
+  id: string,
+  pin: unknown,
+  size: { width: number; height: number; x?: number; y?: number; rotation?: number } = {
+    width: 400,
+    height: 560,
+  }
+) {
   return {
     id,
+    x: 0,
+    y: 0,
+    rotation: 0,
     ...size,
     flags: pin === undefined ? {} : { [MODULE_ID]: { [FLAGS.PIN]: pin } },
   };
@@ -81,7 +91,7 @@ describe("planMigration", () => {
   it("rewrites every version 1 payload, because the type size becomes stored", () => {
     const updates = planMigration([tile("a", v1Pin())]);
     expect(updates.length).toBe(1);
-    expect((updates[0][FLAG_PATH] as any).v).toBe(2);
+    expect((updates[0][FLAG_PATH] as any).v).toBe(3);
   });
 
   it("freezes the type size a prop is currently drawn at, so migrating changes nothing on the map", () => {
@@ -141,5 +151,65 @@ describe("planMigration", () => {
     stale.display = { ...stale.display, padding: 42 };
     const updates = planMigration([tile("ok", cleanPin()), tile("stale", stale)]);
     expect(updates.map((u) => u._id)).toEqual(["stale"]);
+  });
+});
+
+/**
+ * Version 3: the paper stays where it is.
+ *
+ * A card used to be placed with the document's point as its top-left corner; core drew
+ * the tile about that point. The sweep moves the point to where the card's centre already
+ * was, so nothing moves on the map and core's frame joins the paper.
+ */
+describe("re-anchoring a prop that was drawn as a card", () => {
+  const card = () => true;
+  const texture = () => false;
+  /** A prop exactly as 0.2.0 or 0.2.1 wrote it: current shape, version 2. */
+  const v2Prop = (): any => ({ ...cleanPin(), v: 2 });
+  const at = (x: number, y: number, rotation = 0) => ({ width: 400, height: 560, x, y, rotation });
+
+  it("moves the point to the centre the card already had", () => {
+    const [update] = planMigration([tile("a", v2Prop(), at(100, 240))], { drawnAsCard: card });
+    expect(update.x).toBe(300);
+    expect(update.y).toBe(520);
+    expect((update[FLAG_PATH] as any).v).toBe(3);
+  });
+
+  it("moves it the same at any rotation, because the card turned about that centre", () => {
+    const [update] = planMigration([tile("a", v2Prop(), at(100, 240, 90))], { drawnAsCard: card });
+    expect(update.x).toBe(300);
+    expect(update.y).toBe(520);
+  });
+
+  it("leaves a prop that was a texture on the mesh where core drew it", () => {
+    const [update] = planMigration([tile("a", v2Prop(), at(100, 240))], { drawnAsCard: texture });
+    expect(update).toBeDefined();
+    expect("x" in update).toBe(false);
+  });
+
+  it("leaves a pin-mode anchor alone: core drew its icon at the point", () => {
+    const pin = { ...v2Prop(), mode: "pin" };
+    const [update] = planMigration([tile("a", pin, { ...at(100, 240), width: 100, height: 100 })], {
+      drawnAsCard: card,
+    });
+    expect("x" in update).toBe(false);
+  });
+
+  it("treats a payload with no version as older than the move", () => {
+    const pin = v2Prop();
+    delete pin.v;
+    const [update] = planMigration([tile("a", pin, at(100, 240))], { drawnAsCard: card });
+    expect(update.x).toBe(300);
+  });
+
+  it("never moves twice", () => {
+    const [first] = planMigration([tile("a", v2Prop(), at(100, 240))], { drawnAsCard: card });
+    const moved = tile("a", first[FLAG_PATH], at(first.x as number, first.y as number));
+    expect(planMigration([moved], { drawnAsCard: card })).toEqual([]);
+  });
+
+  it("does not move without a client to ask", () => {
+    const [update] = planMigration([tile("a", v2Prop(), at(100, 240))]);
+    expect("x" in update).toBe(false);
   });
 });

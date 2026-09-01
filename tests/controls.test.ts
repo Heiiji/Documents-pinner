@@ -101,5 +101,7 @@ describe("locate", () => {
 
     expect(activated).toBe(1);
     expect(controlled).toHaveLength(1);
+    // The pan lands on the document's point, which is the tile's centre.
+    expect(world.canvas.animatePan).toHaveBeenCalledWith(expect.objectContaining({ x: 100, y: 100 }));
   });
 });

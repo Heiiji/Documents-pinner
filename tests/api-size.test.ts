@@ -59,11 +59,20 @@ afterEach(() => uninstallWorld());
 const lastWrite = () => tile.updates[tile.updates.length - 1];
 
 describe("fitToContent", () => {
-  it("writes the measured height and keeps the width", async () => {
+  it("writes the measured height, keeps the width, and keeps the top edge where it was", async () => {
     const { fitToContent } = await import("../src/api");
     expect(await fitToContent(tile)).toBe(true);
-    expect(lastWrite()).toEqual({ width: 400, height: 812 });
+    // The document's point is the centre: 560 → 812 tall moves it down by 126 so the
+    // sheet grows downward from the same top edge.
+    expect(lastWrite()).toEqual({ x: 0, y: 126, width: 400, height: 812 });
     expect(tile.height).toBe(812);
+  });
+
+  it("keeps a rotated prop's own corner, growing along its own edges", async () => {
+    tile.rotation = 90;
+    const { fitToContent } = await import("../src/api");
+    await fitToContent(tile);
+    expect(lastWrite()).toEqual({ x: -126, y: 0, width: 400, height: 812 });
   });
 
   it("clamps into the range a placeable can occupy", async () => {
@@ -110,7 +119,7 @@ describe("resetSize", () => {
     tile.height = 300;
     const { resetSize } = await import("../src/api");
     expect(await resetSize(tile)).toBe(true);
-    expect(lastWrite()).toEqual({ width: 400, height: 566 });
+    expect(lastWrite()).toEqual({ x: -250, y: 133, width: 400, height: 566 });
     expect(tile.flags[MODULE_ID][FLAGS.PIN].display.typeSize).toBe(12);
   });
 
@@ -121,6 +130,6 @@ describe("resetSize", () => {
     world = installWorld({ isGM: true, tiles: [tile] });
     const { resetSize } = await import("../src/api");
     await resetSize(tile);
-    expect(lastWrite()).toEqual({ width: 100, height: 100 });
+    expect(lastWrite()).toEqual({ x: -100, y: -230, width: 100, height: 100 });
   });
 });

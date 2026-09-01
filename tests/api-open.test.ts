@@ -106,7 +106,8 @@ describe("flash", () => {
     world.canvas.controls = { handlePing: vi.fn() };
     const { flash } = await import("../src/api");
     flash(tile);
-    expect(world.canvas.ping).toHaveBeenCalledWith({ x: 200, y: 280 });
+    // The document's point IS the centre; the ping lands on it.
+    expect(world.canvas.ping).toHaveBeenCalledWith({ x: 0, y: 0 });
     expect(world.canvas.controls.handlePing).not.toHaveBeenCalled();
   });
 

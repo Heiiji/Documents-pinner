@@ -274,6 +274,20 @@ describe("placement elevation", () => {
     expect(created[0].elevation).toBe(0);
   });
 
+  it("writes the cursor point as the document's point: the ghost is centred on it, and so is the tile", async () => {
+    arm(source);
+    const board = document.getElementById("board")!;
+    board.dispatchEvent(
+      new MouseEvent("pointermove", { bubbles: true, clientX: 700, clientY: 500 })
+    );
+    board.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0 }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(created).toHaveLength(1);
+    expect(created[0].x).toBe(700);
+    expect(created[0].y).toBe(500);
+  });
+
   it("places once for two presses while the first is still landing", async () => {
     arm(source);
     const board = document.getElementById("board")!;

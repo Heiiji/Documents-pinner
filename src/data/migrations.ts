@@ -23,6 +23,11 @@
  * makes the next resize a change of window rather than a change of zoom. A pin-mode
  * anchor with no remembered prop size is left to decide when it becomes a prop.
  *
+ * Version 3 changes nothing in the payload and one thing on the tile: the point of every
+ * prop that was drawn as a card moves by half a box, so the paper stays exactly where the
+ * GM left it and core's frame — which was always half a box away — joins it there. See
+ * `reanchor`.
+ *
  * `planMigration` is pure and unit-tested; everything below it performs the writes.
  */
 
@@ -30,8 +35,14 @@ import { logger } from "../log";
 import { FLAGS, MODULE_ID, SCHEMA_VERSION } from "../const";
 import { g, internal, isPrimaryGM, notify } from "../fvtt";
 import * as settings from "../settings";
+import { resolveSourceSync } from "../api";
+import { pdfSourceOf } from "../render/PdfPage";
+import { docPositionFor } from "../canvas/transform";
 import { freezeMetrics, validatePin } from "./pin-schema";
 import type { DpPinFlags } from "../types/dp";
+
+/** The payload version from which a document's point is stored as the tile's centre. */
+const CENTRE_VERSION = 3;
 
 const log = logger("migrate");
 
@@ -52,11 +63,24 @@ export interface MigrationUpdate {
   [flagPath: string]: unknown;
 }
 
+export interface MigrationOptions {
+  /**
+   * Whether a prop was drawn as a card over the canvas — with the document's point as
+   * its top-left corner — before version 3 read that point as the centre core always
+   * took it for. Defaults to never, which is right for a pure caller with no client to
+   * ask and wrong for a world; `migrateScene` passes the real answer.
+   */
+  drawnAsCard?: (pin: DpPinFlags) => boolean;
+}
+
 /**
  * PURE. Given tile-like records, return the updates that would bring their payloads to
  * the current schema — an empty array when there is nothing to do.
  */
-export function planMigration(tiles: readonly any[]): MigrationUpdate[] {
+export function planMigration(
+  tiles: readonly any[],
+  options: MigrationOptions = {}
+): MigrationUpdate[] {
   const updates: MigrationUpdate[] = [];
 
   for (const tile of tiles) {
@@ -66,15 +90,58 @@ export function planMigration(tiles: readonly any[]): MigrationUpdate[] {
     const validated = validatePin(stored).pin;
     const size = propSizeOf(tile, validated);
     const pin = size ? freezeMetrics(validated, size) : validated;
-    if (stable(pin) === stable(stored)) continue;
+    const moved = reanchor(tile, stored, pin, options);
+    if (!moved && stable(pin) === stable(stored)) continue;
 
     updates.push({
       _id: tile.id,
       [`flags.${MODULE_ID}.${FLAGS.PIN}`]: pin,
+      ...(moved ?? {}),
     });
   }
 
   return updates;
+}
+
+/**
+ * Version 3: the paper stays where it is.
+ *
+ * Until 0.2.2 a card was placed with the document's point as its top-left corner, while
+ * core drew the tile — its frame, its handles, its own hit test — about that point. The
+ * two were half a box apart, and the paper is the one the GM placed by eye. So a prop
+ * that was a card has its point moved to where the paper's centre already was, which is
+ * where core will now draw the frame too. Rotation changes nothing: the card turned about
+ * its own centre, and that centre is the one point both readings agree on.
+ *
+ * A PDF was core's texture on core's mesh, drawn about the point, and stays put; so does
+ * a pin-mode icon, drawn by core; so does anything written at version 3 or later.
+ */
+function reanchor(
+  tile: any,
+  stored: any,
+  pin: DpPinFlags,
+  options: MigrationOptions
+): { x: number; y: number } | null {
+  const version = Number(stored?.v);
+  if (Number.isFinite(version) && version >= CENTRE_VERSION) return null;
+  if (pin.mode !== "prop" || !options.drawnAsCard?.(pin)) return null;
+
+  const box = { x: Number(tile?.x), y: Number(tile?.y), width: Number(tile?.width), height: Number(tile?.height) };
+  if (!Object.values(box).every(Number.isFinite)) return null;
+  const centre = docPositionFor(box);
+  return { x: Math.round(centre.x), y: Math.round(centre.y) };
+}
+
+/**
+ * Whether a prop has been drawn as a card on this client.
+ *
+ * HTML never reaches a texture — an SVG `foreignObject` taints the canvas, DESIGN A10 —
+ * so every prop but a PDF was a card. A PDF was a texture on the tile's mesh, drawn by
+ * core about the point, unless this client had chosen the DOM path for everything.
+ */
+function drawnAsCard(pin: DpPinFlags): boolean {
+  if (settings.get("rendering") === "dom") return true;
+  return pdfSourceOf(resolveSourceSync(pin)) === null;
 }
 
 /**
@@ -93,16 +160,23 @@ function propSizeOf(tile: any, pin: DpPinFlags): { width: number; height: number
 
 /** How many pins on this scene would be rewritten. Used to size the offer. */
 export function pendingCount(scene: any): number {
-  return planMigration(scene?.tiles?.contents ?? []).length;
+  return planMigration(scene?.tiles?.contents ?? [], { drawnAsCard }).length;
 }
 
 /** Migrate one scene. Returns the number of anchors rewritten. */
 export async function migrateScene(scene: any): Promise<number> {
-  const updates = planMigration(scene?.tiles?.contents ?? []);
+  const updates = planMigration(scene?.tiles?.contents ?? [], { drawnAsCard });
   if (!updates.length) return 0;
 
   await scene.updateEmbeddedDocuments("Tile", updates, internal());
-  log.info(`migrated ${updates.length} pin(s) on "${scene.name}"`);
+  const moved = updates.filter((update) => "x" in update).length;
+  log.info(
+    `migrated ${updates.length} pin(s) on "${scene.name}"` +
+      (moved ? `, re-anchored ${moved} prop(s) at the paper's centre` : "")
+  );
+  // Said once, because a GM who has just seen the frame jump onto the paper deserves to
+  // know that the map did not change.
+  if (moved) notify({ key: "DP.migration.reanchored", data: { count: moved } });
   return updates.length;
 }
 

@@ -135,9 +135,11 @@ describe("the focus reader", () => {
     await openReader(tile);
     await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
 
+    // Centred on the pin's own point, which is the tile's centre.
     expect(reader()!.style.width).toBe("400px");
     expect(reader()!.style.height).toBe("566px");
-    expect(reader()!.style.left).toBe("-150px");
+    expect(reader()!.style.left).toBe("-200px");
+    expect(reader()!.style.top).toBe("-283px");
   });
 
   it("brings the view in first when the type is too small to read, and not otherwise", async () => {
@@ -169,12 +171,12 @@ describe("the focus reader", () => {
     await openReader(tile);
     const board = document.getElementById("board")!;
 
-    // Inside the 200x280 prop at the origin.
-    board.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, clientX: 100, clientY: 100 }));
+    // Inside the 200x280 prop centred on the origin, which spans -100..100 by -140..140.
+    board.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, clientX: 50, clientY: 50 }));
     expect(reader()).not.toBeNull();
 
-    // Beside it.
-    board.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, clientX: 900, clientY: 900 }));
+    // Just beside it — inside the old reading of the point as a corner, and not the prop.
+    board.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, clientX: 150, clientY: 150 }));
     expect(reader()).toBeNull();
   });
 

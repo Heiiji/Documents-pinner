@@ -4,7 +4,10 @@ import {
   apparentWidth,
   applyInverseMat,
   applyMat,
+  centreAfterResize,
+  centreOf,
   containsPoint,
+  docPositionFor,
   invertMat,
   rectsIntersect,
   rotatedBounds,
@@ -12,6 +15,7 @@ import {
   sameMat,
   scaleOf,
   screenPlacement,
+  tileRect,
   toCssMatrix,
   type Mat,
   viewportRect,
@@ -180,5 +184,69 @@ describe("containsPoint", () => {
     // Rotated about its centre (200, 150) the 200x100 box now spans y 50..250, x 150..250.
     expect(containsPoint(tilted, { x: 200, y: 60 })).toBe(true);
     expect(containsPoint(tilted, { x: 110, y: 150 })).toBe(false);
+  });
+});
+
+/**
+ * The one measured fact under every placement: on v14 a TileDocument's point is the
+ * tile's CENTRE. `tileRect` is the only function allowed to know it; everything that
+ * takes a rect takes the top-left rect it returns.
+ */
+describe("tileRect", () => {
+  const doc = { x: 300, y: 400, width: 400, height: 560, rotation: 15 };
+
+  it("returns the top-left rect around a centre-anchored document, with its rotation", () => {
+    expect(tileRect(doc)).toEqual({ x: 100, y: 120, width: 400, height: 560, rotation: 15 });
+  });
+
+  it("treats a missing rotation as none", () => {
+    expect(tileRect({ x: 0, y: 0, width: 10, height: 10 }).rotation).toBe(0);
+  });
+
+  it("centreOf is the document's own point", () => {
+    expect(centreOf(doc)).toEqual({ x: 300, y: 400 });
+  });
+
+  it("docPositionFor inverts tileRect", () => {
+    expect(docPositionFor(tileRect(doc))).toEqual({ x: 300, y: 400 });
+  });
+
+  it("rotatedBounds(tileRect(doc)) grows about the document's point", () => {
+    const b = rotatedBounds(tileRect({ ...doc, width: 100, height: 100, rotation: 45 }));
+    close(b.x + b.width / 2, 300);
+    close(b.y + b.height / 2, 400);
+    close(b.width, Math.SQRT2 * 100);
+  });
+
+  it("containsPoint(tileRect(doc)) follows the rotation about the document's point", () => {
+    const tilted = tileRect({ x: 200, y: 150, width: 200, height: 100, rotation: 90 });
+    // A 200x100 box turned on its side about (200,150) spans x 150..250, y 50..250.
+    expect(containsPoint(tilted, { x: 200, y: 60 })).toBe(true);
+    expect(containsPoint(tilted, { x: 110, y: 150 })).toBe(false);
+    expect(containsPoint(tilted, { x: 200, y: 150 })).toBe(true);
+  });
+});
+
+describe("centreAfterResize", () => {
+  it("keeps the top-left corner fixed when the height grows", () => {
+    const doc = { x: 300, y: 400, width: 400, height: 566, rotation: 0 };
+    const next = centreAfterResize(doc, { width: 400, height: 812 });
+    close(next.x, 300);
+    close(next.y, 523);
+    // The corner did not move.
+    close(tileRect({ ...doc, ...next, height: 812 }).y, tileRect(doc).y);
+  });
+
+  it("keeps the local corner fixed under rotation, so a tilted sheet grows along its own edges", () => {
+    const doc = { x: 300, y: 400, width: 400, height: 566, rotation: 90 };
+    const next = centreAfterResize(doc, { width: 400, height: 812 });
+    // Turned 90° clockwise, the sheet's "down" points left on screen.
+    close(next.x, 177);
+    close(next.y, 400);
+  });
+
+  it("is the identity for an unchanged size", () => {
+    const doc = { x: 12, y: 34, width: 50, height: 60, rotation: 33 };
+    expect(centreAfterResize(doc, { width: 50, height: 60 })).toEqual({ x: 12, y: 34 });
   });
 });

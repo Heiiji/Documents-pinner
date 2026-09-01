@@ -22,35 +22,40 @@ const pairs = (poly: FakePolygon) => {
   return out;
 };
 
+/**
+ * The document's point is the tile's CENTRE on v14 — measured, see `tileRect` — so the
+ * footprint is laid out around it. Every corner used to be derived from the point first,
+ * which put each player's hit area half a card down and right of the paper.
+ */
 describe("rotatedPolygon", () => {
-  it("traces the four corners of an unrotated prop", () => {
+  it("traces the four corners of an unrotated prop around its point", () => {
     const poly = rotatedPolygon({ x: 100, y: 200, width: 40, height: 20, rotation: 0 }, PIXI);
     expect(pairs(poly)).toEqual([
-      [100, 200],
-      [140, 200],
-      [140, 220],
-      [100, 220],
+      [80, 190],
+      [120, 190],
+      [120, 210],
+      [80, 210],
     ]);
   });
 
-  it("rotates about the centre, not the corner, matching TileDocument", () => {
+  it("rotates about the point, matching the tile core draws", () => {
     const poly = rotatedPolygon({ x: 0, y: 0, width: 100, height: 100, rotation: 90 }, PIXI);
     const points = pairs(poly);
     // A square rotated 90° about its own centre covers exactly the same ground.
     for (const [px, py] of points) {
-      expect(Math.abs(px - 50)).toBeCloseTo(50, 6);
-      expect(Math.abs(py - 50)).toBeCloseTo(50, 6);
+      expect(Math.abs(px)).toBeCloseTo(50, 6);
+      expect(Math.abs(py)).toBeCloseTo(50, 6);
     }
   });
 
-  it("keeps the centre fixed at any angle", () => {
+  it("keeps the point at the centre at any angle", () => {
     for (const rotation of [0, 17, 45, 90, 180, 275, 359]) {
       const poly = rotatedPolygon({ x: 10, y: 30, width: 80, height: 40, rotation }, PIXI);
       const points = pairs(poly);
       const cx = points.reduce((s, p) => s + p[0], 0) / 4;
       const cy = points.reduce((s, p) => s + p[1], 0) / 4;
-      expect(cx, `rotation ${rotation}`).toBeCloseTo(50, 6);
-      expect(cy, `rotation ${rotation}`).toBeCloseTo(50, 6);
+      expect(cx, `rotation ${rotation}`).toBeCloseTo(10, 6);
+      expect(cy, `rotation ${rotation}`).toBeCloseTo(30, 6);
     }
   });
 
@@ -79,7 +84,7 @@ describe("rotatedPolygon", () => {
 
   it("treats a missing rotation as none", () => {
     const poly = rotatedPolygon({ x: 0, y: 0, width: 10, height: 10 }, PIXI);
-    expect(pairs(poly)[0]).toEqual([0, 0]);
+    expect(pairs(poly)[0]).toEqual([-5, -5]);
   });
 
   it("emits eight numbers, which is what PIXI.Polygon expects", () => {

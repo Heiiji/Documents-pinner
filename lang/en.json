@@ -116,6 +116,7 @@
   "DP.keys.toggleModeHint": "The same anchor either way, so nothing that refers to the pin breaks.",
   "DP.migration.done": "Updated {count} pin(s) to the current format.",
   "DP.migration.prompt": "{pinCount} pin(s) on {sceneCount} scene(s) you have not opened were made with an earlier version. Update them now? They already work either way; this only rewrites them into the current format.",
+  "DP.migration.reanchored": "Re-anchored {count} prop(s): the selection frame and the resize grip now sit on the paper. Nothing moved on the map.",
   "DP.migration.title": "Documents Pinner — update pins",
   "DP.module.title": "Documents Pinner",
   "DP.notice.cannotOpenYet": "You can see this pin, but the GM has not granted access to the document yet.",

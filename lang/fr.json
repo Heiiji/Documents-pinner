@@ -116,6 +116,7 @@
   "DP.keys.toggleModeHint": "Le même ancrage dans les deux cas : rien de ce qui référence l'épingle ne casse.",
   "DP.migration.done": "{count} épingle(s) mises à jour au format actuel.",
   "DP.migration.prompt": "{pinCount} épingle(s) réparties sur {sceneCount} scène(s) que vous n'avez pas ouvertes proviennent d'une version antérieure. Les mettre à jour maintenant ? Elles fonctionnent déjà dans les deux cas ; il s'agit seulement de les réécrire au format actuel.",
+  "DP.migration.reanchored": "{count} accessoire(s) ré-ancré(s) : le cadre de sélection et la poignée de redimensionnement sont désormais sur le papier. Rien n'a bougé sur la carte.",
   "DP.migration.title": "Documents Pinner — mise à jour des épingles",
   "DP.module.title": "Documents Pinner",
   "DP.notice.cannotOpenYet": "Vous voyez cette épingle, mais le MJ n'a pas encore accordé l'accès au document.",

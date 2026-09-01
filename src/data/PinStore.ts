@@ -23,6 +23,7 @@
 
 import { DELETE_PREFIX, FLAGS, MODULE_ID } from "../const";
 import { g, internal } from "../fvtt";
+import { centreAfterResize } from "../canvas/transform";
 import type { DpMode, DpPinFlags } from "../types/dp";
 import { anchorHidden } from "./audience";
 import { readPin } from "./PinData";
@@ -203,6 +204,10 @@ export function update(doc: any, patch: PinPatch): Promise<any> {
  *
  * The size being left is remembered before the size being entered is applied, so a GM
  * who hand-resized a prop gets that prop back rather than a freshly derived one.
+ *
+ * The point is deliberately left alone, unlike `resize`: a document's point is the tile's
+ * centre, so a switch keeps the centre — the marker's spot becomes the paper's middle and
+ * back. A mode switch is a swap of object, not a growth of one.
  */
 export function convertMode(
   doc: any,
@@ -236,7 +241,14 @@ export function convertMode(
 }
 
 /**
- * Resize the anchor. The one write that touches nothing but the box.
+ * Resize the anchor, keeping its top-left corner where it was.
+ *
+ * The box, and the point that keeps the box's corner put. A document's point is the
+ * tile's centre, so a bare width and height would grow a sheet about its middle and slide
+ * its first line up over whatever it lay against; `centreAfterResize` moves the point so
+ * the sheet grows down and to the right in its own frame — the way core's handle grows a
+ * tile, and the way a page fills. Every caller — fit, reset, the Studio's fields — gets
+ * the same gesture.
  *
  * `geometry` is deliberately not written here: it is read only when RETURNING to a
  * mode, and `convertMode` captures the live size on the way out, so a copy written now
@@ -245,11 +257,11 @@ export function convertMode(
 export function resize(doc: any, size: { width: number; height: number }): Promise<any> {
   return enqueue(doc?.id ?? "", async () => {
     if (!readPin(doc)) return null;
+    const width = Math.max(1, Math.round(size.width));
+    const height = Math.max(1, Math.round(size.height));
+    const centre = centreAfterResize(doc, { width, height });
     return doc.update(
-      {
-        width: Math.max(1, Math.round(size.width)),
-        height: Math.max(1, Math.round(size.height)),
-      },
+      { x: Math.round(centre.x), y: Math.round(centre.y), width, height },
       internal()
     );
   });

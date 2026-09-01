@@ -31,8 +31,11 @@ function fakeDoc(overrides: Record<string, any> = {}) {
   const doc: any = {
     id: overrides.id ?? "t1",
     uuid: `Scene.s1.Tile.${overrides.id ?? "t1"}`,
+    x: overrides.x ?? 0,
+    y: overrides.y ?? 0,
     width: overrides.width ?? 400,
     height: overrides.height ?? 560,
+    rotation: overrides.rotation ?? 0,
     sort: overrides.sort ?? 0,
     hidden: true,
     flags: { [MODULE_ID]: { [FLAGS.PIN]: pin } },
@@ -41,6 +44,8 @@ function fakeDoc(overrides: Record<string, any> = {}) {
     async update(data: any, options: any) {
       this.writes.push({ data, options });
       if (data[FLAG_PATH]) this.flags[MODULE_ID][FLAGS.PIN] = data[FLAG_PATH];
+      if (typeof data.x === "number") this.x = data.x;
+      if (typeof data.y === "number") this.y = data.y;
       if (typeof data.width === "number") this.width = data.width;
       if (typeof data.height === "number") this.height = data.height;
       if (typeof data.hidden === "boolean") this.hidden = data.hidden;
@@ -346,13 +351,26 @@ describe("the type size and the mode switch", () => {
 });
 
 describe("resize", () => {
-  it("writes width and height through the queue with the internal option, and nothing else", async () => {
+  it("writes the box and the point that keeps its corner, through the queue with the internal option", async () => {
     const doc = fakeDoc();
     await resize(doc, { width: 640.4, height: 900.6 });
     expect(doc.writes.length).toBe(1);
-    expect(Object.keys(doc.writes[0].data).sort()).toEqual(["height", "width"]);
-    expect(doc.writes[0].data).toEqual({ width: 640, height: 901 });
+    expect(Object.keys(doc.writes[0].data).sort()).toEqual(["height", "width", "x", "y"]);
+    // The point is the centre: 400x560 → 640x901 moves it by half the growth.
+    expect(doc.writes[0].data).toEqual({ x: 120, y: 171, width: 640, height: 901 });
     expect(doc.writes[0].options[INTERNAL_OPTION]).toBe(true);
+  });
+
+  it("keeps the top-left corner: a taller sheet's point moves down by half the growth", async () => {
+    const doc = fakeDoc();
+    await resize(doc, { width: 400, height: 812 });
+    expect(doc.writes[0].data).toEqual({ x: 0, y: 126, width: 400, height: 812 });
+  });
+
+  it("grows a rotated sheet along its own edges, not the screen's", async () => {
+    const doc = fakeDoc({ rotation: 90 });
+    await resize(doc, { width: 400, height: 812 });
+    expect(doc.writes[0].data).toEqual({ x: -126, y: 0, width: 400, height: 812 });
   });
 
   it("refuses a tile that is not a pin", async () => {
@@ -364,6 +382,6 @@ describe("resize", () => {
   it("never writes a size below one pixel", async () => {
     const doc = fakeDoc();
     await resize(doc, { width: 0, height: -5 });
-    expect(doc.writes[0].data).toEqual({ width: 1, height: 1 });
+    expect(doc.writes[0].data).toMatchObject({ width: 1, height: 1 });
   });
 });

@@ -11,6 +11,10 @@
  *
  * Scene padding needs no correction anywhere here: placeable `x`/`y` are already in
  * canvas coordinates, which include padding (`canvas.dimensions.rect` starts at 0,0).
+ *
+ * What `x`/`y` MEAN is the one fact everything below rests on, and it is measured, not
+ * read: on v14 a TileDocument's point is the tile's CENTRE. `tileRect` is the only place
+ * that knowledge lives; every rect function here takes a top-left rect and says so.
  */
 
 export interface Mat {
@@ -34,7 +38,81 @@ export interface Rect {
   height: number;
 }
 
+/**
+ * What a placeable document carries. On v14 `x, y` is the placeable's CENTRE.
+ *
+ * Measured on 14.365, not read from the types: `object.center` equals the document's own
+ * point, `object.bounds` starts half a width and half a height before it, and the mesh is
+ * anchored at 0.5 there. The type definitions shipped with 14.366 still call the point
+ * "the top-left corner", which is exactly why `checkTileGeometry` in `PinnedTile.ts`
+ * asks the live canvas at every draw and says so if the answer ever changes.
+ */
+export interface DocGeometry {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  rotation?: number;
+}
+
+/** A top-left rect with the rotation it is drawn at, about its own centre. */
+export type PlacedRect = Rect & { rotation: number };
+
 export const IDENTITY: Mat = { a: 1, b: 0, c: 0, d: 1, tx: 0, ty: 0 };
+
+/**
+ * Core's `object.bounds` for a document: the unrotated top-left rect around its centre.
+ * Pass the result, never the document, to the rect functions below.
+ */
+export function tileRect(doc: DocGeometry): PlacedRect {
+  return {
+    x: doc.x - doc.width / 2,
+    y: doc.y - doc.height / 2,
+    width: doc.width,
+    height: doc.height,
+    rotation: doc.rotation ?? 0,
+  };
+}
+
+/** The document's own point. Named so a reader never has to remember which convention holds. */
+export function centreOf(doc: DocGeometry): Point {
+  return { x: doc.x, y: doc.y };
+}
+
+/** The `x, y` a document must store for `tileRect` to return `rect`: the inverse of `tileRect`. */
+export function docPositionFor(rect: Rect): Point {
+  return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
+}
+
+/**
+ * The centre a document must move to so that its LOCAL top-left corner stays put across
+ * a resize.
+ *
+ * A sheet grows down and to the right in its own frame — the way core's handle grows a
+ * tile, the way a page fills as it is written — so fitting a prop to its content keeps
+ * its top edge where the GM laid it, and a tilted letter grows along its own edges rather
+ * than swelling about its middle.
+ */
+export function centreAfterResize(
+  doc: DocGeometry,
+  size: { width: number; height: number }
+): Point {
+  const dx = (size.width - doc.width) / 2;
+  const dy = (size.height - doc.height) / 2;
+  const rot = ((doc.rotation ?? 0) * Math.PI) / 180;
+  const cos = exact(Math.cos(rot));
+  const sin = exact(Math.sin(rot));
+  return { x: doc.x + dx * cos - dy * sin, y: doc.y + dx * sin + dy * cos };
+}
+
+/**
+ * A trig result with the floating-point dust blown off, so a quarter turn is exactly a
+ * quarter turn: `cos(π/2)` is 6e-17, and a rectangle placed from it lands at
+ * `-2.8e-14px` — harmless to a renderer, ugly in a style attribute and wrong in a test.
+ */
+function exact(value: number): number {
+  return Math.round(value * 1e12) / 1e12;
+}
 
 export function applyMat(m: Mat, p: Point): Point {
   return { x: m.a * p.x + m.c * p.y + m.tx, y: m.b * p.x + m.d * p.y + m.ty };
@@ -103,56 +181,57 @@ export function rectsIntersect(a: Rect, b: Rect): boolean {
 }
 
 /**
- * The axis-aligned scene-space bounds of a rotated placeable, used for culling.
- * `rotation` is in degrees, about the placeable's centre, matching TileDocument.
+ * The axis-aligned scene-space bounds of a rotated top-left rect, used for culling.
+ * `rotation` is in degrees, about the rect's own centre. For a document, pass
+ * `tileRect(doc)`.
  */
-export function rotatedBounds(doc: Rect & { rotation?: number }): Rect {
-  const rot = ((doc.rotation ?? 0) * Math.PI) / 180;
-  if (rot === 0) return { x: doc.x, y: doc.y, width: doc.width, height: doc.height };
+export function rotatedBounds(rect: Rect & { rotation?: number }): Rect {
+  const rot = ((rect.rotation ?? 0) * Math.PI) / 180;
+  if (rot === 0) return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
 
-  const cos = Math.abs(Math.cos(rot));
-  const sin = Math.abs(Math.sin(rot));
-  const w = doc.width * cos + doc.height * sin;
-  const h = doc.width * sin + doc.height * cos;
+  const cos = Math.abs(exact(Math.cos(rot)));
+  const sin = Math.abs(exact(Math.sin(rot)));
+  const w = rect.width * cos + rect.height * sin;
+  const h = rect.width * sin + rect.height * cos;
   return {
-    x: doc.x + doc.width / 2 - w / 2,
-    y: doc.y + doc.height / 2 - h / 2,
+    x: rect.x + rect.width / 2 - w / 2,
+    y: rect.y + rect.height / 2 - h / 2,
     width: w,
     height: h,
   };
 }
 
 /**
- * Whether a scene-space point lies inside a rotated placeable.
+ * Whether a scene-space point lies inside a rotated top-left rect.
  *
  * Exact, not the axis-aligned bounds: the reader uses this to tell a press on the prop
  * being read from a press beside it, and a tilted letter's bounding box covers a good
- * deal of map that is not letter.
+ * deal of map that is not letter. For a document, pass `tileRect(doc)`.
  */
-export function containsPoint(doc: Rect & { rotation?: number }, p: Point): boolean {
-  const cx = doc.x + doc.width / 2;
-  const cy = doc.y + doc.height / 2;
-  const rot = (-(doc.rotation ?? 0) * Math.PI) / 180;
+export function containsPoint(rect: Rect & { rotation?: number }, p: Point): boolean {
+  const cx = rect.x + rect.width / 2;
+  const cy = rect.y + rect.height / 2;
+  const rot = (-(rect.rotation ?? 0) * Math.PI) / 180;
   const dx = p.x - cx;
   const dy = p.y - cy;
   const lx = dx * Math.cos(rot) - dy * Math.sin(rot);
   const ly = dx * Math.sin(rot) + dy * Math.cos(rot);
-  return Math.abs(lx) <= doc.width / 2 && Math.abs(ly) <= doc.height / 2;
+  return Math.abs(lx) <= rect.width / 2 && Math.abs(ly) <= rect.height / 2;
 }
 
-/** Where a prop lands on screen, for positioning the focused DOM reader. */
+/** Where a top-left rect lands on screen. For a document, pass `tileRect(doc)`. */
 export function screenPlacement(
   m: Mat,
-  doc: Rect & { rotation?: number }
+  rect: Rect & { rotation?: number }
 ): { cx: number; cy: number; width: number; height: number; angle: number } {
-  const centre = applyMat(m, { x: doc.x + doc.width / 2, y: doc.y + doc.height / 2 });
+  const centre = applyMat(m, { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 });
   const k = scaleOf(m);
   return {
     cx: centre.x,
     cy: centre.y,
-    width: doc.width * k,
-    height: doc.height * k,
-    angle: (doc.rotation ?? 0) + rotationOf(m),
+    width: rect.width * k,
+    height: rect.height * k,
+    angle: (rect.rotation ?? 0) + rotationOf(m),
   };
 }
 

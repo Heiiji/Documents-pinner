@@ -26,7 +26,7 @@ import { t } from "../i18n";
 import { escapeAttr } from "../html";
 import { readPin } from "../data/PinData";
 import { cardMetrics, naturalSize } from "../data/pin-schema";
-import { containsPoint, scaleOf, screenToScene, stageMatrix } from "../canvas/transform";
+import { centreOf, containsPoint, scaleOf, screenToScene, stageMatrix, tileRect } from "../canvas/transform";
 import { resolveCard } from "../render/ContentResolver";
 import { propManager } from "../canvas/PropManager";
 import { leave, mount, write } from "./OverlayRoot";
@@ -64,19 +64,15 @@ let openGeometry: Placed | null = null;
  * place gets a natural-size sheet centred on it instead.
  */
 export function readerGeometry(doc: any, pin: DpPinFlags, gridSize: number): Placed {
-  if (pin.mode === "prop") {
-    return {
-      x: doc.x,
-      y: doc.y,
-      width: doc.width,
-      height: doc.height,
-      rotation: doc.rotation ?? 0,
-    };
-  }
+  // Core's own rectangle for the tile, never the document's point as a corner: the
+  // point is the centre, and a reader placed from it as a corner opened half a card
+  // down and right of the prop it was reading.
+  if (pin.mode === "prop") return tileRect(doc);
   const natural = naturalSize("prop", gridSize);
+  const centre = centreOf(doc);
   return {
-    x: doc.x + doc.width / 2 - natural.width / 2,
-    y: doc.y + doc.height / 2 - natural.height / 2,
+    x: centre.x - natural.width / 2,
+    y: centre.y - natural.height / 2,
     width: natural.width,
     height: natural.height,
     rotation: 0,
@@ -143,11 +139,7 @@ export async function openReader(tileDoc: any): Promise<void> {
     cfg()?.Canvas?.maxZoom ?? 3
   );
   if (scale !== null && canvas?.animatePan) {
-    await canvas.animatePan({
-      x: geometry.x + geometry.width / 2,
-      y: geometry.y + geometry.height / 2,
-      scale,
-    });
+    await canvas.animatePan({ ...centreOf(tileDoc), scale });
     if (token !== openToken) return;
   }
 

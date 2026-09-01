@@ -14,8 +14,11 @@ export const MODULE_ID = "documents-pinner";
  * 2: the type size and margin are stored per pin (a prop is a window, not a zoom), and
  *    four fields nothing read are gone — `display.showLabel`, `display.labelPosition`,
  *    `interaction.openPage`, `interaction.clickThrough` (folded into `open: "never"`).
+ * 3: nothing in the payload changes. The bump marks the anchors whose stored point has
+ *    been re-read as the centre core always took it for — see `migrations.ts` — so the
+ *    move happens once and never to a pin written after it.
  */
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
 /** Version of the `flags[MODULE_ID].grants` ownership ledger. */
 export const LEDGER_VERSION = 1;
