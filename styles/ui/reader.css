@@ -22,8 +22,10 @@
 
   /* The signature move: the prop was soft, the reader is sharp. The transition runs
      on the compositor — opacity and filter only, no layout, no backdrop-filter. */
+  /* The one settle in the module, because the reader is UI at that moment. */
   opacity: 0;
   filter: blur(6px);
+  scale: 0.98;
   transition:
     opacity var(--dp-dur-reveal, 400ms) var(--dp-ease-resolve, ease-out),
     filter var(--dp-dur-reveal, 400ms) var(--dp-ease-resolve, ease-out),
@@ -32,6 +34,7 @@
   &.dp-reader--in {
     opacity: 1;
     filter: none;
+    scale: 1;
   }
 
   /* The exit: the opening in reverse, shorter, over the prop that has already been
@@ -111,5 +114,6 @@
     transition: none;
     opacity: 1;
     filter: none;
+    scale: 1;
   }
 }

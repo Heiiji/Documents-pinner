@@ -83,6 +83,16 @@ describe("studioMarkup", () => {
     }
   });
 
+  it("shows the box's width and height in grid squares, with the ratio unlocked by default", () => {
+    const markup = studioMarkup(doc, pin(), "content");
+    expect(markup).toContain('name="_width" value="4"');
+    expect(markup).toContain('name="_height" value="5.6"');
+    expect(markup).toContain('name="_aspect">');
+    expect(studioMarkup(doc, pin(), "content", { aspectLocked: true })).toContain(
+      'name="_aspect" checked'
+    );
+  });
+
   it("keeps fit and reset in the strip on every tab", () => {
     for (const tab of ["content", "appearance", "audience"] as const) {
       const markup = studioMarkup(doc, pin(), tab);

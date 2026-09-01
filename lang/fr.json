@@ -53,7 +53,6 @@
   "DP.config.unpinBody": "La tuile reste sur la scène, mais ses réglages d'épingle sont abandonnés et les droits qu'elle accordait sont restitués.",
   "DP.config.unpinTitle": "Ne plus traiter cette tuile comme une épingle ?",
   "DP.controls.board": "Tableau des épingles",
-  "DP.controls.edit": "Déplacer et redimensionner les épingles (calque Tuiles)",
   "DP.controls.pin": "Épingler un document",
   "DP.controls.pinThis": "Épingler sur la scène",
   "DP.cost.high": "Lourd",
@@ -222,6 +221,7 @@
   "DP.settings.rendering.name": "Rendu des accessoires",
   "DP.settings.vramBudgetMb.hint": "Mémoire vidéo que les accessoires peuvent occuper à eux tous. Au-delà, ceux que vous n'avez pas regardés depuis le plus longtemps passent en version basse définition.",
   "DP.settings.vramBudgetMb.name": "Budget de mémoire de textures (Mo)",
+  "DP.studio.aspect": "Garder le ratio",
   "DP.studio.audience": "Qui peut la voir",
   "DP.studio.delete": "Supprimer l'épingle",
   "DP.studio.effect": "Effet",
@@ -233,6 +233,7 @@
   "DP.studio.followName": "Suivre le nom de la source",
   "DP.studio.followNameHint": "Renommer le document renomme l'épingle.",
   "DP.studio.gone": "Cette épingle n'existe plus.",
+  "DP.studio.height": "Hauteur (cases)",
   "DP.studio.intensity": "Intensité",
   "DP.studio.label": "Libellé",
   "DP.studio.labelHint": "Laissez vide pour suivre le nom du document source.",
@@ -270,5 +271,6 @@
   "DP.studio.title": "Studio d'épingle",
   "DP.studio.tooltip": "Infobulle",
   "DP.studio.typeSize": "Taille du texte",
-  "DP.studio.typeSizeHint": "En pixels de scène. Redimensionnez l'épingle pour montrer plus ou moins du document ; le texte garde cette taille."
+  "DP.studio.typeSizeHint": "En pixels de scène. Redimensionnez l'épingle pour montrer plus ou moins du document ; le texte garde cette taille.",
+  "DP.studio.width": "Largeur (cases)"
 }

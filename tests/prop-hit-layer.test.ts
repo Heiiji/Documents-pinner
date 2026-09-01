@@ -107,8 +107,11 @@ describe("PropHitLayer.sync", () => {
     uninstallWorld();
   });
 
-  function layerFor(tiles: any[], isGM: boolean) {
-    installWorld({ isGM, tiles });
+  function layerFor(tiles: any[], isGM: boolean, activeLayer: "notes" | "tiles" | "tokens" = "tiles") {
+    const world = installWorld({ isGM, tiles });
+    world.canvas.activeLayer =
+      activeLayer === "notes" ? world.canvas.notes : activeLayer === "tiles" ? world.canvas.tiles : {};
+    world.canvas.tiles.activate = vi.fn();
     const layer = new LayerClass();
     layer.hits = new Map();
     layer.suspended = false;
@@ -144,9 +147,65 @@ describe("PropHitLayer.sync", () => {
     expect(layer.hits.size).toBe(1);
   });
 
-  it("builds nothing for the GM, who interacts with the real Tile placeable", () => {
-    const layer = layerFor([pinned({ mode: "pin" })], true);
-    expect(layer.hits.size).toBe(0);
+  it("builds nothing for the GM on the Tiles or Tokens layer, where the real placeable is theirs", () => {
+    expect(layerFor([pinned({ mode: "pin" })], true, "tiles").hits.size).toBe(0);
+    uninstallWorld();
+    expect(layerFor([pinned({ mode: "pin" })], true, "tokens").hits.size).toBe(0);
+  });
+
+  /**
+   * The most-reported failure in the changelog. The module's own tools live on the Notes
+   * layer, and core refuses to control a Tile anywhere but the Tiles layer — silently —
+   * so a GM who placed a pin and tried to drag it got nothing, and three code paths
+   * existed to say "go to the Tiles layer first".
+   */
+  describe("the GM on the Notes layer", () => {
+    it("gets a hit area, even on a pin players cannot open", () => {
+      const tile = pinned({ mode: "prop" });
+      tile.flags["documents-pinner"].pin.interaction = { open: "never", tooltip: "" };
+      expect(layerFor([tile], true, "notes").hits.size).toBe(1);
+    });
+
+    it("selects the pin where core can move it: the Tiles layer, then control()", () => {
+      const tile = pinned({ mode: "prop" });
+      tile.object.control = vi.fn();
+      const layer = layerFor([tile], true, "notes");
+      const container = [...layer.hits.values()][0];
+
+      container.emit("pointerdown", { button: 0 });
+      expect((globalThis as any).canvas.tiles.activate).toHaveBeenCalledTimes(1);
+      expect(tile.object.control).toHaveBeenCalledWith({ releaseOthers: true });
+    });
+
+    it("adds to the selection with shift", () => {
+      const tile = pinned({ mode: "prop" });
+      tile.object.control = vi.fn();
+      const layer = layerFor([tile], true, "notes");
+      [...layer.hits.values()][0].emit("pointerdown", { button: 0, shiftKey: true });
+      expect(tile.object.control).toHaveBeenCalledWith({ releaseOthers: false });
+    });
+
+    it("opens the document on a double click, like a player", () => {
+      const layer = layerFor([pinned({ mode: "prop" })], true, "notes");
+      const spy = vi.spyOn(api, "openLocally").mockImplementation(async () => {});
+      [...layer.hits.values()][0].emit("pointertap", { detail: 2 });
+      expect(spy).toHaveBeenCalledTimes(1);
+      spy.mockRestore();
+    });
+
+    it("fires the hover hook, so the GM can finally see the tooltip they wrote", () => {
+      const world = installWorld({ isGM: true, tiles: [pinned({ mode: "prop" })] });
+      uninstallWorld();
+      const layer = layerFor([pinned({ mode: "prop" })], true, "notes");
+      const hooks = (globalThis as any).Hooks;
+      const calls: any[] = [];
+      const original = hooks.callAll;
+      hooks.callAll = (name: string, ...args: any[]) => calls.push([name, ...args]);
+      [...layer.hits.values()][0].emit("pointerover");
+      hooks.callAll = original;
+      expect(calls.some(([name, , hovering]) => name.endsWith(".propHover") && hovering)).toBe(true);
+      void world;
+    });
   });
 
   it("skips a pin this player cannot see", () => {

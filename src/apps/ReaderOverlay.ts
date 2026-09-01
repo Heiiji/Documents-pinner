@@ -20,14 +20,17 @@
  * exactly when someone is trying to read it.
  */
 
-import { MODULE_ID } from "../const";
-import { cv, notify } from "../fvtt";
+import { LOD, MODULE_ID } from "../const";
+import { cfg, cv, notify } from "../fvtt";
 import { t } from "../i18n";
 import { escapeAttr } from "../html";
 import { readPin } from "../data/PinData";
+import { cardMetrics, naturalSize } from "../data/pin-schema";
+import { containsPoint, scaleOf, screenToScene, stageMatrix } from "../canvas/transform";
 import { resolveCard } from "../render/ContentResolver";
 import { propManager } from "../canvas/PropManager";
 import { leave, mount, write } from "./OverlayRoot";
+import type { DpPinFlags } from "../types/dp";
 
 let element: HTMLElement | null = null;
 let openId: string | null = null;
@@ -40,9 +43,63 @@ let listeners: (() => void)[] = [];
  * permanently — a second copy of a prop that nothing could close.
  */
 let openToken = 0;
+interface Placed {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  rotation: number;
+}
+
 /** The geometry the reader was last placed at, so a pan writes nothing. */
-let placedAt: { x: number; y: number; width: number; height: number; rotation: number } | null =
-  null;
+let placedAt: Placed | null = null;
+/** The box the open reader occupies, so a press on it can be told from a press beside it. */
+let openGeometry: Placed | null = null;
+
+/**
+ * Where the reader goes, and how big.
+ *
+ * A prop's reader sits in exact registration with the prop. A PIN is one grid square,
+ * and a reader one grid square wide is a box nobody can read — so a pin set to read in
+ * place gets a natural-size sheet centred on it instead.
+ */
+export function readerGeometry(doc: any, pin: DpPinFlags, gridSize: number): Placed {
+  if (pin.mode === "prop") {
+    return {
+      x: doc.x,
+      y: doc.y,
+      width: doc.width,
+      height: doc.height,
+      rotation: doc.rotation ?? 0,
+    };
+  }
+  const natural = naturalSize("prop", gridSize);
+  return {
+    x: doc.x + doc.width / 2 - natural.width / 2,
+    y: doc.y + doc.height / 2 - natural.height / 2,
+    width: natural.width,
+    height: natural.height,
+    rotation: 0,
+  };
+}
+
+function gridSize(): number {
+  return cv()?.scene?.grid?.size ?? 100;
+}
+
+/**
+ * The zoom at which the reader's type becomes legible.
+ *
+ * The camera is not moved by default — a player clicking a prop expects it to sharpen
+ * where it is, and a view moving under a click fights a GM's ping. But a reader opened
+ * while zoomed out is a tiny scrollable box, so when the apparent type is below the
+ * reader gate the view is brought in first, to a comfortable size rather than the bare
+ * minimum, and never past the canvas's own maximum.
+ */
+export function readableScale(fontPx: number, currentScale: number, maxZoom: number): number | null {
+  if (fontPx * currentScale >= LOD.READER_TYPE) return null;
+  return Math.min(maxZoom, (LOD.READER_TYPE * 1.5) / fontPx);
+}
 
 export function focusedPinId(): string | null {
   return openId;
@@ -72,9 +129,27 @@ export async function openReader(tileDoc: any): Promise<void> {
   // Claimed before the first await; anything older than this stops when it comes back.
   const token = ++openToken;
 
-  const size = { width: tileDoc.width, height: tileDoc.height };
+  const geometry = readerGeometry(tileDoc, pin, gridSize());
+  const size = { width: geometry.width, height: geometry.height };
   const card = await resolveCard(pin, size, { tier: "L3", baked: false });
   if (token !== openToken) return;
+
+  // Pan first when it must, then mount: the overlay matrix is rewritten on every tick
+  // of a pan, and an arrival running on top of a moving matrix is mush in motion.
+  const canvas = cv();
+  const scale = readableScale(
+    cardMetrics(pin.display, size).fontPx,
+    scaleOf(stageMatrix()),
+    cfg()?.Canvas?.maxZoom ?? 3
+  );
+  if (scale !== null && canvas?.animatePan) {
+    await canvas.animatePan({
+      x: geometry.x + geometry.width / 2,
+      y: geometry.y + geometry.height / 2,
+      scale,
+    });
+    if (token !== openToken) return;
+  }
 
   // NOT gated on permission, deliberately. With ownership sync off — a documented
   // setting, and the whole point of DESIGN §3.1 — a player can be in a pin's audience
@@ -112,7 +187,8 @@ export async function openReader(tileDoc: any): Promise<void> {
     `<i class="fa-solid fa-xmark" aria-hidden="true"></i></button>`;
 
   mount(element);
-  place(element, tileDoc);
+  openGeometry = geometry;
+  place(element, geometry);
   openId = tileDoc.id;
 
   // Dimming the mesh is what makes the reader read as the SAME object sharpening,
@@ -130,6 +206,7 @@ export function closeReader(): void {
   // Supersede any open still in flight, so it cannot mount after this.
   openToken++;
   placedAt = null;
+  openGeometry = null;
 
   for (const off of listeners) off();
   listeners = [];
@@ -151,11 +228,13 @@ export function closeReader(): void {
 export function repositionReader(): void {
   if (!element || !openId) return;
   const doc = cv()?.scene?.tiles?.get(openId);
-  if (!doc) {
+  const pin = doc ? readPin(doc) : null;
+  if (!doc || !pin) {
     closeReader();
     return;
   }
-  place(element, doc);
+  openGeometry = readerGeometry(doc, pin, gridSize());
+  place(element, openGeometry);
 }
 
 /**
@@ -165,17 +244,10 @@ export function repositionReader(): void {
  * of its own beyond the prop's rotation, and it stays in exact registration with the
  * prop through any pan or zoom without a single per-frame write.
  */
-function place(node: HTMLElement, doc: any): void {
+function place(node: HTMLElement, next: Placed): void {
   // Dirty-checked, as `canvasPan`'s comment in `main.ts` already claimed it was. Without
   // this it wrote five style values on every tick of an animated pan, for a rectangle
   // that had not moved in scene space at all.
-  const next = {
-    x: doc.x,
-    y: doc.y,
-    width: doc.width,
-    height: doc.height,
-    rotation: doc.rotation ?? 0,
-  };
   if (
     placedAt &&
     placedAt.x === next.x &&
@@ -240,10 +312,26 @@ function attach(): void {
   );
 
   // A click anywhere else on the map closes it — the same gesture that would move on
-  // to the next thing, rather than requiring a deliberate dismissal first.
-  on(document.getElementById("board") ?? document.body, "pointerdown", () => closeReader(), {
-    capture: true,
-  });
+  // to the next thing, rather than requiring a deliberate dismissal first. A press ON
+  // the prop being read is left alone, so the hit layer's tap can reach `openReader`
+  // and toggle it: closing here first meant the tap arrived at a closed reader and
+  // reopened it, and "click it again to close" was unreachable in practice.
+  on(
+    document.getElementById("board") ?? document.body,
+    "pointerdown",
+    (event: PointerEvent) => {
+      if (openGeometry && containsPoint(openGeometry, pointerScenePoint(event))) return;
+      closeReader();
+    },
+    { capture: true }
+  );
+}
+
+/** The pointer in scene coordinates, from core's tracking when it has it. */
+function pointerScenePoint(event: PointerEvent): { x: number; y: number } {
+  const tracked = cv()?.mousePosition;
+  if (tracked && Number.isFinite(tracked.x)) return { x: tracked.x, y: tracked.y };
+  return screenToScene({ x: event.clientX, y: event.clientY });
 }
 
 declare const Hooks: any;

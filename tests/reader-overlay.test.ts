@@ -127,6 +127,57 @@ describe("the focus reader", () => {
     expect(document.querySelector(".dp-reader")).toBeNull();
   });
 
+  it("opens a pin-mode anchor at a readable sheet centred on it, not one grid square", async () => {
+    tile.flags["documents-pinner"].pin.mode = "pin";
+    tile.width = 100;
+    tile.height = 100;
+    const { openReader } = await import("../src/apps/ReaderOverlay");
+    await openReader(tile);
+    await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
+
+    expect(reader()!.style.width).toBe("400px");
+    expect(reader()!.style.height).toBe("566px");
+    expect(reader()!.style.left).toBe("-150px");
+  });
+
+  it("brings the view in first when the type is too small to read, and not otherwise", async () => {
+    const pans: any[] = [];
+    world.canvas.animatePan = async (target: any) => {
+      pans.push(target);
+    };
+    // A natural-size prop derives ~15.4px type; zoomed well out it reads as 4.6px.
+    tile.width = 400;
+    tile.height = 560;
+    world.canvas.stage.worldTransform.a = 0.3;
+    world.canvas.stage.worldTransform.d = 0.3;
+    const { openReader, closeReader } = await import("../src/apps/ReaderOverlay");
+    await openReader(tile);
+    expect(pans).toHaveLength(1);
+    expect(pans[0].scale).toBeGreaterThan(0.3);
+    expect(pans[0].scale).toBeLessThanOrEqual(3);
+    expect(reader()).not.toBeNull();
+
+    closeReader();
+    world.canvas.stage.worldTransform.a = 1;
+    world.canvas.stage.worldTransform.d = 1;
+    await openReader(tile);
+    expect(pans).toHaveLength(1);
+  });
+
+  it("ignores a press on the prop being read, so the hit layer's tap can toggle it", async () => {
+    const { openReader } = await import("../src/apps/ReaderOverlay");
+    await openReader(tile);
+    const board = document.getElementById("board")!;
+
+    // Inside the 200x280 prop at the origin.
+    board.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, clientX: 100, clientY: 100 }));
+    expect(reader()).not.toBeNull();
+
+    // Beside it.
+    board.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, clientX: 900, clientY: 900 }));
+    expect(reader()).toBeNull();
+  });
+
   it("closes on a second click, which is what a click on what you are reading means", async () => {
     const { openReader } = await import("../src/apps/ReaderOverlay");
     await openReader(tile);

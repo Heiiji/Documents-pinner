@@ -11,8 +11,9 @@
  *     on the Notes layer   control() -> false, controlled: false
  *     on the Tiles layer   control() -> true,  controlled: true
  *
- * So a GM who places a pin from the Notes tools and then tries to move it gets nothing at
- * all, and nothing anywhere says why. These tests pin the two ways out.
+ * The way out is now the hit layer (a press on a prop from the Notes layer switches layer
+ * and selects it), so the toolbar no longer carries a button to say "go there first".
+ * `locate` still switches layer itself, and that is what these tests keep.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { activateTilesLayer, onGetSceneControlButtons } from "../src/ui/controls";
@@ -38,25 +39,18 @@ const notesControl = () => {
 };
 
 describe("the Notes control tools", () => {
-  it("offers a way onto the Tiles layer, where a pin can actually be moved", () => {
-    expect(Object.keys(notesControl())).toContain("dp-edit");
+  it("no longer carries the Tiles-layer detour, which the hit layer made unnecessary", () => {
+    expect(Object.keys(notesControl())).not.toContain("dp-edit");
   });
 
-  it("switches layer when that tool is used", () => {
-    notesControl()["dp-edit"].onChange();
-    expect(activated).toBe(1);
-  });
-
-  it("keeps placing and the Pinboard alongside it", () => {
+  it("keeps placing and the Pinboard alongside the core note tool", () => {
     const tools = notesControl();
-    expect(Object.keys(tools)).toEqual(
-      expect.arrayContaining(["note", "dp-pin", "dp-board", "dp-edit"])
-    );
+    expect(Object.keys(tools)).toEqual(expect.arrayContaining(["note", "dp-pin", "dp-board"]));
   });
 
   it("gives every tool a distinct order, so none lands on top of another", () => {
     const tools = notesControl();
-    const orders = ["dp-pin", "dp-board", "dp-edit"].map((k) => tools[k].order);
+    const orders = ["dp-pin", "dp-board"].map((k) => tools[k].order);
     expect(new Set(orders).size).toBe(orders.length);
   });
 

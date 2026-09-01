@@ -10,6 +10,14 @@
  * `interactiveChildren` to whether the layer is *active*, and this layer is never the
  * active one — a player has no layer controls at all.
  *
+ * The GM gets hit areas too, on ONE layer: Notes, where the module's own tools leave
+ * them. Core only lets a Tile be selected while the Tiles layer is active — `control()`
+ * returns false anywhere else, with no error and no cursor change — so a GM who placed a
+ * pin from the Notes rail and tried to drag it got nothing, and the module shipped a
+ * whole toolbar button to say "go to the Tiles layer first". Now a press on a prop from
+ * the Notes layer switches layer and selects it, and the next press drags it. Core's
+ * own handles still do the moving and resizing; this only removes the detour.
+ *
  * Two rules keep it from stealing the canvas:
  *
  * 1. **It sits below tokens and notes**, at a `zIndex` read from those layers at
@@ -24,6 +32,7 @@ import { MODULE_ID } from "../const";
 import { cfg, cv, g } from "../fvtt";
 import { readPin } from "../data/PinData";
 import * as api from "../api";
+import { isArmed } from "../apps/PlacementGhost";
 
 const LAYER_NAME = "documentsPinnerHits";
 
@@ -83,7 +92,12 @@ function buildLayerClass(CanvasLayer: any): any {
       for (const container of this.hits.values()) container.destroy({ children: true });
       this.hits.clear();
 
-      if (g()?.user?.isGM) return; // The GM interacts with the real Tile placeable.
+      // The GM interacts with the real Tile placeable — on the Tiles layer, where it is
+      // interactive and a hit area here would shadow it, and on Tokens, where a
+      // rubber-band select across a prop must keep selecting tokens. On Notes, where
+      // the module's own tools leave them, the GM gets a way onto the pin.
+      const gm = g()?.user?.isGM === true;
+      if (gm && !onNotesLayer()) return;
 
       for (const tile of cv()?.tiles?.placeables ?? []) {
         const pin = readPin(tile.document);
@@ -93,11 +107,49 @@ function buildLayerClass(CanvasLayer: any): any {
         // unreachable for everyone it was written for. `rotatedPolygon` is already
         // mode-agnostic; nothing else needed to change.
         if (!pin) continue;
-        if (pin.interaction.open === "never") continue;
+        // A GM must always be able to grab a pin, whatever it does for a player.
+        if (!gm && pin.interaction.open === "never") continue;
         if (!tile.isVisible) continue;
 
-        this.addChild(this.#buildHit(tile, pin));
+        // The GM's area is the same whatever the pin does for a player.
+        this.addChild(gm ? this.#buildGmHit(tile) : this.#buildHit(tile, pin));
       }
+    }
+
+    /**
+     * The GM's hit area: a press selects the pin where core can move it, a double
+     * click opens it, a hover shows the tooltip the GM authored and could never see.
+     *
+     * The press switches to the Tiles layer FIRST, because that is the one layer on
+     * which `control()` says yes; the selection frame and handles are core's, and the
+     * next press on the now-interactive placeable drags. Nothing while a placement is
+     * armed — the ghost owns the press then, and landing a pin on top of a prop must
+     * not also select the prop.
+     */
+    #buildGmHit(tile: any): any {
+      const PIXI = (globalThis as any).PIXI;
+      const doc = tile.document;
+      const container = new PIXI.Container();
+
+      container.eventMode = "static";
+      container.cursor = "pointer";
+      container.hitArea = rotatedPolygon(doc, PIXI);
+      container.interactiveChildren = false;
+
+      container.on("pointerdown", (event: any) => {
+        if (this.suspended || isArmed() || event?.button === 2) return;
+        cv()?.tiles?.activate?.();
+        tile.control?.({ releaseOthers: !event?.shiftKey });
+      });
+      container.on("pointertap", (event: any) => {
+        if (this.suspended || isArmed()) return;
+        if (event?.detail === 2) void api.openLocally(doc);
+      });
+      container.on("pointerover", () => Hooks.callAll(`${MODULE_ID}.propHover`, doc, true));
+      container.on("pointerout", () => Hooks.callAll(`${MODULE_ID}.propHover`, doc, false));
+
+      this.hits.set(doc.id, container);
+      return container;
     }
 
     #buildHit(tile: any, pin: any): any {
@@ -138,6 +190,12 @@ function buildLayerClass(CanvasLayer: any): any {
       }
     }
   };
+}
+
+/** Whether the Notes layer is the active one — the layer the module's tools live on. */
+function onNotesLayer(): boolean {
+  const canvas = cv();
+  return !!canvas?.notes && canvas.activeLayer === canvas.notes;
 }
 
 /**

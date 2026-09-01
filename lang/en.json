@@ -53,7 +53,6 @@
   "DP.config.unpinBody": "The tile stays on the scene, but its pin settings are discarded and any ownership it granted is released.",
   "DP.config.unpinTitle": "Stop treating this tile as a pin?",
   "DP.controls.board": "Pinboard",
-  "DP.controls.edit": "Move and resize pins (Tiles layer)",
   "DP.controls.pin": "Pin a document",
   "DP.controls.pinThis": "Pin to scene",
   "DP.cost.high": "Heavy",
@@ -222,6 +221,7 @@
   "DP.settings.rendering.name": "Prop rendering",
   "DP.settings.vramBudgetMb.hint": "How much video memory props may hold between them. Past it, the props you have not looked at longest drop to a low-detail version.",
   "DP.settings.vramBudgetMb.name": "Texture memory budget (MB)",
+  "DP.studio.aspect": "Keep ratio",
   "DP.studio.audience": "Who can see this",
   "DP.studio.delete": "Delete pin",
   "DP.studio.effect": "Effect",
@@ -233,6 +233,7 @@
   "DP.studio.followName": "Follow the source's name",
   "DP.studio.followNameHint": "Renaming the document renames the pin.",
   "DP.studio.gone": "This pin no longer exists.",
+  "DP.studio.height": "Height (squares)",
   "DP.studio.intensity": "Intensity",
   "DP.studio.label": "Label",
   "DP.studio.labelHint": "Leave empty to follow the source document's name.",
@@ -270,5 +271,6 @@
   "DP.studio.title": "Pin Studio",
   "DP.studio.tooltip": "Tooltip",
   "DP.studio.typeSize": "Text size",
-  "DP.studio.typeSizeHint": "In scene pixels. Resize the pin to show more or less of the document; the text keeps this size."
+  "DP.studio.typeSizeHint": "In scene pixels. Resize the pin to show more or less of the document; the text keeps this size.",
+  "DP.studio.width": "Width (squares)"
 }

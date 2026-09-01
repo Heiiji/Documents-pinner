@@ -48,7 +48,8 @@ async function studioOn(tab: string) {
 
 function change(studio: any, name: string, value: string) {
   const input = contentOf(studio).querySelector<HTMLInputElement>(`[name="${name}"]`)!;
-  input.value = value;
+  if (input.type === "checkbox") input.checked = value === "on";
+  else input.value = value;
   input.dispatchEvent(new Event("change", { bubbles: true }));
 }
 
@@ -75,5 +76,24 @@ describe("the type-size and margin sliders", () => {
     const display = tile.flags[MODULE_ID][FLAGS.PIN].display;
     expect(display.typeSize).toBe(20);
     expect(display.margin).toBe(1);
+  });
+});
+
+describe("the strip's width and height", () => {
+  it("resizes one axis in grid squares and leaves the other alone", async () => {
+    const studio = await studioOn("content");
+    change(studio, "_width", "6");
+    await settled();
+    expect(tile.width).toBe(600);
+    expect(tile.height).toBe(560);
+  });
+
+  it("carries the other axis when the ratio is locked", async () => {
+    const studio = await studioOn("content");
+    change(studio, "_aspect", "on");
+    change(studio, "_width", "8");
+    await settled();
+    expect(tile.width).toBe(800);
+    expect(tile.height).toBe(1120);
   });
 });

@@ -423,6 +423,16 @@ export async function fitToContent(anchorDoc: any): Promise<boolean> {
   return true;
 }
 
+/** Resize the anchor's box. The type size is on the pin and does not follow. */
+export async function resize(
+  anchorDoc: any,
+  size: { width: number; height: number }
+): Promise<boolean> {
+  if (!isGM() || !anchorDoc || !readPin(anchorDoc)) return false;
+  await store.resize(anchorDoc, size);
+  return true;
+}
+
 /**
  * Put the box back to the natural size for this grid. The box only, deliberately: a GM
  * who set 12 px type and wants the sheet back should not lose the type, and the Studio
@@ -610,6 +620,7 @@ export function publicApi() {
     locate,
     fitToContent,
     resetSize,
+    resize,
     deletePin,
     unpin,
     labelFor,

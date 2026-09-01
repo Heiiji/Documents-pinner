@@ -122,6 +122,24 @@ export function rotatedBounds(doc: Rect & { rotation?: number }): Rect {
   };
 }
 
+/**
+ * Whether a scene-space point lies inside a rotated placeable.
+ *
+ * Exact, not the axis-aligned bounds: the reader uses this to tell a press on the prop
+ * being read from a press beside it, and a tilted letter's bounding box covers a good
+ * deal of map that is not letter.
+ */
+export function containsPoint(doc: Rect & { rotation?: number }, p: Point): boolean {
+  const cx = doc.x + doc.width / 2;
+  const cy = doc.y + doc.height / 2;
+  const rot = (-(doc.rotation ?? 0) * Math.PI) / 180;
+  const dx = p.x - cx;
+  const dy = p.y - cy;
+  const lx = dx * Math.cos(rot) - dy * Math.sin(rot);
+  const ly = dx * Math.sin(rot) + dy * Math.cos(rot);
+  return Math.abs(lx) <= doc.width / 2 && Math.abs(ly) <= doc.height / 2;
+}
+
 /** Where a prop lands on screen, for positioning the focused DOM reader. */
 export function screenPlacement(
   m: Mat,

@@ -18,7 +18,7 @@
  *   should never have to learn a second vocabulary for the module's central idea.
  */
 
-import { ns } from "../fvtt";
+import { cv, ns } from "../fvtt";
 import { t, tn } from "../i18n";
 import { escapeAttr, escapeHtml } from "../html";
 import * as api from "../api";
@@ -270,7 +270,20 @@ function audienceTab(doc: any, pin: DpPinFlags): string {
   );
 }
 
-export function studioMarkup(doc: any, pin: DpPinFlags, active: TabId): string {
+/** The grid the anchor's scene uses, so sizes can be shown in squares. */
+function gridOf(doc: any): number {
+  return doc?.parent?.grid?.size ?? cv()?.scene?.grid?.size ?? 100;
+}
+
+const squares = (px: number, grid: number) => Math.round((px / grid) * 100) / 100;
+
+export function studioMarkup(
+  doc: any,
+  pin: DpPinFlags,
+  active: TabId,
+  options: { aspectLocked?: boolean } = {}
+): string {
+  const grid = gridOf(doc);
   const nav = TABS.map(
     (tab) =>
       `<button type="button" class="dp-studio__tabbtn" data-action="setTab"` +
@@ -297,6 +310,15 @@ export function studioMarkup(doc: any, pin: DpPinFlags, active: TabId): string {
     `<input type="number" name="_elevation" value="${Number(doc.elevation ?? 0)}" step="1"></label>` +
     `<label>${escapeHtml(t("DP.studio.rotation"))}` +
     `<input type="number" name="_rotation" value="${Number(doc.rotation ?? 0)}" step="15"></label>` +
+    // In grid squares, which is how a GM thinks about a map: "four squares wide".
+    `<label>${escapeHtml(t("DP.studio.width"))}` +
+    `<input type="number" name="_width" value="${squares(Number(doc.width) || 0, grid)}"` +
+    ` step="0.5" min="0.05"></label>` +
+    `<label>${escapeHtml(t("DP.studio.height"))}` +
+    `<input type="number" name="_height" value="${squares(Number(doc.height) || 0, grid)}"` +
+    ` step="0.5" min="0.05"></label>` +
+    `<label>${escapeHtml(t("DP.studio.aspect"))}` +
+    `<input type="checkbox" name="_aspect"${options.aspectLocked ? " checked" : ""}></label>` +
     `<label>${escapeHtml(t("DP.studio.locked"))}` +
     `<input type="checkbox" name="_locked"${doc.locked ? " checked" : ""}></label>` +
     // Fit is a prop's verb: a pin is one grid square and has no content to fit.
@@ -369,12 +391,14 @@ export function definePinStudio(): any {
 
     doc: any = null;
     tab: TabId = "content";
+    /** Whether editing one dimension in the strip carries the other with it. */
+    aspectLocked = false;
 
     async _renderHTML() {
       const pin = readPin(this.doc);
       const wrapper = document.createElement("div");
       wrapper.innerHTML = pin
-        ? studioMarkup(this.doc, pin, this.tab)
+        ? studioMarkup(this.doc, pin, this.tab, { aspectLocked: this.aspectLocked })
         : `<p class="dp-studio__gone">${escapeHtml(t("DP.studio.gone"))}</p>`;
       return wrapper.firstElementChild ?? wrapper;
     }
@@ -420,6 +444,14 @@ export function definePinStudio(): any {
       // The placement strip writes tile fields, not the pin payload.
       if (target.name.startsWith("_")) {
         const field = target.name.slice(1);
+        if (field === "aspect") {
+          this.aspectLocked = target.checked;
+          return;
+        }
+        if (field === "width" || field === "height") {
+          await this.#resize(field, Number(target.value));
+          return;
+        }
         const value = target.type === "checkbox" ? target.checked : Number(target.value);
         await this.doc.update({ [field]: value });
         return;
@@ -448,6 +480,25 @@ export function definePinStudio(): any {
       // replace a whole group, and `{ ownershipSync: { level } }` would then wipe the
       // `enabled` flag beside it.
       await api.patchAndSync(this.doc, patch);
+    }
+
+    /** One dimension from the strip, in squares; the other follows if the ratio is locked. */
+    async #resize(axis: "width" | "height", squaresWanted: number) {
+      const grid = gridOf(this.doc);
+      const px = Math.max(1, Math.round(squaresWanted * grid));
+      let width = Number(this.doc.width) || 1;
+      let height = Number(this.doc.height) || 1;
+      if (axis === "width") {
+        const ratio = height / width;
+        width = px;
+        if (this.aspectLocked) height = Math.max(1, Math.round(px * ratio));
+      } else {
+        const ratio = width / height;
+        height = px;
+        if (this.aspectLocked) width = Math.max(1, Math.round(px * ratio));
+      }
+      await api.resize(this.doc, { width, height });
+      this.render();
     }
   };
 

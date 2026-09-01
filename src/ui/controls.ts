@@ -49,33 +49,15 @@ export function onGetSceneControlButtons(controls: any): void {
     onChange: () => openPinboard(),
   };
 
-  /**
-   * The gap between where pins are PLACED and where they are EDITED.
-   *
-   * §5.1 put these tools under Notes deliberately, and the anchors are Tiles — so a GM who
-   * places a pin from here and then tries to drag it gets nothing at all. Core only lets a
-   * Tile be selected while the Tiles layer is active: `control()` simply returns false
-   * otherwise, with no error and no cursor change to explain it. Measured in a live world,
-   * and it is exactly what "there is no way for me to resize or move the document" was.
-   *
-   * One click to cross that gap, next to the tools that created the problem.
-   */
-  notes.tools["dp-edit"] = {
-    name: "dp-edit",
-    title: "DP.controls.edit",
-    icon: "fa-solid fa-up-down-left-right",
-    order: order + 2,
-    button: true,
-    visible: true,
-    onChange: () => activateTilesLayer(),
-  };
 }
 
 /**
  * Switch to the Tiles layer, which is where a pin can be moved, resized and rotated.
  *
- * Exported because the Pinboard and the Studio need it too: "locate this pin" that leaves
- * the GM unable to touch what it just found is only half an answer.
+ * Used by `locate`: "here it is" that leaves the GM unable to touch what was just found
+ * is half an answer. The "Move and resize pins" toolbar button that used to sit beside
+ * the two tools above is gone: a press on a prop from the Notes layer now does this
+ * itself, through the hit layer, so the detour no longer needs a sign.
  */
 export function activateTilesLayer(): boolean {
   const tiles = cv()?.tiles;

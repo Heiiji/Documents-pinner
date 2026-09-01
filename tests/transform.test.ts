@@ -4,6 +4,7 @@ import {
   apparentWidth,
   applyInverseMat,
   applyMat,
+  containsPoint,
   invertMat,
   rectsIntersect,
   rotatedBounds,
@@ -12,8 +13,8 @@ import {
   scaleOf,
   screenPlacement,
   toCssMatrix,
-  viewportRect,
   type Mat,
+  viewportRect,
 } from "../src/canvas/transform";
 
 /** Build a translate+scale+rotate matrix the way PIXI composes one. */
@@ -162,5 +163,22 @@ describe("dirty checking", () => {
 
   it("serialises to a CSS matrix in the right component order", () => {
     expect(toCssMatrix({ a: 1, b: 2, c: 3, d: 4, tx: 5, ty: 6 })).toBe("matrix(1,2,3,4,5,6)");
+  });
+});
+
+describe("containsPoint", () => {
+  const doc = { x: 100, y: 100, width: 200, height: 100, rotation: 0 };
+
+  it("accepts a point inside and rejects one outside an unrotated prop", () => {
+    expect(containsPoint(doc, { x: 150, y: 150 })).toBe(true);
+    expect(containsPoint(doc, { x: 301, y: 150 })).toBe(false);
+    expect(containsPoint(doc, { x: 150, y: 99 })).toBe(false);
+  });
+
+  it("follows the rotation, so a tilted letter's empty corners are not letter", () => {
+    const tilted = { ...doc, rotation: 90 };
+    // Rotated about its centre (200, 150) the 200x100 box now spans y 50..250, x 150..250.
+    expect(containsPoint(tilted, { x: 200, y: 60 })).toBe(true);
+    expect(containsPoint(tilted, { x: 110, y: 150 })).toBe(false);
   });
 });

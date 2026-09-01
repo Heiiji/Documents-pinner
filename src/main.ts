@@ -127,6 +127,10 @@ Hooks.on("canvasPan", () => {
 
 for (const [hook, busy] of POINTER_BUSY_HOOKS) Hooks.on(hook, () => suspendHits(busy));
 
+// The GM's hit areas exist on the Notes layer only, so they follow the active layer.
+// The scene controls re-render whenever it changes, which is the signal core gives.
+Hooks.on("renderSceneControls", () => syncHitLayer());
+
 // Core redrew a pin's tile, so the texture we captured to restore later is stale and the
 // binding we recorded belongs to a mesh that no longer exists. `PinnedTile` has fired this
 // since it was written; nothing listened.
