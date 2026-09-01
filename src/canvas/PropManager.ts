@@ -25,6 +25,7 @@ import { logger } from "../log";
 import { cancelIdle, cv, g, notify, ns, nsAny, onIdle, rendererResolution } from "../fvtt";
 import * as settings from "../settings";
 import { readPin } from "../data/PinData";
+import { cardMetrics } from "../data/pin-schema";
 import * as api from "../api";
 import {
   apparentWidth,
@@ -623,6 +624,11 @@ class Manager {
    * costs one provisional key and every later pass agrees with the cache.
    */
   #keyFor(tile: any, pin: any, longEdge: number, contentHash: string): string {
+    const doc = tile.document;
+    // The type size and the pad are drawn INTO the pixels, so they are in the key for the
+    // same reason the preset is. A prop whose metrics are stored no longer changes its
+    // type when the tile changes size, so the geometry alone could not catch a type edit.
+    const { fontPx, padPx } = cardMetrics(pin.display, { width: doc.width, height: doc.height });
     return cacheKey({
       uuid: pin.source.uuid ?? pin.source.src ?? tile.id,
       // The viewing user is in the key because enrichment strips secrets per viewer.
@@ -630,7 +636,7 @@ class Manager {
       userId: g()?.user?.id ?? "",
       resTier: longEdge,
       presetBake: `${pin.effect.id}:${pin.effect.intensity}:${pin.effect.seed}:${pin.display.paper}:${this.#level}`,
-      docHash: `${tile.document.width}x${tile.document.height}:${contentHash}`,
+      docHash: `${doc.width}x${doc.height}:${fontPx}:${padPx}:${contentHash}`,
     });
   }
 

@@ -42,6 +42,8 @@ import {
   onRenderConfig,
   onSourceRenamed,
 } from "./ui/entry-points";
+import { readPin } from "./data/PinData";
+import { followDomProp } from "./canvas/DomPropTier";
 
 const log = logger("boot");
 
@@ -129,6 +131,18 @@ for (const [hook, busy] of POINTER_BUSY_HOOKS) Hooks.on(hook, () => suspendHits(
 // binding we recorded belongs to a mesh that no longer exists. `PinnedTile` has fired this
 // since it was written; nothing listened.
 Hooks.on(`${MODULE_ID}.tileDrawn`, (tile: any) => propManager().onTileDrawn(tile));
+
+// Core's resize handles mutate the document in memory on every tick of the drag and
+// fire the generic refresh hook; the commit only arrives as `updateTile` on release.
+// The DOM card and the reader follow the handles live through two dirty-checked
+// re-placers, so a refresh that moved nothing — a hover, a control frame — costs a few
+// compares, and if a future core commits without mutating first, the commit path above
+// still does the work.
+Hooks.on("refreshTile", (tile: any) => {
+  if (readPin(tile?.document)?.mode !== "prop") return;
+  followDomProp(tile.document);
+  repositionReader();
+});
 
 // `interaction.tooltip` was offered by the Pin Studio, validated, stored — and read by
 // nothing, while `PropHitLayer` fired this hook into a void. A player hovering a pin got

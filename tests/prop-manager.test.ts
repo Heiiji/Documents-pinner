@@ -128,6 +128,42 @@ describe("the texture cache key", () => {
   });
 });
 
+/**
+ * The type size is drawn INTO the pixels, so it belongs in the key for the same reason
+ * the preset does. Geometry was already there; now that a resize means "show more of
+ * the page" rather than "the same page, larger", both have to stay a cache miss.
+ */
+describe("the texture cache key and the type size", () => {
+  it("is a cache miss when the type size changes", async () => {
+    const { resolveCard } = await import("../src/render/ContentResolver");
+    const before = vi.mocked(resolveCard).mock.calls.length;
+
+    tiles[0].flags["documents-pinner"].pin.display.typeSize = 12;
+    manager.refresh();
+    await settle();
+
+    expect(vi.mocked(resolveCard).mock.calls.length).toBeGreaterThan(before);
+  });
+
+  it("is a cache miss when a prop with stored metrics is resized", async () => {
+    const { resolveCard } = await import("../src/render/ContentResolver");
+    const pin = tiles[0].flags["documents-pinner"].pin;
+    pin.display.typeSize = 12;
+    pin.display.margin = 1.5;
+    manager.refresh();
+    await settle();
+    const before = vi.mocked(resolveCard).mock.calls.length;
+
+    // The type no longer follows the tile, so only the geometry in the key can catch this.
+    tiles[0].width = 800;
+    tiles[0].height = 1132;
+    manager.refresh();
+    await settle();
+
+    expect(vi.mocked(resolveCard).mock.calls.length).toBeGreaterThan(before);
+  });
+});
+
 describe("invalidate", () => {
   it("restores core's own texture BEFORE destroying ours", () => {
     const mesh = tiles[0].object.mesh;
