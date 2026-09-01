@@ -21,6 +21,7 @@
  */
 
 import { DEFAULTS, MODULE_ID } from "../const";
+import { MOTION } from "../motion";
 import { logger } from "../log";
 import { cancelIdle, cv, g, notify, ns, nsAny, onIdle, rendererResolution } from "../fvtt";
 import * as settings from "../settings";
@@ -97,6 +98,17 @@ interface PropRecord {
   contentHash: string;
   /** Whether this client could see it last time we looked, for the reveal animation. */
   wasVisible: boolean;
+  /**
+   * A reveal fired and its arrival has not been drawn yet.
+   *
+   * The reveal used to be played at the moment of the transition, when by definition
+   * the prop's own texture had not been drawn: the mesh was unbound, so the animation
+   * returned early on the canvas tier, first reveals arrived through the flat draw-in
+   * and a re-reveal of a cached prop popped to full alpha with no animation at all.
+   * The preset's curve and duration were dead on the tier they were written for. The
+   * arrival now happens where a texture exists — at the bind.
+   */
+  pendingReveal: boolean;
   /** Whether the key this prop currently wants is one that already failed to draw. */
   lastKeyFailed: boolean;
 }
@@ -242,6 +254,7 @@ class Manager {
           contentHash: "",
           // Assume visible, so props already on screen at load do not all animate in.
           wasVisible: true,
+          pendingReveal: false,
           lastKeyFailed: false,
         });
       }
@@ -359,8 +372,37 @@ class Manager {
       const dom = this.#domModeFor(pin);
       const alpha = this.#alphaFor(tile, pin, tokens);
       if (dom) setDomPropAlpha(record.id, alpha);
-      if (tile.mesh) tile.mesh.alpha = this.#meshAlphaFor(record, alpha, dom);
+      if (tile.mesh) this.#writeMeshAlpha(tile, this.#meshAlphaFor(record, alpha, dom));
     }
+  }
+
+  /**
+   * Set the mesh's alpha: eased between two VISIBLE levels, written directly otherwise.
+   *
+   * The peek and the token fade eased on the DOM tier and snapped on the canvas tier —
+   * the same gesture, two feels. A change from or to zero is not a state change but a
+   * hold or an arrival, and those belong to `#arrive`; everything in between eases at
+   * the state duration under the one alpha channel, so a peek during a reveal simply
+   * takes over and the release eases back.
+   */
+  #writeMeshAlpha(tile: any, target: number): void {
+    const mesh = tile.mesh;
+    const from = mesh.alpha ?? 1;
+    const CanvasAnimation = ns("canvas.animation.CanvasAnimation");
+    if (
+      this.#level !== "full" ||
+      !CanvasAnimation?.animate ||
+      from <= 0 ||
+      target <= 0 ||
+      Math.abs(from - target) < 0.01
+    ) {
+      mesh.alpha = target;
+      return;
+    }
+    void CanvasAnimation.animate([{ parent: mesh, attribute: "alpha", to: target }], {
+      duration: MOTION.state,
+      name: `${MODULE_ID}.alpha.${tile.id}`,
+    });
   }
 
   /** The alpha a prop should be drawn at, whichever tier is drawing it. */
@@ -494,6 +536,8 @@ class Manager {
     const anyDom = this.#domMode();
     const domEntries: DomPropEntry[] = [];
     const tokens = anyDom ? visibleTokens() : [];
+    /** Props bound from the cache this pass, whose arrival is decided after the alpha. */
+    const arrivals: [PropRecord, any][] = [];
 
     for (const record of this.#records.values()) {
       const tile = canvas.tiles?.get(record.id);
@@ -521,8 +565,9 @@ class Manager {
       const dom = this.#domModeFor(pin);
 
       const visible = tile.isVisible === true;
-      if (visible && !record.wasVisible) this.#playReveal(tile, pin, record, dom);
+      const revealing = visible && !record.wasVisible;
       record.wasVisible = visible;
+      if (revealing) this.#onReveal(record, pin, dom);
 
       record.tier = tier;
       record.lastSeen = ++this.#clock;
@@ -539,6 +584,8 @@ class Manager {
           focused: this.#focusedId === record.id,
           alpha: this.#alphaFor(tile, pin, tokens),
           pdf: this.#isPdf(pin),
+          revealing,
+          reveal: revealOf(pin),
         });
         continue;
       }
@@ -560,6 +607,7 @@ class Manager {
       const cached = this.#cache.get(key);
       if (cached) {
         this.#bind(record, tile, cached, key);
+        arrivals.push([record, tile]);
       } else if (!record.generating && !record.lastKeyFailed) {
         queue.push({ id: record.id, priority: priorityOf(bounds, centre) });
       }
@@ -571,62 +619,79 @@ class Manager {
     syncDomTier(domEntries);
     this.#queue = queue.sort((a, b) => a.priority - b.priority);
     this.applyAlpha();
+    for (const [record, tile] of arrivals) this.#arrive(record, tile, false);
     this.#trim();
     this.#pump();
   }
 
   /**
-   * The reveal.
+   * A prop this client could not see has become visible.
+   *
+   * The sound belongs to the moment whichever tier draws it. The arrival does not: it
+   * belongs to whoever puts pixels on screen — `#arrive` at the bind on the canvas tier,
+   * the card's own mount on the DOM tier — because at THIS moment the prop's texture
+   * has by definition not been drawn, and animating the mesh here put the placeholder
+   * icon on screen stretched across a letter.
+   */
+  #onReveal(record: PropRecord, pin: any, dom: boolean): void {
+    playRevealSound(findPreset(pin.effect.id)?.reveal.sound ?? null);
+    if (!dom) record.pendingReveal = true;
+  }
+
+  /**
+   * The arrival, decided AFTER the alpha for this pass has been applied.
+   *
+   * Three cases, from the record's point of view: a reveal is pending, so the preset's
+   * own animation plays; the texture was just drawn, so the short draw-in plays; or it
+   * was rebound from the cache after a pan back, so nothing plays — a GM returning to a
+   * prop they have already seen should find it there, not watch it arrive again.
+   */
+  #arrive(record: PropRecord, tile: any, drawn: boolean): void {
+    if (record.pendingReveal) {
+      record.pendingReveal = false;
+      this.#animateReveal(tile);
+    } else if (drawn) {
+      this.#fadeIn(tile);
+    }
+  }
+
+  /**
+   * The reveal, at the moment there is something to reveal.
    *
    * A prop appearing instantly reads as a rendering glitch; the same prop fading up
    * over half a second reads as something being revealed, which is the entire moment
    * the module exists for. Driven by core's own animation so it shares the ticker and
-   * is cancelled correctly when the scene is torn down mid-animation.
+   * is cancelled correctly when the scene is torn down mid-animation, and under the
+   * one alpha channel every other alpha write uses, so a peek mid-reveal takes over
+   * cleanly. The alpha channel is the ONLY one this may touch — the mesh's position,
+   * size, rotation and anchor belong to core.
    */
-  #playReveal(tile: any, pin: any, record: PropRecord, dom: boolean): void {
+  #animateReveal(tile: any): void {
     const mesh = tile.mesh;
     if (!mesh) return;
+    const target = mesh.alpha;
+    if (!target) return;
 
     // The library, not just the shipped ten: a user preset's reveal never played.
-    const preset = findPreset(pin.effect.id);
+    const pin = readPin(tile.document);
+    const preset = pin ? findPreset(pin.effect.id) : null;
     const animation = preset?.reveal.animation ?? "fade";
-    const target = tile.document.alpha ?? 1;
+    if (animation === "none" || this.#level !== "full") return;
 
-    // The sound belongs to the reveal whichever tier draws it, and plays either way.
-    playRevealSound(preset?.reveal.sound ?? null);
-
-    // The MESH does not, and this decision comes FIRST — before the level check, which
-    // also writes alpha. At the moment a reveal fires the prop's own texture has by
-    // definition not been drawn yet, so touching the mesh here puts the PLACEHOLDER on
-    // screen — a book icon stretched across a letter — and leaves it there, overriding
-    // the hold in `#meshAlphaFor`. On the DOM path it would sit under the card as well.
-    // The arrival is somebody else's job either way: `#fadeIn` when the texture lands,
-    // and the `.dp-prop--in` transition on the DOM card.
-    if (dom || record.boundKey === null) return;
-
-    if (animation === "none" || this.#level !== "full") {
-      mesh.alpha = target;
-      return;
-    }
-
-    const duration = Math.max(0, preset?.reveal.durationMs ?? 400);
     const CanvasAnimation = ns("canvas.animation.CanvasAnimation");
-    mesh.alpha = 0;
+    if (!CanvasAnimation?.animate) return;
 
-    if (!CanvasAnimation?.animate) {
-      mesh.alpha = target;
-      return;
-    }
+    const duration = Math.max(0, preset?.reveal.durationMs ?? MOTION.reveal);
+    mesh.alpha = 0;
     void CanvasAnimation.animate([{ parent: mesh, attribute: "alpha", to: target }], {
       duration,
       // `materialise` and `fade` were the same linear alpha ramp, so half the shipped
       // presets declared an animation that behaved identically to the other half. The
-      // alpha channel is the ONLY one this may touch — the mesh's position, size,
-      // rotation and anchor belong to core — so the two are distinguished by their
-      // curve: a fade arrives at a constant rate, a materialise eases in and out and
-      // reads as something resolving rather than something being turned up.
+      // two are distinguished by their curve: a fade arrives at a constant rate, a
+      // materialise eases in and out and reads as something resolving rather than
+      // something being turned up.
       easing: animation === "materialise" ? CanvasAnimation.easeInOutCosine : undefined,
-      name: `${MODULE_ID}.reveal.${tile.id}`,
+      name: `${MODULE_ID}.alpha.${tile.id}`,
     });
   }
 
@@ -734,6 +799,7 @@ class Manager {
     if (this.#cache.has(provisional)) {
       this.#bind(record, tile, this.#cache.get(provisional), provisional);
       this.applyAlpha();
+      this.#arrive(record, tile, false);
       return;
     }
 
@@ -750,6 +816,7 @@ class Manager {
       if (cachedPdf) {
         this.#bind(record, tile, cachedPdf, key);
         this.applyAlpha();
+        this.#arrive(record, tile, false);
         return;
       }
 
@@ -800,7 +867,7 @@ class Manager {
       this.#cache.set(key, result.texture, result.bytes);
       this.#bind(record, tile, result.texture, key);
       this.applyAlpha();
-      this.#fadeIn(tile);
+      this.#arrive(record, tile, true);
       this.#trim();
       return;
     }
@@ -817,6 +884,7 @@ class Manager {
     if (cached) {
       this.#bind(record, tile, cached, key);
       this.applyAlpha();
+      this.#arrive(record, tile, false);
       return;
     }
     if (this.#failedKeys.has(key)) return;
@@ -857,7 +925,7 @@ class Manager {
     // prop's own texture is bound it has something worth showing. `#recomputeLod` runs
     // this before the queue drains, so the bind has to say so itself.
     this.applyAlpha();
-    this.#fadeIn(tile);
+    this.#arrive(record, tile, true);
     this.#trim();
   }
 
@@ -883,8 +951,8 @@ class Manager {
 
     mesh.alpha = 0;
     void CanvasAnimation.animate([{ parent: mesh, attribute: "alpha", to: target }], {
-      duration: 200,
-      name: `${MODULE_ID}.draw.${tile.id}`,
+      duration: MOTION.enter,
+      name: `${MODULE_ID}.alpha.${tile.id}`,
     });
   }
 
@@ -993,6 +1061,15 @@ export function propManager(): Manager {
 /** Release everything. Called on `canvasTearDown` and when the module is disabled. */
 export function teardownProps(): void {
   manager?.stop();
+}
+
+/** What the DOM tier needs to play a reveal: the preset's animation and duration. */
+function revealOf(pin: any): { animation: string; durationMs: number } {
+  const preset = findPreset(pin.effect.id);
+  return {
+    animation: preset?.reveal.animation ?? "fade",
+    durationMs: Math.max(0, preset?.reveal.durationMs ?? MOTION.reveal),
+  };
 }
 
 /**

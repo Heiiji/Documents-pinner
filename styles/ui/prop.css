@@ -22,18 +22,49 @@
   pointer-events: none;
   /* Lets the browser skip layout and paint entirely for an off-screen card. */
   content-visibility: auto;
-  /* The token fade and the peek arrive as an opacity write from PropManager. */
-  transition:
-    opacity var(--dp-dur-state, 120ms) linear,
-    filter var(--dp-dur-enter, 200ms) var(--dp-ease-out, ease-out);
+  /* The token fade and the peek arrive as an opacity write from PropManager, and ease
+     at the state duration — the same clock the canvas tier's mesh uses for them. */
+  transition: opacity var(--dp-dur-state, 120ms) linear;
+}
 
-  /* The reveal, matching the canvas tier's: a prop appearing instantly reads as a
-     rendering glitch, the same prop resolving reads as something being revealed. */
-  filter: blur(4px);
+/*
+ * The arrival.
+ *
+ * Held invisible until the frame after mount, so the animation has a frame to start
+ * from and a card never flashes at full alpha before it. Then a reveal at the preset's
+ * own duration and curve — `fade` is a linear ramp, `materialise` also resolves from a
+ * blur on the curve the canvas tier's mesh uses — or a plain fade at the enter duration
+ * for a card merely mounted again. An animation rather than a transition, because the
+ * inline opacity the token fade writes must keep its own, shorter transition.
+ */
+.dp-prop:not(.dp-prop--in) {
+  opacity: 0 !important;
 }
 
 .dp-prop--in {
-  filter: none;
+  animation: dp-arrive var(--dp-reveal-dur, var(--dp-dur-enter, 200ms))
+    var(--dp-reveal-ease, linear) backwards;
+}
+
+.dp-prop--in[data-dp-reveal="materialise"] {
+  animation-name: dp-materialise;
+}
+
+.dp-prop[data-dp-reveal="none"] {
+  animation: none;
+}
+
+@keyframes dp-arrive {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes dp-materialise {
+  from {
+    opacity: 0;
+    filter: blur(4px);
+  }
 }
 
 /*
@@ -49,6 +80,12 @@
 .dp-peeking .dp-prop {
   opacity: 0.15 !important;
   transition: opacity var(--dp-dur-state, 120ms) linear;
+}
+
+/* The card under the reader: kept mounted, hidden, so closing the reader fades it
+   back in place rather than re-resolving it and replaying its arrival. */
+.dp-prop[data-dp-focused="true"] {
+  opacity: 0 !important;
 }
 
 /*
@@ -106,6 +143,7 @@
   }
 
   .dp-prop {
+    animation: none;
     filter: none;
   }
 }

@@ -69,6 +69,8 @@ const entry = (over: Record<string, any> = {}) => ({
   focused: false,
   alpha: 1,
   pdf: false,
+  revealing: false,
+  reveal: { animation: "fade", durationMs: 300 },
   ...over,
 });
 
@@ -130,10 +132,19 @@ describe("syncDomTier", () => {
     expect(domPropCount()).toBe(1);
   });
 
-  it("leaves the focused prop to the reader rather than stacking two copies", async () => {
+  it("keeps the focused card mounted but hidden under the reader", async () => {
+    // Unmounting it meant closing the reader re-resolved the card and replayed its
+    // arrival under a reader that had already gone.
     syncDomTier([entry({ focused: true })]);
     await settle();
-    expect(domPropCount()).toBe(0);
+    expect(domPropCount()).toBe(1);
+    const card = overlay()!.querySelector<HTMLElement>(".dp-prop")!;
+    expect(card.dataset.dpFocused).toBe("true");
+
+    syncDomTier([entry({ focused: false })]);
+    await settle();
+    expect(card.dataset.dpFocused).toBeUndefined();
+    expect(resolveCard).toHaveBeenCalledTimes(1);
   });
 
   it("removes a card whose prop is gone from the scene", async () => {
@@ -316,6 +327,26 @@ describe("followDomProp", () => {
 });
 
 describe("the reveal", () => {
+  it("arrives with the preset's own animation and duration when the prop is being revealed", async () => {
+    syncDomTier([
+      entry({ revealing: true, reveal: { animation: "materialise", durationMs: 800 } }),
+    ]);
+    await settle();
+    const card = overlay()!.querySelector<HTMLElement>(".dp-prop")!;
+    expect(card.dataset.dpReveal).toBe("materialise");
+    expect(card.style.getPropertyValue("--dp-reveal-dur")).toBe("800ms");
+    expect(card.style.getPropertyValue("--dp-reveal-ease")).toContain("cubic-bezier");
+  });
+
+  it("arrives with a plain fade at the enter duration when merely mounted again", async () => {
+    // Panning back over a culled prop is not a reveal, whatever the preset says.
+    syncDomTier([entry({ reveal: { animation: "materialise", durationMs: 800 } })]);
+    await settle();
+    const card = overlay()!.querySelector<HTMLElement>(".dp-prop")!;
+    expect(card.dataset.dpReveal).toBe("fade");
+    expect(card.style.getPropertyValue("--dp-reveal-dur")).toBe("");
+  });
+
   it("fades a newly mounted card in rather than snapping it on", async () => {
     syncDomTier([entry()]);
     await settle();

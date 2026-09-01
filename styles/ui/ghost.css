@@ -23,6 +23,12 @@
   display: flex;
   align-items: flex-end;
   justify-content: flex-end;
+  transition: opacity var(--dp-dur-exit, 140ms) var(--dp-ease-in, ease-in);
+
+  /* Cancelled, or placed: it fades rather than vanishing from under the cursor. */
+  &.dp-ghost--out {
+    opacity: 0;
+  }
 }
 
 .dp-ghost__chip,

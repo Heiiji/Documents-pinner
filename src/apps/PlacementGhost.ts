@@ -36,7 +36,7 @@ import { CORE_PRESETS } from "../effects/presets/core-presets";
 import { swatchStyle } from "../effects/preset-css";
 import { resolveCard } from "../render/ContentResolver";
 import { measureCardHeight } from "../render/measure";
-import { mount, syncTransform, write } from "./OverlayRoot";
+import { leave, mount, syncTransform, write } from "./OverlayRoot";
 import type { DpMode, DpPinFlags, DpSource } from "../types/dp";
 
 /** Everything the ghost holds while armed. Pure data, so the steppers can be tested. */
@@ -397,7 +397,7 @@ export function armAt(source: DpSource, point: { x: number; y: number }, mode?: 
 export function disarm(): void {
   for (const off of listeners) off();
   listeners = [];
-  element?.remove();
+  const node = element;
   element = null;
   state = null;
   lastChip = "";
@@ -405,6 +405,7 @@ export function disarm(): void {
   previewHtml = "";
   previewGeneration++;
   fitGeneration++;
+  if (node) void leave(node, "dp-ghost--out");
 }
 
 function on<K extends keyof WindowEventMap>(

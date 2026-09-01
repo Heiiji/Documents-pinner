@@ -27,7 +27,7 @@ import { escapeAttr } from "../html";
 import { readPin } from "../data/PinData";
 import { resolveCard } from "../render/ContentResolver";
 import { propManager } from "../canvas/PropManager";
-import { mount, write } from "./OverlayRoot";
+import { leave, mount, write } from "./OverlayRoot";
 
 let element: HTMLElement | null = null;
 let openId: string | null = null;
@@ -137,10 +137,13 @@ export function closeReader(): void {
   const doc = openId ? cv()?.scene?.tiles?.get(openId) : null;
   if (doc) setMeshDim(doc, false);
 
-  element?.remove();
+  // The state resets at once, so a second open can begin immediately; the node itself
+  // dissolves over the already-restored prop, which is the opening in reverse.
+  const node = element;
   element = null;
   openId = null;
   propManager().setFocused(null);
+  if (node) void leave(node, "dp-reader--out");
   Hooks.callAll(`${MODULE_ID}.readerClosed`);
 }
 

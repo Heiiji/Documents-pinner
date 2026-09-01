@@ -27,6 +27,7 @@
  */
 
 import { cv } from "../fvtt";
+import { MOTION } from "../motion";
 import { IDENTITY, sameMat, stageMatrix, toCssMatrix, type Mat } from "../canvas/transform";
 
 const ROOT_ID = "documents-pinner-overlay";
@@ -201,6 +202,55 @@ function flush(): void {
 /** Add a card to the overlay. The caller owns the element and its removal. */
 export function mount(element: HTMLElement): void {
   overlay()?.appendChild(element);
+}
+
+/**
+ * Take an element out with its exit transition, then remove it.
+ *
+ * The contract: the caller has already dropped its own reference — from here the
+ * element belongs to this function. The class lands at once, so a caller that queries
+ * the document on the next line already sees the element on its way out; removal
+ * happens on `transitionend` for the element itself (not a child), or on a timeout
+ * floor that covers `write()`'s own hidden-tab floor, whichever comes first. So nothing
+ * leaks: a transition that never fires — `display: none`, a property that did not
+ * change, a build with no transitions — still ends in a removal.
+ *
+ * Under a reduced-motion preference, or for an element that is not in the document,
+ * it removes at once. Never `element.animate()`: jsdom has no Web Animations API and
+ * fires no `transitionend`, and the timeout floor is what makes this testable.
+ */
+export function leave(element: HTMLElement, className: string): Promise<void> {
+  if (!element.isConnected || prefersReducedMotion()) {
+    element.remove();
+    return Promise.resolve();
+  }
+
+  return new Promise((resolve) => {
+    let done = false;
+    let timer = 0;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      element.removeEventListener("transitionend", onEnd);
+      window.clearTimeout(timer);
+      element.remove();
+      resolve();
+    };
+    const onEnd = (event: Event) => {
+      if (event.target === element) finish();
+    };
+    element.addEventListener("transitionend", onEnd);
+    timer = window.setTimeout(finish, MOTION.exit + 300);
+    element.classList.add(className);
+  });
+}
+
+function prefersReducedMotion(): boolean {
+  try {
+    return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  } catch {
+    return false;
+  }
 }
 
 /** The matrix the overlay was last drawn with, for tests and for the ghost. */

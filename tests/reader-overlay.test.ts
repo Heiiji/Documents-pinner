@@ -63,7 +63,8 @@ beforeEach(() => {
 
 afterEach(() => uninstallWorld());
 
-const reader = () => document.querySelector<HTMLElement>(".dp-reader");
+/** The OPEN reader: one on its way out is still in the document while it fades. */
+const reader = () => document.querySelector<HTMLElement>(".dp-reader:not(.dp-reader--out)");
 
 describe("the focus reader", () => {
   it("opens for a player who can see the prop but lacks OBSERVER on the source", async () => {
@@ -112,6 +113,18 @@ describe("the focus reader", () => {
     body.scrollTop = 600;
     body.dispatchEvent(new Event("scroll"));
     expect(reader()!.dataset.dpMore).toBe("false");
+  });
+
+  it("leaves with its exit class, and is gone once the exit has run", async () => {
+    const { openReader, closeReader } = await import("../src/apps/ReaderOverlay");
+    await openReader(tile);
+    closeReader();
+
+    // The state is reset at once; the node dissolves.
+    expect(reader()).toBeNull();
+    expect(document.querySelector(".dp-reader--out")).not.toBeNull();
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    expect(document.querySelector(".dp-reader")).toBeNull();
   });
 
   it("closes on a second click, which is what a click on what you are reading means", async () => {

@@ -27,14 +27,17 @@ vi.mock("../src/render/ContentResolver", () => ({
   })),
 }));
 
+/** A rasterisation that lands: the default, put back after any test that changes it. */
+const draw = async () => ({
+  texture: { id: "tex", destroyed: false, destroy: vi.fn() },
+  width: 256,
+  height: 256,
+  bytes: 1024,
+});
+
 vi.mock("../src/render/Rasterizer", () => ({
   loadCardCss: vi.fn(async () => ""),
-  rasterise: vi.fn(async () => ({
-    texture: { id: "tex", destroyed: false, destroy: vi.fn() },
-    width: 256,
-    height: 256,
-    bytes: 1024,
-  })),
+  rasterise: vi.fn(() => draw()),
   rasterisationAvailable: () => true,
   releaseTexture: vi.fn((texture: any) => {
     if (texture) texture.destroyed = true;
@@ -91,9 +94,13 @@ beforeEach(async () => {
   await settle();
 });
 
-afterEach(() => {
+afterEach(async () => {
   manager?.stop();
   uninstallWorld();
+  // A mock implementation survives `vi.resetModules()`, so a test that made the
+  // rasteriser hang would starve every test after it of a texture.
+  const { rasterise } = await import("../src/render/Rasterizer");
+  vi.mocked(rasterise).mockImplementation(() => draw());
 });
 
 describe("the texture cache key", () => {
@@ -288,6 +295,7 @@ describe("the placeholder never gets shown", () => {
     // A rasterisation that never lands, which is the state every reveal fires in: the
     // prop's own texture has by definition not been drawn yet.
     vi.mocked(rasterise).mockImplementation(() => new Promise(() => {}));
+    const before = scheduledAnimations().length;
 
     // Unbind, then hide: the record has to already exist and have been seen as invisible,
     // because the reveal fires on the false -> true transition.
@@ -304,9 +312,84 @@ describe("the placeholder never gets shown", () => {
     // The reveal must not animate the MESH at all: a real animation runs over its
     // duration and would land on full alpha with only the placeholder bound, so the
     // absence of the animation is what has to be asserted, not the value it left behind.
-    // The arrival belongs to `#fadeIn`, once the texture is actually there.
-    const reveals = scheduledAnimations().filter((a) => a.name.includes(".reveal."));
+    // The arrival belongs to `#arrive`, once the texture is actually there.
+    const reveals = scheduledAnimations()
+      .slice(before)
+      .filter((a) => a.name.includes(".alpha."));
     expect(reveals).toEqual([]);
     expect(object.mesh.alpha).toBe(0);
+  });
+});
+
+/**
+ * The reveal used to play at the moment of the transition, when the mesh was by
+ * definition unbound — so it returned early, first reveals arrived through the flat
+ * draw-in and a re-reveal of a cached prop popped with no animation at all. The preset's
+ * curve and duration were dead on the tier they were written for.
+ */
+describe("the reveal, at the bind", () => {
+  const alphas = (from: number) =>
+    scheduledAnimations()
+      .slice(from)
+      .filter((a) => a.name === "documents-pinner.alpha.t1");
+
+  it("plays once a cached prop is re-revealed, with the texture already there", async () => {
+    const object = tiles[0].object;
+    object.isVisible = false;
+    manager.refresh();
+    await settle();
+
+    const before = scheduledAnimations().length;
+    object.isVisible = true;
+    manager.refresh();
+    await settle();
+
+    expect(alphas(before)).toHaveLength(1);
+    expect(object.mesh.alpha).toBe(1);
+  });
+
+  it("plays nothing for a prop rebound after a pan back — it is found where it was", async () => {
+    const world = (globalThis as any).canvas;
+    // Far enough that the prop leaves the viewport, then back.
+    world.stage.worldTransform.tx = -100000;
+    manager.refresh();
+    await settle();
+    expect(tiles[0].object.mesh.texture.id).toBe("core-texture");
+
+    const before = scheduledAnimations().length;
+    world.stage.worldTransform.tx = 0;
+    manager.refresh();
+    await settle();
+
+    expect(tiles[0].object.mesh.texture.id).toBe("tex");
+    expect(alphas(before)).toEqual([]);
+  });
+});
+
+/** Peek and the token fade eased on the DOM tier and snapped on the canvas tier. */
+describe("peek on the canvas tier", () => {
+  it("eases the mesh between two visible levels rather than snapping", () => {
+    const before = scheduledAnimations().length;
+    manager.setPeeking(true);
+    const eased = scheduledAnimations()
+      .slice(before)
+      .filter((a) => a.name === "documents-pinner.alpha.t1");
+    expect(eased).toHaveLength(1);
+    expect(tiles[0].object.mesh.alpha).toBe(0.15);
+  });
+
+  it("does not schedule twice for the same peek", () => {
+    manager.setPeeking(true);
+    const before = scheduledAnimations().length;
+    manager.setPeeking(true);
+    expect(scheduledAnimations().length).toBe(before);
+  });
+
+  it("writes directly while the mesh is held for a texture — a hold is not a transition", () => {
+    manager.invalidate("JournalEntry.j");
+    const before = scheduledAnimations().length;
+    manager.setPeeking(true);
+    expect(scheduledAnimations().length).toBe(before);
+    expect(tiles[0].object.mesh.alpha).toBe(0);
   });
 });

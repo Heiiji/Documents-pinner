@@ -223,3 +223,47 @@ describe("where the overlay sits", () => {
     expect(document.querySelectorAll("#documents-pinner-overlay")).toHaveLength(1);
   });
 });
+
+/**
+ * Every appearance in the module animated and no disappearance did. `leave()` is the one
+ * exit mechanism: a class through the write queue, removal on the element's own
+ * `transitionend` or on a timeout floor, so nothing is ever left behind.
+ */
+describe("leave", () => {
+  it("adds the class at once and removes the element on transitionend", async () => {
+    const element = document.createElement("div");
+    document.body.appendChild(element);
+    const done = overlayRoot.leave(element, "gone");
+    expect(element.classList.contains("gone")).toBe(true);
+    expect(element.isConnected).toBe(true);
+
+    element.dispatchEvent(new Event("transitionend"));
+    await done;
+    expect(element.isConnected).toBe(false);
+  });
+
+  it("ignores a child's transitionend and waits for its own", async () => {
+    const element = document.createElement("div");
+    const child = document.createElement("span");
+    element.appendChild(child);
+    document.body.appendChild(element);
+    void overlayRoot.leave(element, "gone");
+
+    child.dispatchEvent(new Event("transitionend", { bubbles: true }));
+    expect(element.isConnected).toBe(true);
+  });
+
+  it("removes the element on the timeout floor when no transition ever ends", async () => {
+    const element = document.createElement("div");
+    document.body.appendChild(element);
+    const done = overlayRoot.leave(element, "gone");
+    await done;
+    expect(element.isConnected).toBe(false);
+  });
+
+  it("removes a detached element at once", async () => {
+    const element = document.createElement("div");
+    await overlayRoot.leave(element, "gone");
+    expect(element.classList.contains("gone")).toBe(false);
+  });
+});

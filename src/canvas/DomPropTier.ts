@@ -27,6 +27,7 @@
  */
 
 import { logger } from "../log";
+import { curveFor } from "../motion";
 import { escapeAttr } from "../html";
 import { cardMetrics } from "../data/pin-schema";
 import { resolveCard } from "../render/ContentResolver";
@@ -48,6 +49,10 @@ export interface DomPropEntry {
   alpha: number;
   /** A PDF page is drawn at a size, so its card depends on the geometry; HTML does not. */
   pdf: boolean;
+  /** This pass is the one where the prop became visible to this client. */
+  revealing: boolean;
+  /** The preset's reveal, so the card arrives the way the canvas tier's mesh would. */
+  reveal: { animation: string; durationMs: number };
 }
 
 interface Placed {
@@ -125,8 +130,11 @@ export function syncDomTier(entries: readonly DomPropEntry[]): void {
     // Only L0 is skipped. The canvas tier draws a silhouette at L1 from the tile's own
     // texture, but on this path the mesh is held at alpha 0 — the card IS the prop — so
     // skipping L1 here would make a prop vanish as the GM zoomed out rather than shrink.
-    // The focused one is the reader's job; a second copy under it helps nobody.
-    if (entry.tier === "L0" || entry.focused) continue;
+    // The focused one STAYS mounted, hidden under the reader: unmounting it meant that
+    // closing the reader re-resolved the card and replayed its arrival under a reader
+    // that had already vanished. A card at opacity 0 costs a layer, which is what the
+    // reader costs anyway.
+    if (entry.tier === "L0") continue;
     live.add(entry.id);
     upsert(entry);
   }
@@ -161,9 +169,11 @@ function upsert(entry: DomPropEntry): void {
   }
 
   prop.element.dataset.dpFx = escapeAttr(entry.pin.effect.id);
+  if (entry.focused) prop.element.dataset.dpFocused = "true";
+  else delete prop.element.dataset.dpFocused;
   placeGeometry(prop, entry.doc);
   applyAlpha(prop, entry.alpha);
-  if (mounted) reveal(prop.element);
+  if (mounted) arrive(prop.element, entry);
 
   const key = contentKeyOf(entry);
   if (prop.key === key) return;
@@ -255,13 +265,24 @@ function applyAlpha(prop: DomProp, alpha: number): void {
 }
 
 /**
- * The reveal. A prop appearing instantly reads as a rendering glitch; the same prop
- * fading up reads as something being revealed, which is the moment the module exists
- * for — and the canvas tier has always had it. The class is added on the frame AFTER
- * the element is mounted so the transition has an initial state to run from; the
- * stylesheet drops it entirely under `prefers-reduced-motion`.
+ * The arrival: a reveal at the preset's own duration and curve, or a plain fade at the
+ * enter duration for a card that is merely being mounted again — panning back over a
+ * culled prop, say. A prop appearing instantly reads as a rendering glitch; the same
+ * prop resolving reads as something being revealed, which is the moment the module
+ * exists for, and it used to play the same 260 ms unblur on EVERY mount whatever the
+ * preset said. The class is added on the frame AFTER the element is mounted so the
+ * animation has a frame to start from; the stylesheet drops it under reduced motion.
  */
-function reveal(element: HTMLElement): void {
+function arrive(element: HTMLElement, entry: DomPropEntry): void {
+  const animation = entry.revealing ? entry.reveal.animation : "fade";
+  element.dataset.dpReveal = animation;
+  if (entry.revealing) {
+    element.style.setProperty("--dp-reveal-dur", `${entry.reveal.durationMs}ms`);
+    element.style.setProperty("--dp-reveal-ease", curveFor(animation));
+  } else {
+    element.style.removeProperty("--dp-reveal-dur");
+    element.style.removeProperty("--dp-reveal-ease");
+  }
   write(element, () => {
     requestAnimationFrame(() => element.classList.add("dp-prop--in"));
   });

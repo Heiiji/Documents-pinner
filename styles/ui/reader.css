@@ -26,11 +26,22 @@
   filter: blur(6px);
   transition:
     opacity var(--dp-dur-reveal, 400ms) var(--dp-ease-resolve, ease-out),
-    filter var(--dp-dur-reveal, 400ms) var(--dp-ease-resolve, ease-out);
+    filter var(--dp-dur-reveal, 400ms) var(--dp-ease-resolve, ease-out),
+    scale var(--dp-dur-reveal, 400ms) var(--dp-ease-resolve, ease-out);
 
   &.dp-reader--in {
     opacity: 1;
     filter: none;
+  }
+
+  /* The exit: the opening in reverse, shorter, over the prop that has already been
+     restored underneath. The reader is UI at that moment, so it may settle in space. */
+  &.dp-reader--out {
+    opacity: 0;
+    filter: blur(6px);
+    scale: 0.98;
+    transition-duration: var(--dp-dur-exit, 140ms);
+    transition-timing-function: var(--dp-ease-in, ease-in);
   }
 
   /* Text in a reader is meant to be selected; everywhere else in the module it is not. */

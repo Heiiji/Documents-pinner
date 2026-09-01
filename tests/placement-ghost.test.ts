@@ -267,7 +267,8 @@ describe("the preview", () => {
     uninstallWorld();
   });
 
-  const body = () => document.querySelector<HTMLElement>(".dp-ghost__body")!;
+  const body = () =>
+    document.querySelector<HTMLElement>(".dp-ghost:not(.dp-ghost--out) .dp-ghost__body")!;
 
   it("shows the swatch at once and the real page once it resolves", async () => {
     arm(source);
