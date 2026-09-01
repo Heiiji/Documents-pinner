@@ -52,9 +52,8 @@ describe("the rasteriser's SVG is well-formed XML", () => {
       bodyHtml: body,
       showTitle: true,
       paper: "parchment",
-      padding: 0.06,
-      width: 400,
-      height: 560,
+      fontPx: 15.38,
+      padPx: 24,
       effectId: "aged-parchment",
     });
     expect(parseErrorIn(svgDocument(card, CARD_CSS, 400, 560))).toBeNull();

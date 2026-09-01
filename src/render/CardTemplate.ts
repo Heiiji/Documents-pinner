@@ -38,11 +38,17 @@ export interface CardOptions {
   bodyHtml: string;
   showTitle: boolean;
   paper: string;
-  /** Fraction of the short edge, 0–0.5. */
-  padding: number;
-  /** The card's pixel size, so type scales with the prop rather than with the screen. */
-  width: number;
-  height: number;
+  /**
+   * Type size and padding in CARD pixels, from `cardMetrics`.
+   *
+   * Card pixels, not screen pixels: a prop is rasterised once at a chosen resolution
+   * and then scaled, so type sized in screen units would grow and shrink relative to
+   * the paper as the GM zoomed, which is the one thing a physical object must never do.
+   * The card carries NO width or height of its own — it fills whatever box it is put
+   * in, which is what lets a resized prop re-flow without being re-resolved.
+   */
+  fontPx: number;
+  padPx: number;
   /** Effect id, exposed as a data attribute for the CSS renditions to key off. */
   effectId: string;
   /** The effect's custom properties, from `EffectRegistry.dressing`. */
@@ -53,36 +59,15 @@ export interface CardOptions {
   missing?: boolean;
 }
 
-/**
- * Type size, derived from the card's own short edge.
- *
- * Font size in card pixels, not screen pixels: a prop is rasterised once at a chosen
- * resolution and then scaled, so type sized in screen units would grow and shrink
- * relative to the paper as the GM zoomed, which is the one thing a physical object
- * must never do.
- */
-export function baseFontSize(width: number, height: number): number {
-  const short = Math.max(1, Math.min(width, height));
-  // Deliberately not rounded to whole pixels: rounding makes the size only ALMOST
-  // proportional to the card, and "almost" is what makes type visibly drift as a prop
-  // is resized. Fractional font sizes are exact in both CSS and an SVG foreignObject.
-  // ~26 lines of body text down the short edge reads as a letter, not a poster.
-  return Math.max(8, short / 26);
-}
-
 export function cardHtml(options: CardOptions): string {
   const paper = paperOf(options.paper);
-  const pad = Math.round(Math.min(options.width, options.height) * options.padding);
-  const font = baseFontSize(options.width, options.height);
 
   const style = [
     `--dp-paper-base:${paper.base}`,
     `--dp-paper-ink:${paper.ink}`,
     `--dp-paper-edge:${paper.edge}`,
-    `--dp-card-pad:${pad}px`,
-    `font-size:${font}px`,
-    `width:${options.width}px`,
-    `height:${options.height}px`,
+    `--dp-card-pad:${options.padPx}px`,
+    `font-size:${options.fontPx}px`,
     // The effect's own properties last, so a preset can override a paper default
     // rather than the other way round.
     options.effectStyle ?? "",

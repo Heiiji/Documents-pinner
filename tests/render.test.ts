@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { baseFontSize, cardHtml, paperOf, svgDocument } from "../src/render/CardTemplate";
+import { cardHtml, paperOf, svgDocument } from "../src/render/CardTemplate";
 import { textureBytes, textureFromCanvas, tierFor } from "../src/render/Rasterizer";
 import { TextureCache, cacheKey, hashContent, plan } from "../src/render/TextureCache";
 
@@ -9,9 +9,8 @@ const card = (over: Record<string, any> = {}) =>
     bodyHtml: "<p>Signed.</p>",
     showTitle: true,
     paper: "parchment",
-    padding: 0.06,
-    width: 400,
-    height: 560,
+    fontPx: 15.38,
+    padPx: 24,
     effectId: "aged-parchment",
     ...over,
   });
@@ -23,20 +22,6 @@ describe("paperOf", () => {
 
   it("falls back to parchment for an unknown stock", () => {
     expect(paperOf("holographic-unobtanium")).toEqual(paperOf("parchment"));
-  });
-});
-
-describe("baseFontSize", () => {
-  it("derives type size from the SHORT edge, so a wide card is not oversized", () => {
-    expect(baseFontSize(400, 560)).toBe(baseFontSize(400, 4000));
-  });
-
-  it("scales with the card, so type stays fixed relative to the paper", () => {
-    expect(baseFontSize(800, 1120)).toBeCloseTo(2 * baseFontSize(400, 560), 10);
-  });
-
-  it("never goes below a legible floor", () => {
-    expect(baseFontSize(4, 4)).toBe(8);
   });
 });
 
@@ -59,8 +44,19 @@ describe("cardHtml", () => {
     expect(html).not.toContain("--color-");
   });
 
-  it("turns the padding fraction into pixels of the short edge", () => {
-    expect(card({ padding: 0.1, width: 400, height: 560 })).toContain("--dp-card-pad:40px");
+  it("writes the type size and the pad it was given, in card pixels", () => {
+    const html = card({ fontPx: 12, padPx: 18 });
+    expect(html).toContain("font-size:12px");
+    expect(html).toContain("--dp-card-pad:18px");
+  });
+
+  // A prop is a window onto its document. The box it fills decides the size; a card
+  // that carried its own width would have to be re-resolved on every resize, which is
+  // exactly the defect the DOM tier had.
+  it("does not bake the card's width or height into its style — the box it fills decides", () => {
+    const html = card();
+    expect(html).not.toMatch(/[^-]width:\d/);
+    expect(html).not.toMatch(/[^-]height:\d/);
   });
 
   it("marks a missing source rather than drawing a blank sheet", () => {

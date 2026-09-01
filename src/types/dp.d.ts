@@ -28,8 +28,30 @@ export interface DpDisplay {
   /** Asset key for the card backing (parchment, vellum, plain…). */
   paper: string;
   showTitle: boolean;
-  /** Inner padding as a fraction of the card's short edge, 0–0.5. */
+  /**
+   * Legacy: inner padding as a fraction of the card's short edge, 0–0.5.
+   *
+   * Read only while `margin` is null, and never written by this version. It stays in
+   * the schema so a payload from before type sizes existed neither warns nor changes.
+   */
   padding: number;
+  /**
+   * Type size in SCENE pixels, independent of the tile's size.
+   *
+   * This is what makes a prop a window onto its document rather than a zoom of it:
+   * the tile decides how much of the page shows, the type size decides how large the
+   * words are. `null` means "derive the legacy proportional size from the tile" — see
+   * `cardMetrics` — which is exactly what every prop did before this field existed.
+   */
+  typeSize: number | null;
+  /**
+   * Inner margin in em of the type size, 0–6.
+   *
+   * Em rather than a fraction of the short edge, or growing a tile to show more lines
+   * would also grow the margins — the opposite of a window. `null` derives from the
+   * legacy `padding` fraction.
+   */
+  margin: number | null;
   fadeUnderTokens: boolean;
   /** Alpha the prop fades to when a token overlaps it, 0–1. */
   fadeUnderTokensAlpha: number;

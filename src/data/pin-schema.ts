@@ -71,6 +71,22 @@ const ALLOWED_SCHEME = /^(?:https?):/i;
 const HAS_SCHEME = /^[a-z][a-z0-9+.-]*:/i;
 const MAX_PATH = 1024;
 
+/**
+ * The type-size contract.
+ *
+ * `LINES_PER_SHORT_EDGE` is the legacy derive — ~26 lines of body text down a card's
+ * short edge reads as a letter, not a poster — and still decides what a freshly placed
+ * prop looks like, through `defaultTypeSize`. The bounds are legibility: below 6 px
+ * nothing is text, and above 200 px a single word is a poster. Margins are in em of the
+ * type size; six ems of margin on each side is where a card stops having content.
+ */
+export const LINES_PER_SHORT_EDGE = 26;
+export const TYPE_SIZE_MIN = 6;
+export const TYPE_SIZE_MAX = 200;
+export const MARGIN_MAX_EM = 6;
+/** ~23 px at the default type on a 100 px grid, against the legacy 24 px. */
+export const DEFAULT_MARGIN_EM = 1.5;
+
 export function defaultSource(): DpSource {
   return { kind: "document", uuid: null, src: null, pageId: null, followName: true };
 }
@@ -83,6 +99,8 @@ export function defaultDisplay(): DpDisplay {
     paper: "parchment",
     showTitle: true,
     padding: 0.06,
+    typeSize: null,
+    margin: null,
     fadeUnderTokens: true,
     fadeUnderTokensAlpha: 0.25,
   };
@@ -180,9 +198,24 @@ function normaliseDisplay(raw: unknown, warnings: DpNotice[]): DpDisplay {
     showTitle: bool(s.showTitle, d.showTitle),
     // Half the short edge is the point at which padding leaves no content area at all.
     padding: num(s.padding, d.padding, 0, 0.5),
+    typeSize: nullableNum(s.typeSize, TYPE_SIZE_MIN, TYPE_SIZE_MAX),
+    margin: nullableNum(s.margin, 0, MARGIN_MAX_EM),
     fadeUnderTokens: bool(s.fadeUnderTokens, d.fadeUnderTokens),
     fadeUnderTokensAlpha: num(s.fadeUnderTokensAlpha, d.fadeUnderTokensAlpha, 0, 1),
   };
+}
+
+/**
+ * A number clamped into `[min, max]`, or `null` for anything that is not one.
+ *
+ * `null` is a real value here, not an absence: it means "derive it", and a string that
+ * fails to parse must become that rather than a silent default the GM never chose.
+ */
+function nullableNum(value: unknown, min: number, max: number): number | null {
+  if (typeof value !== "number" && typeof value !== "string") return null;
+  const n = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(n)) return null;
+  return Math.min(max, Math.max(min, n));
 }
 
 /**
@@ -401,6 +434,76 @@ export function naturalSize(
   const grid = Number.isFinite(gridSize) && gridSize > 0 ? gridSize : 100;
   if (mode === "pin") return { width: grid, height: grid };
   return { width: grid * 4, height: Math.round(grid * 4 * 1.414) };
+}
+
+/**
+ * The legacy type size: a fixed fraction of the card's short edge.
+ *
+ * This is what every prop was drawn at before type sizes were stored, and it is still
+ * what a `null` type size means. Deliberately not rounded to whole pixels: rounding
+ * makes the size only ALMOST proportional to the card, and "almost" is what made type
+ * visibly drift as a prop was resized. Fractional font sizes are exact in both CSS and
+ * an SVG foreignObject.
+ */
+export function baseFontSize(width: number, height: number): number {
+  const short = Math.max(1, Math.min(width, height));
+  return Math.max(8, short / LINES_PER_SHORT_EDGE);
+}
+
+export interface CardMetrics {
+  /** Type size in card pixels. */
+  fontPx: number;
+  /** Inner padding in card pixels. */
+  padPx: number;
+}
+
+/**
+ * The two numbers a card is laid out with, from a display and the box it is going into.
+ *
+ * The single choke point between the stored fields and every renderer. A stored value
+ * wins; a `null` derives exactly what the pre-2 schema derived, so an unmigrated
+ * payload renders byte-for-byte as it did — on a player client that loaded before the
+ * GM's migration ran, or on a scene imported from a pack a year from now.
+ */
+export function cardMetrics(
+  display: DpDisplay,
+  size: { width: number; height: number }
+): CardMetrics {
+  const fontPx = display.typeSize ?? baseFontSize(size.width, size.height);
+  const padPx =
+    display.margin !== null
+      ? Math.round(display.margin * fontPx)
+      : Math.round(Math.min(size.width, size.height) * display.padding);
+  return { fontPx, padPx };
+}
+
+/**
+ * The type size a NEW prop gets: what a natural-size prop derived before type sizes
+ * were stored, so a freshly placed prop looks exactly as it always has.
+ */
+export function defaultTypeSize(gridSize: number): number {
+  const natural = naturalSize("prop", gridSize);
+  return baseFontSize(natural.width, natural.height);
+}
+
+/**
+ * Replace derived metrics with the numbers that reproduce them at `size`.
+ *
+ * The migration, the mode switch and the Studio all call this at the moment a prop's
+ * proportional look is about to become a stored one: the pixels on screen do not
+ * change, only what the next resize does. Stored numbers are left alone; a payload
+ * with both stored is returned as-is, so this is idempotent and cheap to call twice.
+ */
+export function freezeMetrics(
+  pin: DpPinFlags,
+  size: { width: number; height: number }
+): DpPinFlags {
+  if (pin.display.typeSize !== null && pin.display.margin !== null) return pin;
+  const { fontPx, padPx } = cardMetrics(pin.display, size);
+  const typeSize = pin.display.typeSize ?? num(fontPx, fontPx, TYPE_SIZE_MIN, TYPE_SIZE_MAX);
+  const margin =
+    pin.display.margin ?? num(Number((padPx / typeSize).toFixed(4)), 0, 0, MARGIN_MAX_EM);
+  return { ...pin, display: { ...pin.display, typeSize, margin } };
 }
 
 /** Whether a payload describes a pin that can actually resolve its source. */

@@ -28,6 +28,7 @@ import type { LodTier } from "../canvas/lod";
 import { enrichFor } from "./enrich";
 import { pdfSourceOf, renderPdfPage } from "./PdfPage";
 import { hashContent } from "./TextureCache";
+import { cardMetrics } from "../data/pin-schema";
 import type { DpPinFlags } from "../types/dp";
 
 export interface ResolvedCard {
@@ -112,12 +113,13 @@ export async function resolveCard(
       })
     : null;
 
+  // The box decides how much shows; the metrics decide how large the words are.
+  const { fontPx, padPx } = cardMetrics(pin.display, size);
   const common = {
     showTitle: pin.display.showTitle,
     paper: pin.display.paper,
-    padding: pin.display.padding,
-    width: size.width,
-    height: size.height,
+    fontPx,
+    padPx,
     effectId: pin.effect.id,
     effectStyle: dressed?.style,
     effectAttrs: dressed?.attrs,
