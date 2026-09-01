@@ -15,7 +15,8 @@
 .dp-prop {
   position: absolute;
   transform-origin: 50% 50%;
-  overflow: hidden;
+  /* No clip of its own: the card inside clips itself, and the grip below sits astride
+     the corner, which a clip here cut in half. */
   /* `PropHitLayer` owns interaction on every tier. A card that captured its own clicks
      would give DOM-mode clients a second, subtly different interaction path — and would
      swallow the drag-to-pan gesture that starts with a pointerdown on the board. */
@@ -110,6 +111,38 @@
    back in place rather than re-resolving it and replaying its arrival. */
 .dp-prop[data-dp-focused="true"] {
   opacity: 0 !important;
+}
+
+/*
+ * Core's selection, redrawn on the paper.
+ *
+ * The card is opaque and paints over the Tiles layer, so core's own frame and its resize
+ * handle sit under it: a GM saw a grip on a PDF, which has no card, and none on a letter.
+ * The card now occupies exactly core's rectangle, so a ring on its edge and a disc on its
+ * bottom-right corner lie over core's own — and the press goes through to core's handle,
+ * because the card is pointer-transparent. Scene units, like everything in the overlay,
+ * which is what core draws its frame in. The colour is core's `CONTROLLED` disposition,
+ * published on the overlay root; the literal is the value core has shipped for years.
+ */
+.dp-prop[data-dp-controlled="true"] {
+  box-shadow:
+    0 0 0 2px var(--dp-controlled, #ff9829),
+    0 0 0 4px rgb(0 0 0 / 85%);
+}
+
+.dp-prop[data-dp-controlled="true"]::after {
+  content: "";
+  position: absolute;
+  inset-inline-end: 0;
+  inset-block-end: 0;
+  inline-size: 20px;
+  block-size: 20px;
+  translate: 50% 50%;
+  border-radius: 50%;
+  background: var(--dp-controlled, #ff9829);
+  border: 3px solid #000;
+  box-sizing: border-box;
+  pointer-events: none;
 }
 
 /*

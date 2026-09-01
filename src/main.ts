@@ -18,7 +18,12 @@ import * as settings from "./settings";
 import { definePinData } from "./data/PinData";
 import { onPreDeleteTile, onSourceOwnershipEdited, reconcile } from "./data/ownership-sync";
 import { onCanvasReady as migrateOnCanvasReady } from "./data/migrations";
-import { definePinnedTile, refreshAllPins } from "./canvas/PinnedTile";
+import {
+  checkTileGeometry,
+  definePinnedTile,
+  onTileRefreshed,
+  refreshAllPins,
+} from "./canvas/PinnedTile";
 import { registerPropHitLayer, suspendHits, syncHitLayer } from "./canvas/PropHitLayer";
 import { propManager, teardownProps } from "./canvas/PropManager";
 import { probeRasterisation } from "./render/Rasterizer";
@@ -42,8 +47,7 @@ import {
   onRenderConfig,
   onSourceRenamed,
 } from "./ui/entry-points";
-import { readPin } from "./data/PinData";
-import { followDomProp, setDomPropHover } from "./canvas/DomPropTier";
+import { setDomPropHover } from "./canvas/DomPropTier";
 import { onboardingReady } from "./ui/onboarding";
 
 const log = logger("boot");
@@ -108,6 +112,8 @@ Hooks.on("canvasReady", () => {
   alignToBoard();
   syncTransform(true);
   propManager().start();
+  // The one assumption every placement rests on, checked against core's own bounds.
+  checkTileGeometry();
   syncHitLayer();
   void migrateOnCanvasReady(cv()?.scene);
 });
@@ -138,17 +144,10 @@ Hooks.on("renderSceneControls", () => syncHitLayer());
 // since it was written; nothing listened.
 Hooks.on(`${MODULE_ID}.tileDrawn`, (tile: any) => propManager().onTileDrawn(tile));
 
-// Core's resize handles mutate the document in memory on every tick of the drag and
-// fire the generic refresh hook; the commit only arrives as `updateTile` on release.
-// The DOM card and the reader follow the handles live through two dirty-checked
-// re-placers, so a refresh that moved nothing — a hover, a control frame — costs a few
-// compares, and if a future core commits without mutating first, the commit path above
-// still does the work.
-Hooks.on("refreshTile", (tile: any) => {
-  if (readPin(tile?.document)?.mode !== "prop") return;
-  followDomProp(tile.document);
-  repositionReader();
-});
+// Core's handles and drags mutate a document in memory on every tick and fire the
+// generic refresh hook; the commit only arrives as `updateTile` on release. The card and
+// the reader follow live, and a drag's preview clone speaks for its original.
+Hooks.on("refreshTile", onTileRefreshed);
 
 // `interaction.tooltip` was offered by the Pin Studio, validated, stored — and read by
 // nothing, while `PropHitLayer` fired this hook into a void. A player hovering a pin got

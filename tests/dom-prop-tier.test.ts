@@ -39,6 +39,7 @@ import {
   domPropCount,
   followDomProp,
   previewIntensity,
+  setDomPropControlled,
   setDomPropHover,
   syncDomTier,
 } from "../src/canvas/DomPropTier";
@@ -73,6 +74,7 @@ const entry = (over: Record<string, any> = {}) => ({
   pdf: false,
   revealing: false,
   reveal: { animation: "fade", durationMs: 300 },
+  controlled: false,
   ...over,
 });
 
@@ -110,13 +112,14 @@ describe("syncDomTier", () => {
     expect(card!.innerHTML).toContain("letter");
   });
 
-  it("positions the card in SCENE space, so the overlay matrix does the rest", async () => {
+  it("positions the card in SCENE space, around the document's point, so the overlay matrix does the rest", async () => {
     syncDomTier([entry()]);
     await settle();
 
+    // (100,240) is the tile's CENTRE on v14; the card's corner is half a box before it.
     const card = overlay()!.querySelector<HTMLElement>(".dp-prop")!;
-    expect(card.style.left).toBe("100px");
-    expect(card.style.top).toBe("240px");
+    expect(card.style.left).toBe("-100px");
+    expect(card.style.top).toBe("-40px");
     expect(card.style.width).toBe("400px");
     expect(card.style.height).toBe("560px");
     expect(card.style.transform).toBe("rotate(15deg)");
@@ -180,7 +183,7 @@ describe("syncDomTier", () => {
     await settle();
 
     expect(resolveCard).toHaveBeenCalledTimes(1);
-    expect(overlay()!.querySelector<HTMLElement>(".dp-prop")!.style.left).toBe("900px");
+    expect(overlay()!.querySelector<HTMLElement>(".dp-prop")!.style.left).toBe("700px");
   });
 
   /**
@@ -402,5 +405,53 @@ describe("the reveal", () => {
     syncDomTier([entry({ doc: doc({ x: 900 }) })]);
     await settle();
     expect(card.classList.contains("dp-prop--in")).toBe(false);
+  });
+});
+
+/**
+ * Core's selection, mirrored on the card: the frame and the grip core draws lie under
+ * an opaque card, so the card draws its own copy of both in the rectangle it now shares
+ * with the tile.
+ */
+describe("the controlled mark", () => {
+  it("mounts a card already marked when its tile is controlled", async () => {
+    syncDomTier([entry({ controlled: true })]);
+    await settle();
+    expect(overlay()!.querySelector<HTMLElement>(".dp-prop")!.dataset.dpControlled).toBe("true");
+  });
+
+  it("setDomPropControlled marks and unmarks a mounted card", async () => {
+    syncDomTier([entry()]);
+    await settle();
+    const card = overlay()!.querySelector<HTMLElement>(".dp-prop")!;
+    expect(card.dataset.dpControlled).toBeUndefined();
+
+    setDomPropControlled("t1", true);
+    await settle();
+    expect(card.dataset.dpControlled).toBe("true");
+
+    setDomPropControlled("t1", false);
+    await settle();
+    expect(card.dataset.dpControlled).toBeUndefined();
+  });
+
+  it("is a no-op for a prop that is not mounted", () => {
+    expect(() => setDomPropControlled("nope", true)).not.toThrow();
+  });
+});
+
+describe("followDomProp under another id", () => {
+  it("places the original's card from a preview clone's document", async () => {
+    syncDomTier([entry({ pin: sized() })]);
+    await settle();
+
+    // A drag clone: a copy of the document with its own id, moved by core.
+    followDomProp(doc({ id: "preview-of-t1", x: 500, y: 640 }), "t1");
+    await settle();
+
+    expect(resolveCard).toHaveBeenCalledTimes(1);
+    const box = overlay()!.querySelector<HTMLElement>(".dp-prop")!;
+    expect(box.style.left).toBe("300px");
+    expect(box.style.top).toBe("360px");
   });
 });

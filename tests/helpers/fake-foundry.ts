@@ -152,12 +152,188 @@ export function fakeTile(options: FakeDocOptions = {}): any {
     id: doc.id,
     document: doc,
     isVisible: true,
+    controlled: false,
+    isPreview: false,
+    hasPreview: false,
     // A real tile always has a texture — see PLACEHOLDER_TEXTURE — and the manager
     // captures it to restore later.
     mesh: { texture: { id: "core-texture" }, alpha: 1, visible: true },
     renderFlags: { set: () => {} },
+    // Core's own geometry, as measured on 14.365: the document's point is the CENTRE, and
+    // `bounds` starts half a box before it. The 14.366 type definitions still document the
+    // point as the top-left corner; the live canvas is the authority, and this fake models
+    // the live canvas. `checkTileGeometry` compares the two at every draw.
+    get bounds() {
+      return tileBounds(doc);
+    },
+    get center() {
+      return { x: doc.x, y: doc.y };
+    },
   };
   return doc;
+}
+
+/** The axis-aligned bounds core reports for a tile drawn about its centre. */
+function tileBounds(doc: any): { x: number; y: number; width: number; height: number } {
+  const rot = ((doc.rotation ?? 0) * Math.PI) / 180;
+  const cos = Math.abs(Math.cos(rot));
+  const sin = Math.abs(Math.sin(rot));
+  const width = doc.width * cos + doc.height * sin;
+  const height = doc.width * sin + doc.height * cos;
+  return { x: doc.x - width / 2, y: doc.y - height / 2, width, height };
+}
+
+/**
+ * The Tile placeable, thin enough to chain `PinnedTile` onto.
+ *
+ * Models the parts of core's drag that the module reaches into, each with the real
+ * behaviour it stands in for:
+ *
+ * - `clone()` builds `new this.constructor(copy)`, keeps the document id and flags, and
+ *   points `_original` back — so a clone of a PinnedTile IS a PinnedTile and reads as a
+ *   pin. `isPreview` is `!!_original`; `hasPreview` is `!!_preview`.
+ * - `_draw()` takes the texture from `_original.texture` when there is one: a preview
+ *   draws the placeholder the original was created with, never what a manager bound to
+ *   the original's mesh.
+ * - `_refreshState()` and `_refreshMesh()` write `document.alpha` back onto the mesh,
+ *   which is the reset any override has to survive.
+ * - `_onDragLeftStart` clones every controlled object into `layer.preview`;
+ *   `_onDragLeftMove` moves the clones' documents synchronously; drop and cancel clear
+ *   the preview and destroy the clones. Drop records what would be committed.
+ */
+export function fakeTileClass(): any {
+  const layer = { preview: { children: [] as any[] }, controlled: [] as any[] };
+
+  return class Tile {
+    static layer = layer;
+    document: any;
+    mesh: any = null;
+    texture: any;
+    _original: any = null;
+    _preview: any = null;
+    _controlled = false;
+    destroyed = false;
+    drawn = 0;
+    layer = layer;
+    /** What `_onDragLeftDrop` would have written. */
+    committed: any[] = [];
+
+    constructor(document: any) {
+      this.document = document;
+      this.texture = { id: `placeholder:${document?.texture?.src ?? ""}` };
+    }
+
+    get id() {
+      return this.document.id;
+    }
+    get isPreview() {
+      return !!this._original;
+    }
+    get hasPreview() {
+      return !!this._preview;
+    }
+    get controlled() {
+      return this._controlled;
+    }
+    get isVisible() {
+      return true;
+    }
+    get bounds() {
+      return tileBounds(this.document);
+    }
+    get center() {
+      return { x: this.document.x, y: this.document.y };
+    }
+
+    clone() {
+      const copy = { ...this.document, flags: this.document.flags, parent: this.document.parent };
+      const clone = new (this.constructor as any)(copy);
+      clone._original = this;
+      this._preview = clone;
+      return clone;
+    }
+
+    async draw() {
+      await this._draw();
+      return this;
+    }
+    async _draw() {
+      this.drawn++;
+      this.mesh = {
+        texture: this._original?.texture ?? this.texture,
+        alpha: this.document.alpha ?? 1,
+        visible: true,
+      };
+    }
+    _refreshState() {
+      if (this.mesh) this.mesh.alpha = this.document.alpha ?? 1;
+    }
+    _refreshMesh() {
+      if (this.mesh) this.mesh.alpha = this.document.alpha ?? 1;
+    }
+    _refreshVisibility() {}
+    _canControl() {
+      return true;
+    }
+    _canHover() {
+      return true;
+    }
+    _onClickLeft() {}
+    _onClickLeft2() {}
+    _onControl(_options?: any) {}
+    _onRelease(_options?: any) {}
+    _onUpdate() {}
+
+    control(options?: any) {
+      this._controlled = true;
+      if (!layer.controlled.includes(this)) layer.controlled.push(this);
+      this._onControl(options);
+      return true;
+    }
+    release(options?: any) {
+      this._controlled = false;
+      layer.controlled = layer.controlled.filter((o) => o !== this);
+      this._onRelease(options);
+      return true;
+    }
+
+    _onDragLeftStart(event: any) {
+      const clones = layer.controlled.map((o) => o.clone());
+      event.interactionData.clones = clones;
+      layer.preview.children.push(...clones);
+      for (const clone of clones) void clone.draw();
+    }
+    _onDragLeftMove(event: any) {
+      const { clones, origin, destination } = event.interactionData;
+      for (const clone of clones ?? []) {
+        clone.document.x = clone._original.document.x + (destination.x - origin.x);
+        clone.document.y = clone._original.document.y + (destination.y - origin.y);
+      }
+    }
+    _onDragLeftDrop(event: any) {
+      for (const clone of event.interactionData.clones ?? []) {
+        this.committed.push({ _id: clone._original.id, x: clone.document.x, y: clone.document.y });
+      }
+      this.#clearPreview(event);
+    }
+    _onDragLeftCancel(event: any) {
+      this.#clearPreview(event);
+    }
+    #clearPreview(event: any) {
+      for (const clone of event.interactionData.clones ?? []) {
+        clone._original._preview = null;
+        clone._destroy();
+      }
+      layer.preview.children = [];
+    }
+
+    destroy() {
+      this._destroy();
+    }
+    _destroy() {
+      this.destroyed = true;
+    }
+  };
 }
 
 // ---------------------------------------------------------------------------

@@ -26,7 +26,7 @@
  * events through except on the cards that opt in.
  */
 
-import { cv } from "../fvtt";
+import { cfg, cv } from "../fvtt";
 import { MOTION } from "../motion";
 import { IDENTITY, sameMat, stageMatrix, toCssMatrix, type Mat } from "../canvas/transform";
 
@@ -156,9 +156,15 @@ export function alignToBoard(): void {
   const dimensions = cv()?.dimensions;
   if (!element || !dimensions?.width || !dimensions?.height) return;
 
+  // Core's selection colour, so the frame the DOM tier draws on a controlled card is the
+  // same orange core draws under it — read at runtime, never copied.
+  const controlled = cfg()?.Canvas?.dispositionColors?.CONTROLLED;
   write(element, () => {
     element.style.width = `${dimensions.width}px`;
     element.style.height = `${dimensions.height}px`;
+    if (typeof controlled === "number" && Number.isFinite(controlled)) {
+      element.style.setProperty("--dp-controlled", `#${controlled.toString(16).padStart(6, "0")}`);
+    }
   });
 }
 

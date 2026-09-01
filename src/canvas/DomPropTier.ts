@@ -33,6 +33,7 @@ import { cardMetrics } from "../data/pin-schema";
 import { resolveCard } from "../render/ContentResolver";
 import { currentLevel } from "../effects/level";
 import { mount, write } from "../apps/OverlayRoot";
+import { tileRect, type PlacedRect } from "./transform";
 import type { LodTier } from "./lod";
 import type { DpPinFlags } from "../types/dp";
 
@@ -53,14 +54,8 @@ export interface DomPropEntry {
   revealing: boolean;
   /** The preset's reveal, so the card arrives the way the canvas tier's mesh would. */
   reveal: { animation: string; durationMs: number };
-}
-
-interface Placed {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  rotation: number;
+  /** Core has this tile selected; the card draws the frame and the grip core's mesh cannot. */
+  controlled: boolean;
 }
 
 interface DomProp {
@@ -70,7 +65,7 @@ interface DomProp {
   /** Bumped on every resolve, so a slow one cannot overwrite a newer card. */
   generation: number;
   /** The geometry last written, so a LOD pass after a pan writes nothing. */
-  placedAt: Placed | null;
+  placedAt: PlacedRect | null;
   /** The opacity last written, for the same reason. */
   alpha: number | null;
   /** The height at which the whole card fits, from the resolver; null when unknown. */
@@ -171,6 +166,7 @@ function upsert(entry: DomPropEntry): void {
   prop.element.dataset.dpFx = escapeAttr(entry.pin.effect.id);
   if (entry.focused) prop.element.dataset.dpFocused = "true";
   else delete prop.element.dataset.dpFocused;
+  markControlled(prop.element, entry.controlled);
   placeGeometry(prop, entry.doc);
   applyAlpha(prop, entry.alpha);
   if (mounted) arrive(prop.element, entry);
@@ -199,15 +195,15 @@ function upsert(entry: DomPropEntry): void {
  * The overlay root already carries the stage matrix, so these five values are written
  * once per geometry CHANGE and never per frame — dirty-checked, because a LOD pass runs
  * after every pan and five style writes per prop per pass is what this saves.
+ *
+ * The box is `tileRect(doc)`, never the document's own point: that point is the tile's
+ * centre, and a card placed with its corner there sat half a card down and right of the
+ * frame core drew — which is why a text prop showed no resize handle (it was under the
+ * paper) and why a dragged prop trailed a white book (core's preview, where the tile
+ * actually was).
  */
 function placeGeometry(prop: DomProp, doc: any): void {
-  const next: Placed = {
-    x: doc.x,
-    y: doc.y,
-    width: doc.width,
-    height: doc.height,
-    rotation: doc.rotation ?? 0,
-  };
+  const next = tileRect(doc);
   const last = prop.placedAt;
   if (
     last &&
@@ -289,17 +285,41 @@ function arrive(element: HTMLElement, entry: DomPropEntry): void {
 }
 
 /**
- * Re-place a mounted card at the document's CURRENT geometry, with no resolve.
+ * Re-place a mounted card at a document's CURRENT geometry, with no resolve.
  *
  * Core's resize handles mutate the document in memory on every tick of the drag and
  * commit on release; the LOD pass only hears the commit. This is what lets the card
  * follow the handles live, and it is dirty-checked, so a refresh that moved nothing
  * costs a few compares.
+ *
+ * `id` names the card when the document is not the card's own: a drag moves core's
+ * preview clone, whose document is a copy, and the card that must follow it is the
+ * original's.
  */
-export function followDomProp(doc: any): void {
-  const prop = props.get(doc?.id);
+export function followDomProp(doc: any, id: string | undefined = doc?.id): void {
+  const prop = id ? props.get(id) : undefined;
   if (!prop) return;
   placeGeometry(prop, doc);
+}
+
+/**
+ * Core's selection, mirrored on the card.
+ *
+ * The card is opaque and paints over the Tiles layer, so core's own frame and resize
+ * handle lie under it — a GM saw a grip on a PDF, which has no card, and none on a
+ * letter. The stylesheet draws both on the marked card, in the same rectangle, and the
+ * press still reaches core's handle because the card is pointer-transparent.
+ */
+export function setDomPropControlled(id: string, controlled: boolean): void {
+  const prop = props.get(id);
+  if (!prop) return;
+  const element = prop.element;
+  write(element, () => markControlled(element, controlled));
+}
+
+function markControlled(element: HTMLElement, controlled: boolean): void {
+  if (controlled) element.dataset.dpControlled = "true";
+  else delete element.dataset.dpControlled;
 }
 
 /**

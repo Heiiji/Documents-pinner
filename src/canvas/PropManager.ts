@@ -35,6 +35,7 @@ import {
   sameMat,
   scaleOf,
   stageMatrix,
+  tileRect,
   visibleSceneRect,
   type Mat,
 } from "./transform";
@@ -66,6 +67,7 @@ import { currentLevel, sampleFrame, sampledFps } from "../effects/level";
 import { findPreset } from "../effects/preset-library";
 import { clearDomTier, setDomPropAlpha, syncDomTier, type DomPropEntry } from "./DomPropTier";
 import { overlay, write } from "../apps/OverlayRoot";
+import type { DpPinFlags } from "../types/dp";
 
 const log = logger("props");
 
@@ -171,26 +173,13 @@ class Manager {
     return rasterisationAvailable() === false || settings.get("rendering") === "dom";
   }
 
-  /**
-   * Whether THIS prop has to be drawn as DOM.
-   *
-   * A PDF is the exception, and it is the interesting one. `rasterisationAvailable()`
-   * being false means the HTML pipeline cannot reach a texture — an SVG `foreignObject`
-   * taints the canvas, see DESIGN A10 — but pdf.js paints with Canvas2D and its output
-   * uploads fine. So a pinned PDF still gets the canvas tier, and with it the lighting,
-   * fog, occlusion and token z-order that no other source type can have.
-   *
-   * A GM who deliberately chose DOM rendering still gets DOM, for everything.
-   */
+  /** Whether THIS prop has to be drawn as DOM. See `drawsAsDom`. */
   #domModeFor(pin: any): boolean {
-    if (settings.get("rendering") === "dom") return true;
-    if (rasterisationAvailable() !== false) return false;
-    // HTML cannot reach a texture on this client, but a PDF still can.
-    return !this.#isPdf(pin);
+    return drawsAsDom(pin);
   }
 
   #isPdf(pin: any): boolean {
-    return pdfSourceOf(api.resolveSourceSync(pin)) !== null;
+    return isPdfPin(pin);
   }
 
   // -------------------------------------------------------------------------
@@ -560,7 +549,7 @@ class Manager {
       const pin = tile ? readPin(tile.document) : null;
       if (!tile || !pin) continue;
 
-      const bounds = rotatedBounds(tile.document);
+      const bounds = rotatedBounds(tileRect(tile.document));
       const metrics = cardMetrics(pin.display, {
         width: tile.document.width,
         height: tile.document.height,
@@ -602,6 +591,7 @@ class Manager {
           pdf: this.#isPdf(pin),
           revealing,
           reveal: revealOf(pin),
+          controlled: tile.controlled === true,
         });
         continue;
       }
@@ -1129,18 +1119,49 @@ function visibleTokens(): any[] {
   return (cv()?.tokens?.placeables ?? []).filter((token: any) => token.visible);
 }
 
-/** Bounding-box overlap in scene space. Rotation is ignored deliberately: the fade is
- * a gameplay courtesy, not a hit test, and a token near the corner of a tilted letter
- * should still reveal it. */
+/**
+ * Bounding-box overlap in scene space. Rotation is ignored deliberately: the fade is a
+ * gameplay courtesy, not a hit test, and a token near the corner of a tilted letter
+ * should still reveal it. The token's side is core's own `bounds` when it has one: a
+ * TokenDocument's point is not measured here, and core's rect does not need it to be.
+ */
 function overlaps(tile: any, token: any): boolean {
-  const a = rotatedBounds(tile.document);
-  const b = {
-    x: token.document.x,
-    y: token.document.y,
-    width: token.w ?? token.document.width * (cv()?.grid?.size ?? 100),
-    height: token.h ?? token.document.height * (cv()?.grid?.size ?? 100),
-  };
+  const a = rotatedBounds(tileRect(tile.document));
+  const own = token.bounds;
+  const b =
+    own && Number.isFinite(own.x) && Number.isFinite(own.width)
+      ? { x: own.x, y: own.y, width: own.width, height: own.height }
+      : {
+          x: token.document.x,
+          y: token.document.y,
+          width: token.w ?? token.document.width * (cv()?.grid?.size ?? 100),
+          height: token.h ?? token.document.height * (cv()?.grid?.size ?? 100),
+        };
   return rectsIntersect(a, b);
+}
+
+/**
+ * Whether a prop is drawn as a DOM card on this client.
+ *
+ * A PDF is the exception, and it is the interesting one. `rasterisationAvailable()`
+ * being false means the HTML pipeline cannot reach a texture — an SVG `foreignObject`
+ * taints the canvas, see DESIGN A10 — but pdf.js paints with Canvas2D and its output
+ * uploads fine. So a pinned PDF still gets the canvas tier, and with it the lighting,
+ * fog, occlusion and token z-order that no other source type can have.
+ *
+ * A GM who deliberately chose DOM rendering still gets DOM, for everything. Exported
+ * because `PinnedTile` has to dress core's drag preview the same way the manager draws
+ * the original.
+ */
+export function drawsAsDom(pin: DpPinFlags): boolean {
+  if (settings.get("rendering") === "dom") return true;
+  if (rasterisationAvailable() !== false) return false;
+  // HTML cannot reach a texture on this client, but a PDF still can.
+  return !isPdfPin(pin);
+}
+
+function isPdfPin(pin: DpPinFlags): boolean {
+  return pdfSourceOf(api.resolveSourceSync(pin)) !== null;
 }
 
 /** Exposed for the Pinboard's diagnostics and for the smoke test. */
