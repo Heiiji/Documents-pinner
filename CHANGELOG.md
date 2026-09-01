@@ -9,6 +9,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Nothing yet.
 
+## [0.2.2] — unreleased
+
+### Fixed
+
+- **The paper and the tile were half a card apart.** On v14 a Tile's stored point is its
+  centre, and the module read it as the top-left corner everywhere it placed anything:
+  the card, the reader, the tooltip, the players' hit areas, the pan target, the ping,
+  the line-of-sight test and the ghost's own placement. So a text prop showed no resize
+  handle (it was under the paper), a dragged prop trailed a white book (core's preview,
+  where the tile actually was), and a player's click landed half a card off. One helper
+  now owns the conversion, every site goes through it, and the first drawn tile of every
+  scene is checked against core's own bounds so a future change is said out loud in the
+  console rather than shown on the map. Existing text props are re-anchored once, so the
+  paper stays exactly where it was and the frame joins it; PDFs and pin-mode icons, which
+  core drew at the point, do not move.
+- **Drag the paper, not the book.** Core's drag preview is a clone drawn from the
+  placeholder texture. It now shows nothing on the DOM path, where the card follows the
+  clone, and the original's own page for a PDF.
+- **The selection frame and the resize grip are drawn on the paper.** Core draws them
+  under the card, which is opaque. The card now redraws both in the same rectangle, in
+  core's own selection colour, and the press still reaches core's handle.
+
+### Changed
+
+- **Fit to content and Reset size keep the top edge where it was.** A resize grows the
+  sheet down and to the right in its own frame, as core's corner grip does, instead of
+  about its middle. The pin payload is version 3; the payload itself is unchanged.
+
 ## [0.2.1] — unreleased
 
 ### Fixed

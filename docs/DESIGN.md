@@ -1046,3 +1046,56 @@ assumed.
 
 **The pattern.** A13 signposted a gap. A19 closes it. The difference is who pays: a sign
 costs the GM one detour per session forever; closing the gap cost one afternoon once.
+
+### A20 — The document's point is its centre (2026-09-01)
+
+Measured in a live 14.365 world after 0.2.1 shipped: `tile.object.center` equals the
+document's `x, y`; `tile.object.bounds` is `{x − w/2, y − h/2, w, h}`; the mesh is
+anchored at (0.5, 0.5) at the point and rotates about it. The type definitions shipped
+with 14.366 still document `TileDocument.x` as "the top-left corner". The module had
+believed the types.
+
+**What it cost.** Every corner the module ever derived from the point — the DOM card, the
+reader, the tooltip, the hit polygons, the culling bounds, the token fade, the ping, the
+pan target, the line-of-sight test and the `centred` placement in `pinAt` — was half a box
+down and right of where core drew the tile. The DOM card and the hit polygon agreed with
+each other, which is why 747 tests were green over it: both sides of the bug were tested
+against their own inputs and never against a tile as core draws it. The GM saw it as "a
+resize handle on a PDF and none on a text prop" (the handle was under the paper) and "a
+white book trailing the paper I drag" (core's preview, at the tile's real place).
+
+**What changed.** `tileRect(doc)` in `transform.ts` is the one function that knows; the
+rect functions take a rect and say so in their signatures. `checkTileGeometry` asks the
+first drawn tile of every scene whether core's `bounds` still agree, and warns if not: the
+types were wrong once, and nothing readable at build time will say when the canvas moves
+again. The fake tile models the live canvas, with a comment recording that the types
+disagree, so every placement test now runs against what core draws.
+
+**Resize keeps the corner.** With the point at the centre, a bare width and height grow a
+prop about its middle and slide its first line up over whatever it lay against. The
+store's `resize` — fit, reset, the Studio's fields — now moves the point so the local
+top-left corner stays put: the way core's grip grows a tile, the way a page fills.
+`convertMode` alone keeps the centre, because a pin becoming a prop is a swap of object,
+not a growth of one.
+
+**Existing pins move once, so that nothing moves.** A card was placed at the point as its
+corner; its visual centre was therefore `(x + w/2, y + h/2)`, whatever the rotation, since
+the card turned about its own centre. The version-3 sweep writes that centre back as the
+point for every prop that was a card — everything but a PDF, since A10 established that
+HTML never reaches a texture — so the paper stays exactly where the GM left it and core's
+frame joins it there. A PDF was core's texture on core's mesh, at the point, and stays; so
+does a pin-mode icon. The sweep says what it did, once, in a toast. A blanket shift was
+rejected: no stored fact distinguishes a card from a texture, so the sweep asks the client
+which tier draws each source, which is the same question the manager answers every pass.
+
+**The preview and the frame.** Core's drag clone draws from `_original.texture`, the
+placeholder, and the manager never sees a clone: it walks `canvas.tiles.placeables`, and a
+preview is in neither that list nor the document collection. `PinnedTile` dresses the
+clone — nothing on the DOM path, the original's bound page on the canvas path — and moves
+the card with the clone from `_onDragLeftMove`, under the original's id, which the clone
+keeps. A clone's draw and destroy are no longer reported to the manager as the original's,
+which was a latent way to null the original's binding mid-drag. A controlled card draws
+core's ring and grip on itself, in the rectangle core now shares with it; the card is
+pointer-transparent, so the press still goes through to core's handle. What core still
+owns is unchanged from A19: the drag and the resize are core's; this module only makes
+sure the paper is where core thinks the tile is.

@@ -58,7 +58,8 @@ follows the cursor; click to place. It stays hidden from players until you revea
 **Click a pin on the Notes layer to grab it.** Pins are Tiles, and Foundry only lets you
 drag one from the Tiles layer — so a press on a prop from the Notes layer, where the
 module's tools leave you, switches layer and selects it for you; the next press drags,
-and the corner handles resize. The Pinboard's `L` (locate) does the same from a distance.
+and the corner grip resizes. The frame and the grip are drawn on the paper itself, and
+what you drag is the paper. The Pinboard's `L` (locate) does the same from a distance.
 
 **A prop is a window onto its document.** Resizing it shows more or less of the page at
 the same text size; text that does not fit fades out at the bottom edge. *Fit to content*
@@ -201,8 +202,10 @@ ce que vous le révéliez.
 **Cliquez une épingle sur le calque Notes pour la saisir.** Les épingles sont des tuiles,
 et Foundry ne permet de les déplacer que depuis le calque Tuiles — alors un clic sur un
 accessoire depuis le calque Notes, là où les outils du module vous laissent, change de
-calque et le sélectionne pour vous ; le clic suivant le déplace, et les poignées d'angle
-le redimensionnent. Le `L` du tableau de bord (localiser) fait de même à distance.
+calque et le sélectionne pour vous ; le clic suivant le déplace, et la poignée d'angle
+le redimensionne. Le cadre et la poignée sont dessinés sur le papier lui-même, et ce que
+vous déplacez, c'est le papier. Le `L` du tableau de bord (localiser) fait de même à
+distance.
 
 **Un accessoire est une fenêtre sur son document.** Le redimensionner montre plus ou
 moins de la page à la même taille de texte ; le texte qui ne tient pas s'estompe au bord
