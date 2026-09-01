@@ -234,6 +234,8 @@
   "DP.studio.labelHint": "Leave empty to follow the source document's name.",
   "DP.studio.labelPlaceholder": "Use the document's name",
   "DP.studio.locked": "Locked",
+  "DP.studio.margin": "Margins",
+  "DP.studio.marginHint": "In multiples of the text size, so they follow it.",
   "DP.studio.mode": "Shape",
   "DP.studio.motion": "Motion",
   "DP.studio.motionLoop": "Continuous",
@@ -244,9 +246,8 @@
   "DP.studio.openInPlace": "Read in place",
   "DP.studio.openNever": "Not interactive",
   "DP.studio.openSingle": "Single click",
-  "DP.studio.padding": "Margins",
   "DP.studio.paper": "Paper",
-  "DP.studio.pdfAppearance": "This pin shows a PDF page, painted straight into the scene — so it is lit and occluded like the map itself. Effects apply to it, baked into the page; the paper stock, the padding and anything that moves do not, because it has no card and a texture cannot animate.",
+  "DP.studio.pdfAppearance": "This pin shows a PDF page, painted straight into the scene — so it is lit and occluded like the map itself. Effects apply to it, baked into the page; the paper stock, the text size, the margins and anything that moves do not, because it has no card and a texture cannot animate.",
   "DP.studio.rotation": "Rotation",
   "DP.studio.showTitle": "Show the title on the card",
   "DP.studio.sourceMissing": "No source",
@@ -263,5 +264,7 @@
   "DP.studio.tabAudience": "Audience",
   "DP.studio.tabContent": "Content",
   "DP.studio.title": "Pin Studio",
-  "DP.studio.tooltip": "Tooltip"
+  "DP.studio.tooltip": "Tooltip",
+  "DP.studio.typeSize": "Text size",
+  "DP.studio.typeSizeHint": "In scene pixels. Resize the pin to show more or less of the document; the text keeps this size."
 }

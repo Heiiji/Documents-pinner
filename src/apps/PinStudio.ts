@@ -23,6 +23,7 @@ import { t, tn } from "../i18n";
 import { escapeAttr, escapeHtml } from "../html";
 import * as api from "../api";
 import { readPin } from "../data/PinData";
+import { cardMetrics, freezeMetrics } from "../data/pin-schema";
 import { PAPERS } from "../render/CardTemplate";
 import { allPresets } from "../effects/preset-library";
 import { swatchStyle } from "../effects/preset-css";
@@ -126,16 +127,24 @@ function contentTab(pin: DpPinFlags): string {
 /**
  * A PDF page is painted by pdf.js straight into a texture — no card, no paper, no CSS.
  *
- * So every appearance control below is inert for one: the paper stock, the padding, the
- * effect, the intensity, the speed and the animation all describe a card that a PDF prop
- * does not have. Offering controls that cannot be honoured is worse than not offering
- * them, so they are disabled and the reason is stated where the GM is looking.
+ * So every appearance control below is inert for one: the paper stock, the type size,
+ * the margins and anything that moves all describe a card that a PDF prop does not
+ * have. Offering controls that cannot be honoured is worse than not offering them, so
+ * they are disabled and the reason is stated where the GM is looking.
  */
 function isPdfPin(pin: DpPinFlags): boolean {
   return pdfSourceOf(api.resolveSourceSync(pin)) !== null;
 }
 
-function appearanceTab(pin: DpPinFlags): string {
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
+function appearanceTab(doc: any, pin: DpPinFlags): string {
+  // The EFFECTIVE metrics, so a pin that predates stored type sizes shows the size it
+  // is actually drawn at rather than an empty slider; the first edit freezes both.
+  const size = { width: Number(doc?.width) || 1, height: Number(doc?.height) || 1 };
+  const metrics = cardMetrics(pin.display, size);
+  const marginEm = metrics.padPx / metrics.fontPx;
+
   // The whole library, so a preset a GM authored can actually be assigned to a pin.
   // The preset's OWN variables, so a GM can tell Glitch from Torn Edges without applying
   // it. Every swatch used to be the same beige rectangle: the markup carried a preset id
@@ -181,7 +190,16 @@ function appearanceTab(pin: DpPinFlags): string {
         Object.keys(PAPERS).map((id) => ({ value: id, label: t(`DP.paper.${id}`) }))
       )
     ) +
-    field("DP.studio.padding", range("display.padding", pin.display.padding, 0, 0.5, 0.01)) +
+    field(
+      "DP.studio.typeSize",
+      range("display.typeSize", round2(metrics.fontPx), 6, 72, 0.5),
+      "DP.studio.typeSizeHint"
+    ) +
+    field(
+      "DP.studio.margin",
+      range("display.margin", round2(marginEm), 0, 6, 0.1),
+      "DP.studio.marginHint"
+    ) +
     `<div class="dp-studio__swatches" role="group" aria-label="${escapeAttr(t("DP.studio.effect"))}">` +
     swatches +
     `</div>` +
@@ -264,7 +282,7 @@ export function studioMarkup(doc: any, pin: DpPinFlags, active: TabId): string {
     active === "content"
       ? contentTab(pin)
       : active === "appearance"
-        ? appearanceTab(pin)
+        ? appearanceTab(doc, pin)
         : audienceTab(doc, pin);
 
   return (
@@ -407,10 +425,23 @@ export function definePinStudio(): any {
         return;
       }
 
+      const patch = formToPatch([[target.name, valueOf(target)]]);
+
+      // Touching one metric must not leave the other proportional: a stored type with a
+      // margin still derived from the short edge would drift on the next resize, which is
+      // the exact thing storing the type exists to stop. So the first edit freezes both.
+      if (target.name === "display.typeSize" || target.name === "display.margin") {
+        const pin = readPin(this.doc);
+        if (pin && (pin.display.typeSize === null || pin.display.margin === null)) {
+          const frozen = freezeMetrics(pin, this.doc).display;
+          patch.display = { typeSize: frozen.typeSize, margin: frozen.margin, ...patch.display };
+        }
+      }
+
       // Deep-merged and ownership-synced in one call: spreading the patch here would
       // replace a whole group, and `{ ownershipSync: { level } }` would then wipe the
       // `enabled` flag beside it.
-      await api.patchAndSync(this.doc, formToPatch([[target.name, valueOf(target)]]));
+      await api.patchAndSync(this.doc, patch);
     }
   };
 

@@ -10,16 +10,16 @@ const doc = { id: "t1", elevation: 20, rotation: 45, locked: false, width: 400, 
 
 describe("formToPatch", () => {
   it("turns a dotted field name into a nested patch", () => {
-    expect(formToPatch([["display.padding", 0.2]])).toEqual({ display: { padding: 0.2 } });
+    expect(formToPatch([["display.typeSize", 12]])).toEqual({ display: { typeSize: 12 } });
   });
 
   it("merges several fields in the same group", () => {
     expect(
       formToPatch([
-        ["display.padding", 0.2],
+        ["display.margin", 2],
         ["display.showTitle", false],
       ])
-    ).toEqual({ display: { padding: 0.2, showTitle: false } });
+    ).toEqual({ display: { margin: 2, showTitle: false } });
   });
 
   it("handles a path more than two deep", () => {
@@ -139,6 +139,23 @@ describe("the appearance tab and what it can actually do", () => {
     // Nothing implements a play-once animation; the renderer treated `onReveal` exactly
     // as `loop`, so a third choice behaved identically to the first.
     expect(markup).not.toContain('value="onReveal"');
+  });
+
+  it("offers a text size in scene pixels, showing the size the pin is actually drawn at", () => {
+    // A pin from before type sizes were stored: the slider sits at the derived size.
+    const markup = studioMarkup(doc, pin(), "appearance");
+    expect(markup).toMatch(/name="display.typeSize" min="6" max="72" step="0.5" value="15\.38"/);
+    // A stored one shows what is stored.
+    const stored = pin({ display: { ...pin().display, typeSize: 20, margin: 2 } });
+    expect(studioMarkup(doc, stored, "appearance")).toContain(
+      'name="display.typeSize" min="6" max="72" step="0.5" value="20"'
+    );
+  });
+
+  it("offers margins in em, not as a fraction of the short edge", () => {
+    const markup = studioMarkup(doc, pin(), "appearance");
+    expect(markup).toMatch(/name="display.margin" min="0" max="6" step="0.1" value="1\.56"/);
+    expect(markup).not.toContain('name="display.padding"');
   });
 
   it("gives the effect name its own grid area, so it cannot land on the cost label", () => {
