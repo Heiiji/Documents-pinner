@@ -30,6 +30,8 @@ export const TIER_ORDER: LodTier[] = ["L0", "L1", "L2a", "L2b", "L3"];
 export interface LodInput {
   /** On-screen width in CSS pixels. */
   apparentWidth: number;
+  /** On-screen type size in CSS pixels — the input to the reader gate. */
+  apparentTypeSize: number;
   /** Whether the prop's bounds intersect the viewport at all. */
   onScreen: boolean;
   /** Whether this user is in the audience and the anchor is not hidden. */
@@ -45,12 +47,13 @@ export interface LodInput {
  *
  * `visible` and `onScreen` are checked first and together: a prop the user is not in
  * the audience for costs nothing at all, and neither does one behind them. The reader
- * tier additionally requires the prop to be big enough to actually read, because
- * fading in a live HTML card over a thumbnail helps nobody.
+ * tier additionally requires the TYPE to be big enough to actually read — not the box,
+ * which no longer decides the type — because fading in a live HTML card over text that
+ * is a smear helps nobody.
  */
 export function lodFor(input: LodInput): LodTier {
   if (!input.visible || !input.onScreen) return "L0";
-  if (input.focused && input.readable && input.apparentWidth >= LOD.READER) return "L3";
+  if (input.focused && input.readable && input.apparentTypeSize >= LOD.READER_TYPE) return "L3";
   if (input.apparentWidth < LOD.SILHOUETTE) return "L1";
   if (input.apparentWidth < LOD.COARSE) return "L2a";
   return "L2b";

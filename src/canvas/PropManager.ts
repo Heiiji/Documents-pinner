@@ -485,8 +485,13 @@ class Manager {
       if (!tile || !pin) continue;
 
       const bounds = rotatedBounds(tile.document);
+      const metrics = cardMetrics(pin.display, {
+        width: tile.document.width,
+        height: tile.document.height,
+      });
       let tier = lodFor({
         apparentWidth: apparentWidth(matrix, tile.document.width),
+        apparentTypeSize: metrics.fontPx * scaleOf(matrix),
         onScreen: rectsIntersect(bounds, viewport),
         visible: tile.isVisible === true,
         focused: this.#focusedId === record.id,

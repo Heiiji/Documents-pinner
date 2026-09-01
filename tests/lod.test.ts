@@ -19,6 +19,7 @@ import {
 
 const input = (over: Partial<Parameters<typeof lodFor>[0]> = {}) => ({
   apparentWidth: 400,
+  apparentTypeSize: 15,
   onScreen: true,
   visible: true,
   focused: false,
@@ -42,11 +43,22 @@ describe("lodFor", () => {
     expect(lodFor(input({ apparentWidth: LOD.COARSE }))).toBe("L2b");
   });
 
-  it("opens the reader only when focused, readable and big enough to read", () => {
-    expect(lodFor(input({ focused: true, apparentWidth: LOD.READER }))).toBe("L3");
-    expect(lodFor(input({ focused: true, apparentWidth: LOD.READER - 1 }))).toBe("L2b");
-    expect(lodFor(input({ focused: true, readable: false, apparentWidth: 2000 }))).toBe("L2b");
-    expect(lodFor(input({ focused: false, apparentWidth: 2000 }))).toBe("L2b");
+  it("opens the reader only when focused, readable and the TYPE is big enough to read", () => {
+    expect(lodFor(input({ focused: true, apparentTypeSize: LOD.READER_TYPE }))).toBe("L3");
+    expect(lodFor(input({ focused: true, apparentTypeSize: LOD.READER_TYPE - 0.01 }))).toBe("L2b");
+    expect(lodFor(input({ focused: true, readable: false, apparentTypeSize: 40 }))).toBe("L2b");
+    expect(lodFor(input({ focused: false, apparentTypeSize: 40 }))).toBe("L2b");
+  });
+
+  // The type no longer follows the tile, so the box's width says nothing about
+  // legibility. A small scrap with legible type is exactly the prop whose clipped tail
+  // the reader exists to scroll.
+  it("opens the reader for a small prop whose type is legible", () => {
+    expect(lodFor(input({ focused: true, apparentWidth: 200, apparentTypeSize: 12 }))).toBe("L3");
+  });
+
+  it("refuses the reader for a large prop whose type is too small to read", () => {
+    expect(lodFor(input({ focused: true, apparentWidth: 2000, apparentTypeSize: 4 }))).toBe("L2b");
   });
 
   it("never opens the reader for a prop the user cannot see", () => {

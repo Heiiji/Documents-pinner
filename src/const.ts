@@ -61,8 +61,17 @@ export const LOD = {
   SILHOUETTE: 48,
   /** Below this, render at reduced texture resolution and half effect intensity. */
   COARSE: 320,
-  /** At or above this, the focused DOM reader is allowed to open. */
-  READER: 480,
+  /**
+   * Apparent TYPE size in CSS px at or above which the focused reader may open.
+   *
+   * The reader gate is the one threshold that is not about the box: legibility is a
+   * property of the type, now that the type no longer follows the tile. A small scrap
+   * with legible type is exactly the prop whose clipped tail the reader exists to
+   * scroll, and gating it on the box's width would refuse the reader precisely when
+   * overflow made it necessary. The two thresholds above stay on apparent width,
+   * because they price texture cost, and a speck is a speck whatever its type.
+   */
+  READER_TYPE: 9,
 } as const;
 
 /** Texture resolution tiers, snapped to powers of two so a slow zoom cannot thrash. */
