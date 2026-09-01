@@ -244,6 +244,55 @@ describe("syncDomTier", () => {
   });
 });
 
+/**
+ * Once a prop is a window rather than a zoom, under-sizing one is routine, and content
+ * that is cut off with no signal looks like a rendering fault. The resolver reports the
+ * height at which everything fits; the tier compares it to the box.
+ */
+describe("the overflow mark", () => {
+  const overflowing = () =>
+    vi.mocked(resolveCard).mockResolvedValueOnce({
+      html: '<div class="dp-card">letter</div>',
+      title: "Letter",
+      readable: true,
+      contentHash: "h",
+      missing: false,
+      naturalHeight: 800,
+    } as any);
+
+  it("marks a card whose content does not fit", async () => {
+    overflowing();
+    syncDomTier([entry({ pin: sized() })]);
+    await settle();
+    await settle();
+    const card = overlay()!.querySelector<HTMLElement>(".dp-prop .dp-card")!;
+    expect(card.dataset.dpOverflow).toBe("true");
+  });
+
+  it("clears the mark when the prop is made tall enough, without re-resolving", async () => {
+    overflowing();
+    syncDomTier([entry({ pin: sized() })]);
+    await settle();
+    await settle();
+
+    syncDomTier([entry({ pin: sized(), doc: doc({ height: 900 }) })]);
+    await settle();
+    await settle();
+
+    expect(resolveCard).toHaveBeenCalledTimes(1);
+    const card = overlay()!.querySelector<HTMLElement>(".dp-prop .dp-card")!;
+    expect(card.dataset.dpOverflow).toBeUndefined();
+  });
+
+  it("never marks a card whose height is unknown", async () => {
+    syncDomTier([entry({ pin: sized() })]);
+    await settle();
+    await settle();
+    const card = overlay()!.querySelector<HTMLElement>(".dp-prop .dp-card")!;
+    expect(card.dataset.dpOverflow).toBeUndefined();
+  });
+});
+
 describe("followDomProp", () => {
   it("moves a mounted card to the document's current geometry without resolving", async () => {
     syncDomTier([entry({ pin: sized() })]);

@@ -16,11 +16,14 @@ import { defaultPin } from "../src/data/pin-schema";
 import { fakeTile, installWorld, uninstallWorld } from "./helpers/fake-foundry";
 
 const card = {
-  html: '<div class="dp-card"><p>The Duke is dead.</p></div>',
+  html:
+    '<div class="dp-card"><div class="dp-card__sheet">' +
+    '<div class="dp-card__body"><p>The Duke is dead.</p></div></div></div>',
   title: "The Duke's Letter",
   readable: false,
   contentHash: "h",
   missing: false,
+  naturalHeight: null,
 };
 
 vi.mock("../src/render/ContentResolver", () => ({
@@ -86,6 +89,29 @@ describe("the focus reader", () => {
 
     expect(reader()).toBeNull();
     expect(world.notifications.map((n) => n.type)).toContain("warn");
+  });
+
+  it("says there is more below while the body can still scroll, and stops at the end", async () => {
+    const { openReader } = await import("../src/apps/ReaderOverlay");
+    await openReader(tile);
+    const body = reader()!.querySelector<HTMLElement>(".dp-card__body")!;
+
+    // jsdom lays nothing out, so the scroll geometry is stated.
+    let scrollTop = 0;
+    Object.defineProperty(body, "scrollHeight", { value: 1000, configurable: true });
+    Object.defineProperty(body, "clientHeight", { value: 400, configurable: true });
+    Object.defineProperty(body, "scrollTop", {
+      get: () => scrollTop,
+      set: (v: number) => (scrollTop = v),
+      configurable: true,
+    });
+
+    body.dispatchEvent(new Event("scroll"));
+    expect(reader()!.dataset.dpMore).toBe("true");
+
+    body.scrollTop = 600;
+    body.dispatchEvent(new Event("scroll"));
+    expect(reader()!.dataset.dpMore).toBe("false");
   });
 
   it("closes on a second click, which is what a click on what you are reading means", async () => {

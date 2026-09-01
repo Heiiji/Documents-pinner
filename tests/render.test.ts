@@ -59,6 +59,11 @@ describe("cardHtml", () => {
     expect(html).not.toMatch(/[^-]height:\d/);
   });
 
+  it("marks an overflowing card so the stylesheet can fade its tail", () => {
+    expect(card({ overflow: true })).toContain('data-dp-overflow="true"');
+    expect(card()).not.toContain("data-dp-overflow");
+  });
+
   it("marks a missing source rather than drawing a blank sheet", () => {
     const html = card({ missing: true, title: "gone" });
     expect(html).toContain('data-dp-missing="true"');

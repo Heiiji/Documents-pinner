@@ -46,6 +46,18 @@
     min-block-size: 0;
     overflow-y: auto;
   }
+
+  /* The fade means "there is more below", so here it is gated on the scroll position
+     rather than on the resolver's mark, and it eases rather than snaps. */
+  & .dp-card__sheet::after {
+    content: "";
+    opacity: 0;
+    transition: opacity 120ms ease-out;
+  }
+
+  &[data-dp-more="true"] .dp-card__sheet::after {
+    opacity: 1;
+  }
 }
 
 .dp-reader__close {

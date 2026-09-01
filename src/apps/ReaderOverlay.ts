@@ -210,6 +210,20 @@ function attach(): void {
     if ((event.target as HTMLElement).closest(".dp-reader__close")) closeReader();
   });
 
+  // "There is more below." The fade the sheet carries is gated on the scroll position
+  // here, because the reader scrolls where a prop clips: it shows while the body can
+  // still scroll and goes once the last line is in view. One layout read per scroll
+  // event, off the frame path.
+  const body = element!.querySelector<HTMLElement>(".dp-card__body");
+  if (body) {
+    const node = element!;
+    const update = () => {
+      node.dataset.dpMore = String(body.scrollTop + body.clientHeight < body.scrollHeight - 1);
+    };
+    on(body, "scroll", update, { passive: true });
+    requestAnimationFrame(update);
+  }
+
   on(
     window,
     "keydown",

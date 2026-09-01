@@ -28,6 +28,7 @@ import type { LodTier } from "../canvas/lod";
 import { enrichFor } from "./enrich";
 import { pdfSourceOf, renderPdfPage } from "./PdfPage";
 import { hashContent } from "./TextureCache";
+import { measureCardHeight } from "./measure";
 import { cardMetrics } from "../data/pin-schema";
 import type { DpPinFlags } from "../types/dp";
 
@@ -39,6 +40,11 @@ export interface ResolvedCard {
   /** Changes whenever the rendered content would change. Part of the cache key. */
   contentHash: string;
   missing: boolean;
+  /**
+   * The height at which the whole content fits at this width, type size and margin —
+   * what "fit to content" writes — or `null` when it cannot be measured.
+   */
+  naturalHeight: number | null;
 }
 
 /**
@@ -139,6 +145,8 @@ export async function resolveCard(
       readable: true,
       contentHash: hashContent(`image|${src}`),
       missing: !src,
+      // An unloaded <img> measures 0, which is "unknown" rather than a height.
+      naturalHeight: null,
     };
   }
 
@@ -166,6 +174,9 @@ export async function resolveCard(
           `pdf|${pdfSrc}|${pageOf(pin)}|${rendered.width}x${rendered.height}`
         ),
         missing: false,
+        // The page's own aspect is the answer; it is contained, so it never overflows.
+        naturalHeight:
+          Math.max(1, size.width - 2 * padPx) * (rendered.height / rendered.width) + 2 * padPx,
       };
     }
   }
@@ -174,8 +185,15 @@ export async function resolveCard(
   const { html, isOwner } = await enrichFor(source, text);
   const title = pin.display.label || source.name || "";
 
+  // Measured at the width it will be drawn at, then marked if the box is too short.
+  // The mark is a function of the size, and the size is in every cache key already, so
+  // the content hash does not carry it.
+  const build = (overflow: boolean) => cardHtml({ ...common, title, bodyHtml: html, overflow });
+  const naturalHeight = await measureCardHeight(build(false), size.width);
+  const overflow = naturalHeight !== null && naturalHeight > size.height + 1;
+
   return {
-    html: cardHtml({ ...common, title, bodyHtml: html }),
+    html: build(overflow),
     title,
     readable: source.testUserPermission?.(g()?.user, "OBSERVER") === true,
     // `isOwner` is in the hash because it changes what the HTML contains: a GM and a
@@ -183,6 +201,7 @@ export async function resolveCard(
     // after the user id already in the key.
     contentHash: hashContent(`${kind}|${isOwner}|${html}`),
     missing: false,
+    naturalHeight,
   };
 }
 
@@ -200,5 +219,6 @@ function placeholder(common: any): ResolvedCard {
     readable: false,
     contentHash: hashContent("missing"),
     missing: true,
+    naturalHeight: null,
   };
 }

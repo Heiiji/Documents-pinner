@@ -57,6 +57,8 @@ export interface CardOptions {
   effectAttrs?: Record<string, string>;
   /** Placeholder mode: the source is gone, so say so instead of drawing a blank sheet. */
   missing?: boolean;
+  /** The content does not fit the box, so the stylesheet fades its tail. */
+  overflow?: boolean;
 }
 
 export function cardHtml(options: CardOptions): string {
@@ -90,7 +92,8 @@ export function cardHtml(options: CardOptions): string {
 
   return (
     `<div class="dp-card" data-dp-fx="${escapeAttr(options.effectId)}"${attrs}` +
-    `${options.missing ? ' data-dp-missing="true"' : ""} style="${escapeAttr(style)}">` +
+    `${options.missing ? ' data-dp-missing="true"' : ""}` +
+    `${options.overflow ? ' data-dp-overflow="true"' : ""} style="${escapeAttr(style)}">` +
     `<div class="dp-card__sheet">${title}${body}</div>` +
     `</div>`
   );

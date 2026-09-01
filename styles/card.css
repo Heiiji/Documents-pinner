@@ -53,6 +53,7 @@
 }
 
 .dp-card__sheet {
+  position: relative;
   box-sizing: border-box;
   /* A column, so the body is exactly the visible remainder under the title. With the
      body at 100% of the sheet instead, a title pushed the last title-height of text
@@ -137,6 +138,34 @@
     border-block-start: 1px solid color-mix(in oklab, var(--dp-paper-edge) 80%, transparent);
     margin: 0.6em 0;
   }
+}
+
+/*
+ * Content past the bottom edge fades into the paper rather than cutting off mid-line.
+ *
+ * Paper-coloured, not transparent: at the coarse tier a transparent mask lets the map
+ * show through the card's foot and reads as a torn edge, while a paper gradient reads
+ * as the sheet continuing under a fold. Sized in em so it scales with the type and needs
+ * no tier variant, and drawn on the sheet — inside the pad, ending exactly at the body's
+ * edge — so the paper and the hairline border stay intact. It sits under the preset's
+ * tint (`.dp-card::after`, z 2), so the tint multiplies it exactly like the paper around
+ * it. Content, not an effect: the level setting does not touch it.
+ *
+ * The geometry is declared once with no `content`, so it renders only where a gate says
+ * so: here for a card marked as overflowing, and in the reader while there is more to
+ * scroll to.
+ */
+.dp-card__sheet::after {
+  position: absolute;
+  inset-inline: var(--dp-card-pad);
+  inset-block-end: var(--dp-card-pad);
+  block-size: 2.5em;
+  background: linear-gradient(to bottom, transparent, var(--dp-paper-base));
+  pointer-events: none;
+}
+
+.dp-card[data-dp-overflow="true"] .dp-card__sheet::after {
+  content: "";
 }
 
 /*

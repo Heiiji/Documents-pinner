@@ -68,6 +68,8 @@ interface DomProp {
   placedAt: Placed | null;
   /** The opacity last written, for the same reason. */
   alpha: number | null;
+  /** The height at which the whole card fits, from the resolver; null when unknown. */
+  naturalHeight: number | null;
 }
 
 const props = new Map<string, DomProp>();
@@ -145,7 +147,14 @@ function upsert(entry: DomPropEntry): void {
     element.className = "dp-prop";
     element.setAttribute("aria-hidden", "true");
     element.dataset.dpId = entry.id;
-    prop = { element, key: "", generation: 0, placedAt: null, alpha: null };
+    prop = {
+      element,
+      key: "",
+      generation: 0,
+      placedAt: null,
+      alpha: null,
+      naturalHeight: null,
+    };
     props.set(entry.id, prop);
     mount(element);
     mounted = true;
@@ -168,6 +177,8 @@ function upsert(entry: DomPropEntry): void {
       // The scene may have changed, or a newer resolve may already have landed.
       if (!current || current.generation !== generation) return;
       current.element.innerHTML = card.html;
+      current.naturalHeight = card.naturalHeight ?? null;
+      applyOverflow(current);
     })
     .catch((error) => log.warn(`DOM prop failed to resolve:`, error));
 }
@@ -207,6 +218,30 @@ function placeGeometry(prop: DomProp, doc: any): void {
     element.style.width = `${next.width}px`;
     element.style.height = `${next.height}px`;
     element.style.transform = `rotate(${next.rotation}deg)`;
+  });
+  applyOverflow(prop);
+}
+
+/**
+ * Mark the card when its content does not fit the box, and unmark it when it does.
+ *
+ * The resolver marks the card for the size it was resolved at; a resize changes the box
+ * without a resolve, so the mark has to follow the geometry here. Skipped entirely while
+ * the natural height is unknown — a card that cannot be measured is never told it
+ * overflows.
+ */
+function applyOverflow(prop: DomProp): void {
+  const height = prop.placedAt?.height;
+  if (prop.naturalHeight === null || height === undefined) return;
+  const overflow = prop.naturalHeight > height + 1;
+
+  const card = prop.element.querySelector<HTMLElement>(".dp-card");
+  if (!card) return;
+  const marked = card.dataset.dpOverflow === "true";
+  if (marked === overflow) return;
+  write(card, () => {
+    if (overflow) card.dataset.dpOverflow = "true";
+    else delete card.dataset.dpOverflow;
   });
 }
 
