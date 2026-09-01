@@ -27,6 +27,7 @@ import {
   type PinPatch,
 } from "./data/pin-schema";
 import { releaseAnchor, syncAnchor } from "./data/ownership-sync";
+import { resolveCard } from "./render/ContentResolver";
 import * as settings from "./settings";
 import type { DpAudience, DpMode, DpPinFlags, DpSource } from "./types/dp";
 
@@ -390,6 +391,53 @@ export async function openLocally(anchorDoc: any): Promise<void> {
 }
 
 /**
+ * Set a prop's height so the whole document shows at its current width and type size.
+ *
+ * The width is the GM's choice — how wide a letter lies on the table — and the height
+ * is the document's. A pin from before type sizes were stored is frozen first: fitting
+ * is a resize, and a resize must never change the type, but a derived type follows the
+ * short edge and would chase the new height. Prop mode only; a pin is one grid square.
+ */
+export async function fitToContent(anchorDoc: any): Promise<boolean> {
+  if (!isGM() || !anchorDoc) return false;
+  let pin = readPin(anchorDoc);
+  if (!pin || pin.mode !== "prop") return false;
+
+  const size = { width: anchorDoc.width, height: anchorDoc.height };
+  if (pin.display.typeSize === null || pin.display.margin === null) {
+    const frozen = freezeMetrics(pin, size).display;
+    await store.update(anchorDoc, {
+      display: { typeSize: frozen.typeSize, margin: frozen.margin },
+    });
+    pin = readPin(anchorDoc) ?? pin;
+  }
+
+  const card = await resolveCard(pin, size, { tier: "L2b", baked: false });
+  if (card.naturalHeight === null) {
+    notify({ key: "DP.notice.fitUnavailable" }, "warn");
+    return false;
+  }
+
+  const height = Math.min(65_536, Math.max(1, Math.round(card.naturalHeight)));
+  await store.resize(anchorDoc, { width: size.width, height });
+  return true;
+}
+
+/**
+ * Put the box back to the natural size for this grid. The box only, deliberately: a GM
+ * who set 12 px type and wants the sheet back should not lose the type, and the Studio
+ * slider is the type's own reset.
+ */
+export async function resetSize(anchorDoc: any): Promise<boolean> {
+  if (!isGM() || !anchorDoc) return false;
+  const pin = readPin(anchorDoc);
+  if (!pin) return false;
+  const grid = anchorDoc.parent?.grid?.size ?? cv()?.scene?.grid?.size ?? 100;
+  await store.resize(anchorDoc, naturalSize(pin.mode, grid));
+  return true;
+}
+
+/**
  * Draw attention to a pin on every connected client.
  *
  * `canvas.ping` already displays locally and remotely, so the flash costs no socket of
@@ -560,6 +608,8 @@ export function publicApi() {
     openLocally,
     flash,
     locate,
+    fitToContent,
+    resetSize,
     deletePin,
     unpin,
     labelFor,

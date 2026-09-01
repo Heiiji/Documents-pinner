@@ -52,7 +52,14 @@ describe("hudMarkup", () => {
   it("is a toolbar with a single tab stop and no tabbable icons by default", () => {
     const markup = hudMarkup(doc, pin());
     expect(markup).toContain('role="toolbar"');
-    expect(markup.match(/tabindex="-1"/g)?.length).toBe(8);
+    expect(markup.match(/tabindex="-1"/g)?.length).toBe(9);
+  });
+
+  it("offers fit-to-content for a prop and not for a pin", () => {
+    expect(hudMarkup(doc, pin())).toContain('data-action="fitHeight"');
+    const asPin = hudMarkup(doc, pin({ mode: "pin" }));
+    expect(asPin).not.toContain('data-action="fitHeight"');
+    expect(asPin.match(/tabindex="-1"/g)?.length).toBe(8);
   });
 
   it("offers reveal while hidden and hide while visible", () => {

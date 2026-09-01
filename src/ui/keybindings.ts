@@ -120,6 +120,21 @@ export function registerKeybindings(): void {
       return true;
     },
   });
+
+  // Alt+Shift+F rather than Alt+F: Alt+F is Chrome's menu accelerator on Windows and
+  // Linux, and a page cannot reliably intercept it. Alt+Shift+V is the precedent.
+  keybindings.register(MODULE_ID, "fitSelected", {
+    name: "DP.keys.fitSelected",
+    hint: "DP.keys.fitSelectedHint",
+    editable: [{ key: "KeyF", modifiers: ["Alt", "Shift"] }],
+    restricted: true,
+    onDown: () => {
+      const pins = selectedPins();
+      if (!pins.length) return false;
+      for (const doc of pins) void api.fitToContent(doc);
+      return true;
+    },
+  });
 }
 
 /**

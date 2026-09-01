@@ -49,11 +49,19 @@ describe("registerKeybindings", () => {
     expect(registered.map((r) => r.key).sort()).toEqual([
       "cancel",
       "cycleAudience",
+      "fitSelected",
       "openPinboard",
       "peek",
       "pinLastUsed",
       "toggleMode",
     ]);
+  });
+
+  it("fits the selected props with Alt+Shift+F, GM-only", () => {
+    // Not Alt+F: that is Chrome's menu accelerator on Windows and Linux.
+    const fit = registerDuringInit().find((r) => r.key === "fitSelected")!;
+    expect(fit.options.editable).toEqual([{ key: "KeyF", modifiers: ["Alt", "Shift"] }]);
+    expect(fit.options.restricted).toBe(true);
   });
 
   it("leaves peek unrestricted — it is the one binding players get", () => {

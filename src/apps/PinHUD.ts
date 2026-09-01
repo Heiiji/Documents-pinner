@@ -177,6 +177,10 @@ export function hudMarkup(anchorDoc: any, pin: DpPinFlags): string {
       icon: "fa-solid fa-right-left",
       key: pin.mode === "prop" ? "DP.hud.toPin" : "DP.hud.toProp",
     },
+    // A prop's verb only: a pin is one grid square and has no content to fit.
+    ...(pin.mode === "prop"
+      ? [{ action: "fitHeight", icon: "fa-solid fa-text-height", key: "DP.hud.fitHeight" }]
+      : []),
     { action: "openLocally", icon: "fa-solid fa-book-open", key: "DP.hud.openForMe" },
     { action: "flash", icon: "fa-solid fa-bolt", key: "DP.hud.flash" },
     { action: "configure", icon: "fa-solid fa-gear", key: "DP.hud.configure" },
@@ -231,6 +235,7 @@ export function definePinHUD(): any {
         togglePalette: onTogglePalette,
         toggleLock: onToggleLock,
         toggleMode: onToggleMode,
+        fitHeight: onFitHeight,
         openLocally: onOpenLocally,
         flash: onFlash,
         configure: onConfigure,
@@ -508,6 +513,10 @@ function onToggleLock(this: any) {
 
 function onToggleMode(this: any) {
   void api.toggleMode(this.anchorDoc)?.then(() => this.render());
+}
+
+function onFitHeight(this: any) {
+  void api.fitToContent(this.object?.document);
 }
 
 function onOpenLocally(this: any) {

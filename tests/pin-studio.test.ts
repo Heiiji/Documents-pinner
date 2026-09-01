@@ -83,6 +83,21 @@ describe("studioMarkup", () => {
     }
   });
 
+  it("keeps fit and reset in the strip on every tab", () => {
+    for (const tab of ["content", "appearance", "audience"] as const) {
+      const markup = studioMarkup(doc, pin(), tab);
+      expect(markup, tab).toContain('data-action="fitHeight"');
+      expect(markup, tab).toContain('data-action="resetSize"');
+    }
+  });
+
+  it("disables fit for a pin-mode anchor, which has no content to fit", () => {
+    expect(studioMarkup(doc, pin({ mode: "pin" }), "content")).toContain(
+      'data-action="fitHeight" disabled'
+    );
+    expect(studioMarkup(doc, pin(), "content")).not.toContain('data-action="fitHeight" disabled');
+  });
+
   it("reflects the anchor's own geometry, not the payload's", () => {
     const markup = studioMarkup(doc, pin(), "content");
     expect(markup).toContain('name="_elevation" value="20"');

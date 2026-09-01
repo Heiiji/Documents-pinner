@@ -299,6 +299,10 @@ export function studioMarkup(doc: any, pin: DpPinFlags, active: TabId): string {
     `<input type="number" name="_rotation" value="${Number(doc.rotation ?? 0)}" step="15"></label>` +
     `<label>${escapeHtml(t("DP.studio.locked"))}` +
     `<input type="checkbox" name="_locked"${doc.locked ? " checked" : ""}></label>` +
+    // Fit is a prop's verb: a pin is one grid square and has no content to fit.
+    `<button type="button" data-action="fitHeight"${pin.mode !== "prop" ? " disabled" : ""}>` +
+    `${escapeHtml(t("DP.studio.fitHeight"))}</button>` +
+    `<button type="button" data-action="resetSize">${escapeHtml(t("DP.studio.resetSize"))}</button>` +
     `<button type="button" data-action="locate">${escapeHtml(t("DP.board.locate"))}</button>` +
     `<button type="button" class="dp-danger" data-action="deletePin">` +
     `${escapeHtml(t("DP.studio.delete"))}</button>` +
@@ -357,6 +361,8 @@ export function definePinStudio(): any {
         setTab: onSetTab,
         setEffect: onSetEffect,
         locate: onLocate,
+        fitHeight: onFitHeight,
+        resetSize: onResetSize,
         deletePin: onDeletePin,
       },
     };
@@ -461,6 +467,14 @@ function onSetEffect(this: any, _event: Event, target: HTMLElement) {
 
 function onLocate(this: any) {
   void api.locate(this.doc);
+}
+
+function onFitHeight(this: any) {
+  void api.fitToContent(this.doc).then(() => this.render());
+}
+
+function onResetSize(this: any) {
+  void api.resetSize(this.doc).then(() => this.render());
 }
 
 /**
