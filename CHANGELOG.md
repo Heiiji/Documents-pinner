@@ -9,6 +9,90 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Nothing yet.
 
+## [0.2.0] — unreleased
+
+The resize release, and a product pass over every surface a GM and a player touch.
+The pin payload schema is now version 2; the migration changes nothing on any map.
+
+### Added
+
+- **Resize a prop to show more or less of its document.** A prop used to be a zoom: its
+  type size followed the tile, so a bigger prop was the same words, larger. It is now a
+  window: the type size belongs to the pin, and growing the tile shows more lines.
+  Existing props keep exactly the size they are drawn at — the migration writes down the
+  number each one already had. The card follows core's resize handles live, and text
+  that does not fit fades into the paper at the bottom edge instead of cutting off
+  mid-line, in both rendering tiers.
+- **Text size and Margins in Pin Studio**, in place of the padding fraction; **Fit to
+  content** and **Reset size** in the Studio strip, the HUD and `Alt+Shift+F`; **width
+  and height in grid squares** with a ratio lock, beside the rotation. The placement
+  ghost previews the real page at the chosen text size, `Shift+Alt+wheel` sets it, `F`
+  fits, and the choice is remembered per client.
+- **Click a pin on the Notes layer to grab it.** A press on a prop from the layer the
+  module's tools leave you on switches to the Tiles layer and selects the pin, so the
+  next press drags; a double click opens it; a hover shows the tooltip the GM authored and
+  could never see. The "Move and resize pins" toolbar button is gone with the detour.
+- **The reader fits the screen.** Opening a prop brings the view in when its text is too
+  small to read, never on close; a pin set to read in place opens as a natural-size sheet
+  rather than a box one grid square wide; a click on the prop being read closes it, which
+  the board's own listener used to prevent; the last lines of a titled page can now be
+  scrolled into view.
+- **The player hears why a pin will not open** — "the GM has not granted access yet" —
+  instead of core's generic refusal, and the Pinboard has a filter for exactly those
+  rows. Revealing a pin-mode pin with ownership sync off tells the GM once that the sheet
+  will refuse.
+- **A first-run welcome and a what's-new dialog**, once per client, GM only. The empty
+  Pinboard says what to do and offers to place a pin. A GM's first prop is Aged Parchment
+  rather than no effect at all.
+- **The Pinboard's `…` button is a real menu** with every verb the row has; a drag shows
+  where the row will land; `Alt+↑↓` reorders from the keyboard; the bulk bar is always
+  there so the list never jumps; the scroll survives a re-render, in the board and in a
+  Studio tab.
+- **Motion, as one system.** A single table of durations and curves shared by both
+  tiers and kept equal by a test. The reveal plays where there is something to reveal —
+  at the bind, with the preset's own curve and duration — instead of at the moment of
+  the transition, when the mesh was unbound and it silently did nothing; the DOM tier no
+  longer replays it on every mount. Every exit animates: the reader, the tooltip, the
+  ghost, the HUD palettes. Peek eases on the canvas tier as it already did on the DOM
+  tier. Warm light falls on a prop under the pointer. The ghost eases its steps, shows a
+  solid border while placing free of the grid and a stamp mark while a run is armed, and
+  holds until the pin exists.
+- **One modifier vocabulary.** Click and Shift on every chip, taught by the tooltip;
+  the ghost legend names the modifiers in the keyboard's own language and lights the
+  held ones. One focus ring for every surface. The picker is a combobox driven from the
+  search box. `Escape` on the HUD lets go of the pin. The intensity sliders preview as
+  they move. Presets are reachable from both galleries and a user preset can be named.
+
+### Changed
+
+- **Pin payload schema 2.** `display.typeSize` (scene px) and `display.margin` (em) are
+  stored per pin; margins are em of the type size rather than a fraction of the short
+  edge, so a resize never moves them. `display.showLabel`, `display.labelPosition`,
+  `interaction.openPage` and `interaction.clickThrough` were stored and read by nothing
+  and are gone; a click-through pin becomes `open: "never"`, which it always was.
+- The reader gate is the apparent **type** size, not the box's width: a small scrap with
+  legible type is exactly the prop whose clipped tail the reader exists to scroll.
+- The rendering setting is labelled by what it does — into the scene where the browser
+  allows, for PDF pages, or always as an overlay.
+- `Alt+Shift+F`, not `Alt+F`: that is Chrome's menu accelerator on Windows and Linux.
+- The Studio's "remember who has discovered it" is gone: it was read only under an
+  audience kind the tab does not offer.
+
+### Fixed
+
+- **A resized DOM prop kept its old card.** The card carried its own width, height and
+  font size as inline pixels, so a resize moved the box and left the old card inside it,
+  clipped or short, until an LOD boundary happened to be crossed.
+- **`Flash` told every player where a hidden pin was.** A ping is drawn at coordinates on
+  every client whether or not a pin is there. A hidden pin now pings this client only.
+- **`Alt+M`, `Alt+Shift+V` and `Shift+P` did nothing in silence** with nothing selected or
+  nothing placed. They act on the Pinboard's focused row, open the picker, or say so.
+- The tooltip's fade never played, and there was no fade-out, because the element was
+  created and removed on every hover. The HUD's "Some" with nobody chosen moved the focus
+  and said nothing. The ghost's `sticky` was written and never read. A rotation step
+  across zero turned the long way. The tooltip ignored a prop's rotation. Two strings
+  nothing referenced, and three stale claims in comments, are gone.
+
 ## [0.1.8] — unreleased
 
 ### Fixed
@@ -329,7 +413,8 @@ occluded. The module detects this at startup rather than failing visibly.
 
 The full list is in the README and in `docs/DESIGN.md` §10.
 
-[Unreleased]: https://github.com/Heiiji/Documents-pinner/compare/v0.1.8...HEAD
+[Unreleased]: https://github.com/Heiiji/Documents-pinner/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/Heiiji/Documents-pinner/compare/v0.1.8...v0.2.0
 [0.1.8]: https://github.com/Heiiji/Documents-pinner/compare/v0.1.7...v0.1.8
 [0.1.7]: https://github.com/Heiiji/Documents-pinner/compare/v0.1.6...v0.1.7
 [0.1.6]: https://github.com/Heiiji/Documents-pinner/compare/v0.1.5...v0.1.6

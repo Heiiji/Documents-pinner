@@ -2,7 +2,7 @@
 
 **Status:** Beta. §11 criteria 2, 3 and 4 are UNREACHABLE — see amendment A10
 **Target:** Foundry VTT v14, `compatibility: { minimum: "14", verified: "14.365" }`
-**Last updated:** 2026-08-27
+**Last updated:** 2026-09-01
 
 ---
 
@@ -194,7 +194,7 @@ the module's signature affordance.
 | L1 silhouette | apparent width < 48 px | shared tinted paper | — | — |
 | L2a coarse | 48–320 px | 512 px long edge | ½ intensity, ≤3 taps | — |
 | L2b full | ≥ 320 px | `min(2048, nextPow2(px·dpr))` | full shader | — |
-| L3 reader | focused, ≥ 480 px, readable | unchanged | eases into focus | live HTML |
+| L3 reader | focused, type ≥ 9 px apparent, readable | unchanged | eases into focus | live HTML |
 
 ### 6.2 Hard performance rules
 
@@ -341,15 +341,16 @@ Test world: one scene at darkness 0.8, two lights, a roof tile, three tokens, fo
 ```
 src/
   main.ts            hook registration only, no logic
-  const.ts  i18n.ts  api.ts  settings.ts
-  data/       PinData  PinStore  audience*  ownership-plan*  migrations*
-  canvas/     PinnedTile  PropRecord  PropManager  PropHitLayer  DomPropTier  transform*
-  render/     ContentResolver  enrich  CardTemplate  AssetInliner  Rasterizer  TextureCache
+  const.ts  i18n.ts  api.ts  settings.ts  motion*
+  data/       PinData  PinStore  audience*  ownership-plan*  migrations*  pin-schema*
+  canvas/     PinnedTile  PropRecord  PropManager  PropHitLayer  DomPropTier  transform*  lod*
+  render/     ContentResolver  enrich  CardTemplate*  AssetInliner  Rasterizer  TextureCache
+              measure
   effects/    EffectRegistry  preset-schema*  preset-css*  presets/*  shaders/*
   apps/       DocumentPicker  PlacementGhost  PinStudio  Pinboard  PinHUD
-              PresetStudio  ReaderOverlay  PropTooltip  OverlayRoot
-  ui/         controls  keybindings
-styles/       documents-pinner.css (entry) + base, theme, fx/*, ui/*
+              PresetStudio  ReaderOverlay  PropTooltip  OverlayRoot  pinboard-model*
+  ui/         controls  keybindings  onboarding
+styles/       documents-pinner.css (entry) + base, theme, fx/*, ui/* (focus.css last)
 templates/  lang/  assets/  tests/  docs/  .github/workflows/
 ```
 
@@ -957,3 +958,91 @@ can honour first". A17 is the one underneath both: **verify the failure MODE, no
 failure.** Knowing that WebKit taints was not enough — what mattered was that the taint
 surfaced somewhere the module could not catch it, and that was never checked because in
 Chromium it never surfaced at all.
+
+### A18 — The prop is a viewport, not a zoom (2026-09-01)
+
+The observation, from the first person to use the module on a real map: resizing a prop
+changed nothing about how much of the document it showed. The card was laid out at the
+tile's width × height and its type size was derived from the short edge (`short / 26`,
+`CardTemplate.baseFontSize`), so a 400×566 prop and an 800×1132 prop held exactly the
+same words. Margins were a fraction of the short edge too. A resize was a zoom.
+
+**What changed.** The type size is stored on the pin, in scene pixels (`display.typeSize`),
+and margins are stored in em of it (`display.margin`). The card carries no size of its
+own: it is `100%` of whatever box it is put in — a `.dp-prop`, the reader, or the SVG's
+sized root — so growing the tile shows more lines and shrinking it shows fewer, and the
+DOM tier re-lays the card out by CSS alone with no resolve. `cardMetrics` is the one
+choke point between the stored fields and every renderer.
+
+**Why the fields are nullable.** A numeric default could not preserve appearance for any
+payload that reaches a renderer *before* the migration has written it — a player client
+that loads before the primary GM connects, a scene imported from a pack a year from now.
+`null` means "derive exactly what the version-1 schema derived", so an unmigrated pin
+renders byte-for-byte as it did; the migration's only job is to freeze the number each
+prop is already drawn at (`freezeMetrics`), after which the next resize is a change of
+window. `convertMode`, `adoptTile` and the Studio freeze on the way in for the same
+reason, and a new anchor is born with its numbers in both modes.
+
+**What it revealed.** `DomPropTier.contentKeyOf` omitted geometry on the stated premise
+that "a resized prop is re-laid-out by CSS". It was not — the card's pixels were inline —
+so a resized DOM prop kept its old card, clipped or short, until an LOD boundary happened
+to be crossed. The premise is true now, and the comment finally describes the code. The
+reader gate (§6.1 L3) moved from apparent width to apparent *type* size, because
+legibility stopped being a property of the box: a small scrap with legible type is
+exactly the prop whose clipped tail the reader exists to scroll.
+
+**Overflow is legible.** CSS cannot ask whether its content fit, so the resolver measures
+the card in a hidden probe at the width it will be drawn at (`render/measure.ts`) and
+marks it; the same number is what "fit to content" writes as the tile's height. The fade
+is paper-coloured rather than a transparent mask: at the coarse tier a mask lets the map
+show through the card's foot and reads as a torn edge, while a paper gradient reads as
+the sheet continuing under a fold. Content, not an effect — the level setting does not
+touch it.
+
+**Schema 2 also drops four fields** — `display.showLabel`, `display.labelPosition`,
+`interaction.openPage`, `interaction.clickThrough` — that were stored, validated and read
+by nothing; `clickThrough` was indistinguishable from `open: "never"` and becomes it, in
+the normaliser rather than the migration, so an unmigrated payload already behaves as it
+will after. They are dropped on read without a warning: a payload version 1 wrote is not a
+stranger's typo.
+
+**The pattern.** A15 was "do not offer what you cannot honour". A18 is its complement:
+**do not derive at read time what the user will one day want to set.** A derived value is
+a promise that it never needs to be stored; the moment the user wants to hold it still
+while something else moves, that promise breaks, and the migration has to reconstruct a
+number from the state that happened to be on screen.
+
+### A19 — The GM's layer (2026-09-01)
+
+A13 documented the cost: core only lets a Tile be selected while the Tiles layer is
+active — `control()` returns false anywhere else, with no error, no notification and no
+cursor change — and the module's own tools live on the Notes layer. A13's answer was a
+sign: a toolbar button, a layer switch inside `locate`, and a README paragraph. Three code
+paths compensating for one architectural choice, and the most-reported failure in the
+changelog kept recurring, because a sign is read once and the failure happens every
+session.
+
+**What changed.** `PropHitLayer` builds hit areas for the GM too, on exactly one layer:
+Notes. A press on a prop there switches to the Tiles layer and calls `control()` — the one
+layer on which it says yes — so the selection frame and handles are core's and the next
+press drags. A double click opens the document; a hover fires the tooltip hook, so the GM
+can at last see the tooltip the Studio let them write. Nothing on Tiles, where the real
+placeable is interactive and a hit area would shadow it; nothing on Tokens, where a
+rubber-band select across a prop must keep selecting tokens; nothing while a placement is
+armed, because the ghost owns the press then. The layer re-syncs when the scene controls
+re-render, which is the signal core gives when the active layer changes. The toolbar
+button is gone.
+
+**What core still owns.** Moving and resizing are core's `MouseInteractionManager` on the
+active Tiles layer, through core's own handles. This module does not reimplement a drag;
+it removes the detour to the layer where core's drag works. A fully module-owned move and
+resize on any layer remains possible and remains unbuilt: the press-selects-then-drag
+gesture is one extra press, and one extra press is not a detour.
+
+**Verified in the fake, to be watched live.** The hit-layer tests assert the layer rule and
+the control call; the actual `activate()` → `control()` sequence on a v14 canvas is the
+same one `api.locate` has used since A13, and is on the verification list rather than
+assumed.
+
+**The pattern.** A13 signposted a gap. A19 closes it. The difference is who pays: a sign
+costs the GM one detour per session forever; closing the gap cost one afternoon once.

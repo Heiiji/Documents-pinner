@@ -33,9 +33,9 @@ follows the cursor; click to place. It stays hidden from players until you revea
 
 | Placing | |
 |---|---|
-| wheel | rotate 15° · `Shift` 1° · `Alt` scale |
+| wheel | rotate 15° · `Shift` 1° · `Alt` scale the box · `Shift+Alt` text size |
 | `Space` | pin ↔ prop |
-| `E` / `V` / `R` | effect · audience · reset rotation |
+| `E` / `V` / `R` / `F` | effect · audience · reset rotation · fit height to content |
 | `Ctrl` | free placement (no grid snap) |
 | click | place · `Shift+click` keeps placing · `Esc` cancels |
 
@@ -43,20 +43,28 @@ follows the cursor; click to place. It stays hidden from players until you revea
 |---|---|
 | `P` | Pinboard — every pin on the scene |
 | `Shift+P` | place the last document again, no dialogs |
-| `Alt+Shift+V` / `Alt+M` | cycle audience · switch shape |
+| `Alt+Shift+V` / `Alt+M` / `Alt+Shift+F` | cycle audience · switch shape · fit to content |
 | hold `Alt` | peek: props fade so the map can be read (players too) |
 | `/pin <name>` | place by name from chat |
 
 | Pinboard | |
 |---|---|
 | `↑↓` `Space` | move · reveal |
+| `Alt+↑↓` | reorder — row order is reveal order |
 | `Enter` `L` `O` `S` `F` `M` | studio · locate · open · show to audience · flash · shape |
+| `…` | every verb the row has, in a menu |
 | `/` `Esc` | search · clear |
 
-**To move, resize or rotate a pin, switch to the Tiles layer** — pins are Tiles, and
-Foundry only lets you grab one while that layer is active. The Notes controls have a
-**Move and resize pins** button that does it in one click, and the Pinboard's `L` (locate)
-takes you there and selects the pin for you.
+**Click a pin on the Notes layer to grab it.** Pins are Tiles, and Foundry only lets you
+drag one from the Tiles layer — so a press on a prop from the Notes layer, where the
+module's tools leave you, switches layer and selects it for you; the next press drags,
+and the corner handles resize. The Pinboard's `L` (locate) does the same from a distance.
+
+**A prop is a window onto its document.** Resizing it shows more or less of the page at
+the same text size; text that does not fit fades out at the bottom edge. *Fit to content*
+(Pin Studio, the HUD, `Alt+Shift+F`, or `F` while placing) sets the height so the whole
+page shows at the current width. *Text size* and *Margins* are in Pin Studio, with the
+width and height in grid squares and a ratio lock.
 
 Also: a journal sheet header button, the Notes scene controls, sidebar context menus, a
 checkbox on any tile's config sheet to adopt it, and a button on a map note to convert it.
@@ -76,7 +84,7 @@ Anything about your machine is per-client; anything about how the table plays is
 
 | | Scope | |
 |---|---|---|
-| Prop rendering | client | DOM is the working path; Canvas is probed and refused by the browser |
+| Prop rendering | client | Into the scene where the browser allows (PDF pages), or always as an overlay |
 | Effect level | client | Auto, full, reduced, off |
 | Texture memory budget | client | Past it, the least-recently-seen props drop detail |
 | Reduce detail automatically | client | One step down if the frame rate will not hold |
@@ -113,6 +121,8 @@ If you need real secrecy, keep the document out of the world until you want it s
 6. Compendium ownership is pack-wide, so there is no per-user grant for a compendium
    source. The pin still reveals its content.
 7. Pins are real Tiles and appear in `scene.tiles` to other modules, by design.
+8. *Fit to content* cannot measure a bare image pin — an image has no text to measure —
+   so it leaves that one's height alone and says so.
 
 ## Development
 
@@ -166,9 +176,9 @@ ce que vous le révéliez.
 
 | Placement | |
 |---|---|
-| molette | pivoter 15° · `Maj` 1° · `Alt` redimensionner |
+| molette | pivoter 15° · `Maj` 1° · `Alt` redimensionner le cadre · `Maj+Alt` taille du texte |
 | `Espace` | épingle ↔ accessoire |
-| `E` / `V` / `R` | effet · public · réinitialiser la rotation |
+| `E` / `V` / `R` / `F` | effet · public · réinitialiser la rotation · ajuster la hauteur au contenu |
 | `Ctrl` | placement libre (sans aimantation) |
 | clic | poser · `Maj+clic` enchaîne · `Échap` annule |
 
@@ -176,20 +186,30 @@ ce que vous le révéliez.
 |---|---|
 | `P` | tableau de bord — toutes les épingles de la scène |
 | `Maj+P` | reposer le dernier document, sans dialogue |
-| `Alt+Maj+V` / `Alt+M` | faire défiler le public · changer de forme |
+| `Alt+Maj+V` / `Alt+M` / `Alt+Maj+F` | faire défiler le public · changer de forme · ajuster au contenu |
 | `Alt` maintenu | coup d'œil : les accessoires s'estompent (les joueurs aussi) |
 | `/pin <nom>` | poser par son nom depuis le chat |
 
 | Tableau de bord | |
 |---|---|
 | `↑↓` `Espace` | se déplacer · révéler |
+| `Alt+↑↓` | réordonner — l'ordre des lignes est l'ordre de révélation |
 | `Entrée` `L` `O` `S` `F` `M` | studio · localiser · ouvrir · montrer au public · faire clignoter · forme |
+| `…` | tous les verbes de la ligne, dans un menu |
 | `/` `Échap` | rechercher · effacer |
 
-**Pour déplacer, redimensionner ou pivoter une épingle, passez au calque Tuiles** — les
-épingles sont des tuiles, et Foundry ne permet de les saisir que depuis ce calque. Les
-contrôles Notes contiennent un bouton **Déplacer et redimensionner les épingles** qui le
-fait en un clic, et le `L` du tableau de bord vous y emmène en sélectionnant l'épingle.
+**Cliquez une épingle sur le calque Notes pour la saisir.** Les épingles sont des tuiles,
+et Foundry ne permet de les déplacer que depuis le calque Tuiles — alors un clic sur un
+accessoire depuis le calque Notes, là où les outils du module vous laissent, change de
+calque et le sélectionne pour vous ; le clic suivant le déplace, et les poignées d'angle
+le redimensionnent. Le `L` du tableau de bord (localiser) fait de même à distance.
+
+**Un accessoire est une fenêtre sur son document.** Le redimensionner montre plus ou
+moins de la page à la même taille de texte ; le texte qui ne tient pas s'estompe au bord
+inférieur. *Ajuster au contenu* (Pin Studio, le HUD, `Alt+Maj+F`, ou `F` pendant le
+placement) règle la hauteur pour que toute la page tienne à la largeur actuelle. *Taille
+du texte* et *Marges* sont dans Pin Studio, avec la largeur et la hauteur en cases et un
+verrou de ratio.
 
 Également : un bouton dans l'en-tête d'une fiche de journal, les contrôles de scène Notes,
 les menus contextuels de la barre latérale, une case sur la fiche de n'importe quelle tuile
@@ -211,7 +231,7 @@ monde.
 
 | | Portée | |
 |---|---|---|
-| Rendu des accessoires | client | DOM est le chemin fonctionnel ; Canvas est testé puis refusé par le navigateur |
+| Rendu des accessoires | client | Dans la scène quand le navigateur le permet (pages PDF), ou toujours en surimpression |
 | Niveau d'effets | client | Auto, complet, réduit, désactivé |
 | Budget mémoire des textures | client | Au-delà, les accessoires les plus anciens perdent en détail |
 | Réduire le détail automatiquement | client | Un cran plus bas si la fluidité ne tient pas |
@@ -253,6 +273,8 @@ voulu.
    contenu est quand même révélé.
 7. Les épingles sont de vraies tuiles et apparaissent dans `scene.tiles` aux autres modules,
    par conception.
+8. *Ajuster au contenu* ne peut pas mesurer une épingle d'image nue — une image n'a pas
+   de texte à mesurer — et laisse alors sa hauteur inchangée en le disant.
 
 ## Développement
 
