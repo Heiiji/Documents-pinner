@@ -29,6 +29,12 @@
   --dp-paper-edge: #c9b58d;
   --dp-card-pad: 12px;
 
+  /* The card carries no size of its own. It fills whatever box it is put in — a
+     `.dp-prop`, the reader, or the SVG's sized root — so a resized prop re-flows by
+     CSS alone and shows more or less of its document, rather than being re-resolved
+     at a new size. The type size is on the card; the box decides how much shows. */
+  inline-size: 100%;
+  block-size: 100%;
   box-sizing: border-box;
   overflow: hidden;
   color: var(--dp-paper-ink);
@@ -48,6 +54,12 @@
 
 .dp-card__sheet {
   box-sizing: border-box;
+  /* A column, so the body is exactly the visible remainder under the title. With the
+     body at 100% of the sheet instead, a title pushed the last title-height of text
+     below the sheet's edge — where the prop clipped it and the reader could not scroll
+     to it. */
+  display: flex;
+  flex-direction: column;
   block-size: 100%;
   padding: var(--dp-card-pad);
   overflow: hidden;
@@ -69,6 +81,9 @@
 
 .dp-card__body {
   font-size: 1em;
+  flex: 1 1 auto;
+  min-block-size: 0;
+  overflow: hidden;
 
   & p {
     margin: 0 0 0.6em;

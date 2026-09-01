@@ -28,8 +28,20 @@ vi.mock("../src/render/ContentResolver", () => ({
 
 vi.mock("../src/effects/level", () => ({ currentLevel: () => "full" }));
 
-import { clearDomTier, domPropCount, syncDomTier } from "../src/canvas/DomPropTier";
+// The real write queue, spied on, so a test can count style writes per pass.
+vi.mock("../src/apps/OverlayRoot", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../src/apps/OverlayRoot")>();
+  return { ...actual, write: vi.fn(actual.write) };
+});
+
+import {
+  clearDomTier,
+  domPropCount,
+  followDomProp,
+  syncDomTier,
+} from "../src/canvas/DomPropTier";
 import { resolveCard } from "../src/render/ContentResolver";
+import { write } from "../src/apps/OverlayRoot";
 
 const pin = (over: Partial<DpPinFlags> = {}): DpPinFlags => ({
   ...defaultPin(),
@@ -56,8 +68,13 @@ const entry = (over: Record<string, any> = {}) => ({
   tier: "L2b" as const,
   focused: false,
   alpha: 1,
+  pdf: false,
   ...over,
 });
+
+/** A pin whose metrics are stored, so nothing about its card depends on the tile. */
+const sized = (typeSize = 12) =>
+  pin({ display: { ...defaultPin().display, typeSize, margin: 1.5 } });
 
 /** The tier batches its style writes through OverlayRoot's single rAF. */
 async function settle() {
@@ -73,6 +90,7 @@ function overlay() {
 beforeEach(() => {
   document.body.innerHTML = '<div id="board"></div>';
   vi.mocked(resolveCard).mockClear();
+  vi.mocked(write).mockClear();
 });
 
 afterEach(() => clearDomTier());
@@ -152,6 +170,70 @@ describe("syncDomTier", () => {
     expect(overlay()!.querySelector<HTMLElement>(".dp-prop")!.style.left).toBe("900px");
   });
 
+  /**
+   * The defect: `contentKeyOf` omitted geometry on the stated premise that a resized
+   * prop is re-laid-out by CSS. The card carried its own width, height and font size
+   * as inline pixels, so nothing re-laid it out — the `.dp-prop` box took the new size
+   * and the old card sat inside it, clipped or short, until an LOD boundary happened
+   * to be crossed. The card now fills its box, and this is what that buys.
+   */
+  it("re-lays-out the card when the prop is resized, without re-resolving", async () => {
+    syncDomTier([entry({ pin: sized() })]);
+    await settle();
+    syncDomTier([entry({ pin: sized(), doc: doc({ height: 900 }) })]);
+    await settle();
+
+    expect(resolveCard).toHaveBeenCalledTimes(1);
+    const box = overlay()!.querySelector<HTMLElement>(".dp-prop")!;
+    expect(box.style.height).toBe("900px");
+  });
+
+  it("re-resolves when the type size changes, because that is drawn into the card", async () => {
+    syncDomTier([entry({ pin: sized(12) })]);
+    await settle();
+    syncDomTier([entry({ pin: sized(20) })]);
+    await settle();
+    expect(resolveCard).toHaveBeenCalledTimes(2);
+  });
+
+  it("still re-resolves a legacy prop when its short edge changes, since its type derives from the tile", async () => {
+    // Default pin: typeSize and margin are null, so the metrics follow min(width, height).
+    syncDomTier([entry()]);
+    await settle();
+    // Taller only: the short edge is still 400, the derived metrics are unchanged.
+    syncDomTier([entry({ doc: doc({ height: 900 }) })]);
+    await settle();
+    expect(resolveCard).toHaveBeenCalledTimes(1);
+    // Wider: the short edge is now 560, and the type with it.
+    syncDomTier([entry({ doc: doc({ width: 800, height: 900 }) })]);
+    await settle();
+    expect(resolveCard).toHaveBeenCalledTimes(2);
+  });
+
+  it("re-resolves a PDF prop on resize, because its page is drawn at a size", async () => {
+    syncDomTier([entry({ pin: sized(), pdf: true })]);
+    await settle();
+    syncDomTier([entry({ pin: sized(), pdf: true, doc: doc({ height: 900 }) })]);
+    await settle();
+    expect(resolveCard).toHaveBeenCalledTimes(2);
+  });
+
+  it("writes geometry once per change, not once per pass", async () => {
+    syncDomTier([entry({ pin: sized() })]);
+    await settle();
+    const afterFirst = vi.mocked(write).mock.calls.length;
+    expect(afterFirst).toBeGreaterThan(0);
+
+    syncDomTier([entry({ pin: sized() })]);
+    syncDomTier([entry({ pin: sized() })]);
+    await settle();
+    expect(vi.mocked(write).mock.calls.length).toBe(afterFirst);
+
+    syncDomTier([entry({ pin: sized(), doc: doc({ x: 900 }) })]);
+    await settle();
+    expect(vi.mocked(write).mock.calls.length).toBeGreaterThan(afterFirst);
+  });
+
   it("stays pointer-transparent so PropHitLayer keeps owning interaction", async () => {
     syncDomTier([entry()]);
     await settle();
@@ -159,6 +241,28 @@ describe("syncDomTier", () => {
     const card = overlay()!.querySelector<HTMLElement>(".dp-prop")!;
     expect(card.style.pointerEvents).toBe("");
     expect(card.getAttribute("aria-hidden")).toBe("true");
+  });
+});
+
+describe("followDomProp", () => {
+  it("moves a mounted card to the document's current geometry without resolving", async () => {
+    syncDomTier([entry({ pin: sized() })]);
+    await settle();
+
+    followDomProp(doc({ width: 640, height: 900 }));
+    await settle();
+
+    expect(resolveCard).toHaveBeenCalledTimes(1);
+    const box = overlay()!.querySelector<HTMLElement>(".dp-prop")!;
+    expect(box.style.width).toBe("640px");
+    expect(box.style.height).toBe("900px");
+  });
+
+  it("is a no-op for a prop that is not mounted", async () => {
+    followDomProp(doc({ id: "nope" }));
+    await settle();
+    expect(domPropCount()).toBe(0);
+    expect(vi.mocked(write)).not.toHaveBeenCalled();
   });
 });
 

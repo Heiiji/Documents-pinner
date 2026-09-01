@@ -106,6 +106,11 @@ export function cardHtml(options: CardOptions): string {
  * The XHTML namespace on the inner div is equally load-bearing: without it the content
  * is parsed as SVG, where a `<div>` means nothing and draws nothing.
  *
+ * The root div is sized too, and that is the third load-bearing size. The card is
+ * `100%` of its box, and a percentage height needs a definite containing block; inside
+ * a foreignObject the root has none unless it is given one, and a card with no definite
+ * height collapses to a transparent texture, as silently as the other two.
+ *
  * The stylesheet is wrapped in CDATA, and that is not a nicety. This document is loaded
  * through `Blob -> img.src`, which parses it with the **XML** parser, and XML gives
  * `<style>` no implicit CDATA the way HTML does. A single bare `&` — which is every
@@ -119,7 +124,8 @@ export function svgDocument(card: string, css: string, width: number, height: nu
     `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" ` +
     `viewBox="0 0 ${width} ${height}">` +
     `<foreignObject x="0" y="0" width="${width}" height="${height}">` +
-    `<div xmlns="http://www.w3.org/1999/xhtml" class="dp-card-root">` +
+    `<div xmlns="http://www.w3.org/1999/xhtml" class="dp-card-root" ` +
+    `style="width:${width}px;height:${height}px">` +
     `<style>${cdata(css)}</style>${card}` +
     `</div></foreignObject></svg>`
   );

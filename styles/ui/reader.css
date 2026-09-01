@@ -40,8 +40,10 @@
     cursor: auto;
   }
 
+  /* The body is the sheet's flex remainder (card.css); here it scrolls. */
   & .dp-card__body {
-    block-size: 100%;
+    flex: 1 1 auto;
+    min-block-size: 0;
     overflow-y: auto;
   }
 }

@@ -516,6 +516,7 @@ class Manager {
           tier,
           focused: this.#focusedId === record.id,
           alpha: this.#alphaFor(tile, pin, tokens),
+          pdf: this.#isPdf(pin),
         });
         continue;
       }

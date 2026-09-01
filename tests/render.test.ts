@@ -77,6 +77,14 @@ describe("svgDocument", () => {
     expect(svg).toMatch(/<foreignObject[^>]*width="400"[^>]*height="560"/);
   });
 
+  // The card is `100%` of its box, and a percentage height needs a definite containing
+  // block. Inside a foreignObject the root div has none unless it is given one, and a
+  // card with no definite height collapses to a transparent texture — silently.
+  it("sizes the root div, so a card at 100% has a definite box to fill", () => {
+    const svg = svgDocument("<div></div>", "", 400, 560);
+    expect(svg).toMatch(/<div[^>]*dp-card-root[^>]*style="width:400px;height:560px"/);
+  });
+
   it("declares the XHTML namespace, without which the div draws nothing", () => {
     expect(svgDocument("<div></div>", "", 10, 10)).toContain(
       'xmlns="http://www.w3.org/1999/xhtml"'
