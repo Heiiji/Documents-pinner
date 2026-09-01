@@ -79,16 +79,18 @@
 }
 
 /*
- * The effect preview.
+ * The preview.
  *
- * A real `.dp-card` filling the ghost, painted by the same rules the rasterised prop is,
- * because DESIGN §5.2 chose a ghost over a modal precisely so a GM could see whether the
- * effect reads against THIS map before committing. The ghost used to be a dashed
- * rectangle with a `data-dp-fx` attribute nothing styled.
+ * A real `.dp-card` filling the ghost, painted by the same rules the prop is, because
+ * DESIGN §5.2 chose a ghost over a modal precisely so a GM could see whether the effect
+ * reads against THIS map before committing. The ghost used to be a dashed rectangle with
+ * a `data-dp-fx` attribute nothing styled.
  *
- * The static rendition is shown deliberately: it is exactly what a baked prop will look
- * like, and a grid of animating presets during placement is a distraction from the
- * question being asked.
+ * First the effect swatch, instantly; then the real page at the chosen type size, once
+ * it resolves — so `Shift+Alt+wheel` shows the words getting denser and `Alt+wheel`
+ * shows more of them. The static rendition is shown deliberately: it is exactly what
+ * a baked prop will look like, and an animating preset during placement is a
+ * distraction from the question being asked.
  */
 .dp-ghost__body {
   position: absolute;

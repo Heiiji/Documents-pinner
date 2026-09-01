@@ -1,10 +1,25 @@
 /**
  * @vitest-environment jsdom
  */
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+/** Deferred resolves, so a test can decide which preview lands first. */
+const pending: { html: string; resolve: () => void }[] = [];
+vi.mock("../src/render/ContentResolver", () => ({
+  resolveCard: vi.fn(
+    (pin: any) =>
+      new Promise((resolve) => {
+        const html = `<div class="dp-card">type ${pin.display.typeSize}</div>`;
+        const card = { html, title: "", readable: true, contentHash: "h", missing: false };
+        pending.push({ html, resolve: () => resolve(card) });
+      })
+  ),
+}));
+
 import {
   SCALE_MAX,
   SCALE_MIN,
+  TYPE_SIZE_GHOST_MAX,
   arm,
   disarm,
   initialState,
@@ -14,6 +29,7 @@ import {
   stepWheel,
   type GhostState,
 } from "../src/apps/PlacementGhost";
+import { TYPE_SIZE_MIN } from "../src/data/pin-schema";
 import { installWorld, uninstallWorld } from "./helpers/fake-foundry";
 import { CORE_PRESETS } from "../src/effects/presets/core-presets";
 
@@ -56,6 +72,59 @@ describe("stepWheel", () => {
 
   it("leaves rotation alone while scaling", () => {
     expect(stepWheel(ghost({ rotation: 45 }), 1, { alt: true }).rotation).toBe(45);
+  });
+});
+
+describe("the type size", () => {
+  it("starts at the default type size for the grid", () => {
+    expect(initialState(source, "prop", 100).typeSize).toBeCloseTo(400 / 26, 6);
+    expect(initialState(source, "prop", 200).typeSize).toBeCloseTo(800 / 26, 6);
+  });
+
+  it("starts at the type size used last, when there is one", () => {
+    installWorld({ isGM: true, settings: { lastTypeSize: 12 } });
+    try {
+      expect(initialState(source, "prop", 100).typeSize).toBe(12);
+    } finally {
+      uninstallWorld();
+    }
+  });
+
+  it("changes the type with shift+alt and never the box", () => {
+    const next = stepWheel(ghost(), -1, { alt: true, shift: true });
+    expect(next.typeSize).toBeCloseTo(ghost().typeSize + 0.5, 6);
+    expect(next.scale).toBe(1);
+  });
+
+  it("scales the box with alt and never the type", () => {
+    const next = stepWheel(ghost(), -1, { alt: true });
+    expect(next.scale).toBeCloseTo(1.1, 6);
+    expect(next.typeSize).toBe(ghost().typeSize);
+  });
+
+  it("clamps the type size at both ends", () => {
+    let state = ghost();
+    for (let i = 0; i < 300; i++) state = stepWheel(state, -1, { alt: true, shift: true });
+    expect(state.typeSize).toBe(TYPE_SIZE_GHOST_MAX);
+    for (let i = 0; i < 300; i++) state = stepWheel(state, 1, { alt: true, shift: true });
+    expect(state.typeSize).toBe(TYPE_SIZE_MIN);
+  });
+
+  it("requests a fit on F and claims the key", () => {
+    expect(stepKey(ghost(), "f")).toMatchObject({ fitPending: true });
+    expect(stepKey(ghost(), "F")).not.toBeNull();
+  });
+
+  it("forgets a fitted height when the box is scaled or the shape changes", () => {
+    const fitted = ghost({ heightOverride: 900 });
+    expect(sizeOf(fitted, 100).height).toBe(900);
+    expect(stepWheel(fitted, 1, { alt: true }).heightOverride).toBeNull();
+    expect(stepWheel(fitted, 1, { alt: true, shift: true }).heightOverride).toBeNull();
+    expect((stepKey(fitted, " ") as GhostState).heightOverride).toBeNull();
+  });
+
+  it("ignores a fitted height in pin mode, which is one grid square", () => {
+    expect(sizeOf(ghost({ mode: "pin", heightOverride: 900 }), 100).height).toBe(100);
   });
 });
 
@@ -168,5 +237,65 @@ describe("placement elevation", () => {
 
     expect(created).toHaveLength(1);
     expect(created[0].elevation).toBe(0);
+  });
+
+  it("passes the chosen type size to the pin it places", async () => {
+    arm(source);
+    document
+      .getElementById("board")!
+      .dispatchEvent(new WheelEvent("wheel", { bubbles: true, deltaY: -1, altKey: true, shiftKey: true }));
+    document
+      .getElementById("board")!
+      .dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0 }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const pin = created[0]["flags.documents-pinner.pin"] as any;
+    expect(pin.display.typeSize).toBeCloseTo(400 / 26 + 0.5, 6);
+    expect(pin.display.margin).toBe(1.5);
+  });
+});
+
+describe("the preview", () => {
+  beforeEach(() => {
+    pending.length = 0;
+    installWorld({ isGM: true });
+    document.body.innerHTML = '<div id="board"></div>';
+  });
+
+  afterEach(() => {
+    disarm();
+    uninstallWorld();
+  });
+
+  const body = () => document.querySelector<HTMLElement>(".dp-ghost__body")!;
+
+  it("shows the swatch at once and the real page once it resolves", async () => {
+    arm(source);
+    expect(body().querySelector(".dp-card")).not.toBeNull();
+    expect(body().textContent).toBe("");
+
+    expect(pending).toHaveLength(1);
+    pending[0].resolve();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(body().textContent).toContain("type");
+  });
+
+  it("previews the real content at the chosen size, and a slow resolve cannot overwrite a newer one", async () => {
+    arm(source);
+    const board = document.getElementById("board")!;
+    board.dispatchEvent(new WheelEvent("wheel", { bubbles: true, deltaY: -1, altKey: true, shiftKey: true }));
+    board.dispatchEvent(new WheelEvent("wheel", { bubbles: true, deltaY: -1, altKey: true, shiftKey: true }));
+    expect(pending).toHaveLength(3);
+
+    // The newest lands first, then the stale ones straggle in.
+    pending[2].resolve();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const newest = body().textContent;
+    pending[0].resolve();
+    pending[1].resolve();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(body().textContent).toBe(newest);
+    expect(newest).toContain(String(Math.round((400 / 26 + 1) * 100) / 100).slice(0, 4));
   });
 });

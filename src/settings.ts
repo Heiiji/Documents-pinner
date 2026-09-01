@@ -182,6 +182,13 @@ export const SETTINGS = {
     type: String,
     default: "",
   },
+  /** The type size the ghost was last placed with; 0 means "derive from the grid". */
+  lastTypeSize: {
+    scope: "client",
+    config: false,
+    type: Number,
+    default: 0,
+  },
 } as const satisfies Record<string, SettingDef>;
 
 export type SettingKey = keyof typeof SETTINGS;
@@ -201,6 +208,7 @@ interface SettingTypes {
   userPresets: unknown[];
   lastPreset: string;
   lastSourceUuid: string;
+  lastTypeSize: number;
 }
 
 /**

@@ -23,20 +23,35 @@ import { escapeAttr, escapeHtml } from "../html";
 import * as api from "../api";
 import * as settings from "../settings";
 import { readPin } from "../data/PinData";
-import { naturalSize } from "../data/pin-schema";
+import {
+  DEFAULT_MARGIN_EM,
+  TYPE_SIZE_MIN,
+  defaultPin,
+  defaultTypeSize,
+  naturalSize,
+  validatePin,
+} from "../data/pin-schema";
 import { scaleOf, screenToScene, stageMatrix } from "../canvas/transform";
 import { CORE_PRESETS } from "../effects/presets/core-presets";
 import { swatchStyle } from "../effects/preset-css";
+import { resolveCard } from "../render/ContentResolver";
+import { measureCardHeight } from "../render/measure";
 import { mount, syncTransform, write } from "./OverlayRoot";
-import type { DpMode, DpSource } from "../types/dp";
+import type { DpMode, DpPinFlags, DpSource } from "../types/dp";
 
 /** Everything the ghost holds while armed. Pure data, so the steppers can be tested. */
 export interface GhostState {
   source: DpSource;
   mode: DpMode;
   rotation: number;
-  /** Multiplier on the mode's natural size. */
+  /** Multiplier on the mode's natural size — the BOX. */
   scale: number;
+  /** Type size in scene px — the density. The box and the type are two gestures. */
+  typeSize: number;
+  /** A height fitted to the content with `F`; forgotten when the box or type changes. */
+  heightOverride: number | null;
+  /** `F` was pressed and the measurement has not landed yet. */
+  fitPending: boolean;
   effectIndex: number;
   audience: "everyone" | "hidden";
   /** Stays armed after a click, for placing a run of markers in one gesture. */
@@ -49,13 +64,19 @@ export interface GhostState {
 
 export const SCALE_MIN = 0.25;
 export const SCALE_MAX = 6;
+/** Larger than this on a ghost is a poster, and the Studio slider stops there too. */
+export const TYPE_SIZE_GHOST_MAX = 72;
+export const TYPE_SIZE_STEP = 0.5;
 
-export function initialState(source: DpSource, mode: DpMode): GhostState {
+export function initialState(source: DpSource, mode: DpMode, gridSize = 100): GhostState {
   return {
     source,
     mode,
     rotation: 0,
     scale: 1,
+    typeSize: settings.get("lastTypeSize") || defaultTypeSize(gridSize),
+    heightOverride: null,
+    fitPending: false,
     effectIndex: Math.max(
       0,
       CORE_PRESETS.findIndex((p) => p.id === settings.get("lastPreset"))
@@ -71,10 +92,11 @@ export function initialState(source: DpSource, mode: DpMode): GhostState {
 /**
  * Wheel handling.
  *
- * Three separate gestures on one wheel, because during placement the hand is already
- * on the pointer and reaching for a slider means losing the position. Rotation snaps
- * to 15° so a letter lands square without fiddling; `Shift` unlocks 1° for the times
- * it should look dropped rather than placed.
+ * Four gestures on one wheel, because during placement the hand is already on the
+ * pointer and reaching for a slider means losing the position. Rotation snaps to 15° so
+ * a letter lands square without fiddling; `Shift` unlocks 1° for the times it should
+ * look dropped rather than placed. `Alt` scales the BOX — how big on the map — and
+ * `Shift+Alt` the TYPE — how dense; the preview makes the difference visible.
  */
 export function stepWheel(
   state: GhostState,
@@ -83,9 +105,21 @@ export function stepWheel(
 ): GhostState {
   const direction = delta > 0 ? 1 : -1;
 
+  if (mods.alt && mods.shift) {
+    const typeSize = state.typeSize - direction * TYPE_SIZE_STEP;
+    return {
+      ...state,
+      typeSize: Math.min(TYPE_SIZE_GHOST_MAX, Math.max(TYPE_SIZE_MIN, typeSize)),
+      heightOverride: null,
+    };
+  }
   if (mods.alt) {
     const scale = state.scale * (direction > 0 ? 1 / 1.1 : 1.1);
-    return { ...state, scale: Math.min(SCALE_MAX, Math.max(SCALE_MIN, scale)) };
+    return {
+      ...state,
+      scale: Math.min(SCALE_MAX, Math.max(SCALE_MIN, scale)),
+      heightOverride: null,
+    };
   }
   const step = mods.shift ? 1 : 15;
   const rotation = (((state.rotation + direction * step) % 360) + 360) % 360;
@@ -108,7 +142,11 @@ export function stepKey(
     case "Escape":
       return "cancel";
     case " ":
-      return { ...state, mode: state.mode === "prop" ? "pin" : "prop" };
+      return { ...state, mode: state.mode === "prop" ? "pin" : "prop", heightOverride: null };
+    case "f":
+    case "F":
+      // Claimed here; the measurement is asynchronous and lands through `render`.
+      return state.mode === "prop" ? { ...state, fitPending: true } : state;
     case "e":
     case "E": {
       const step = mods.shift ? -1 : 1;
@@ -128,9 +166,10 @@ export function stepKey(
 
 export function sizeOf(state: GhostState, gridSize: number): { width: number; height: number } {
   const base = naturalSize(state.mode, gridSize);
+  const fitted = state.mode === "prop" ? state.heightOverride : null;
   return {
     width: Math.round(base.width * state.scale),
-    height: Math.round(base.height * state.scale),
+    height: fitted ?? Math.round(base.height * state.scale),
   };
 }
 
@@ -177,17 +216,20 @@ function legendMarkup(current: GhostState): string {
       `</div>`
     : "";
 
+  const type = current.mode === "prop" ? `${Math.round(current.typeSize)} px · ` : "";
+
   return (
     // The effect, actually drawn. DESIGN §5.2's entire justification for a ghost over a
     // modal is "does the effect read against THIS map" — and the ghost was a dashed
     // rectangle: `dataset.dpFx` was set and nothing styled `.dp-ghost[data-dp-fx]`, so
-    // the one question the ghost exists to answer was the one it could not.
-    `<div class="dp-ghost__body dp-card" aria-hidden="true"` +
-    ` style="${escapeAttr(swatchStyle(preset))}"></div>` +
+    // the one question the ghost exists to answer was the one it could not. The swatch
+    // is the instant answer; the real content replaces it once it resolves.
+    `<div class="dp-ghost__body" aria-hidden="true">` +
+    `<div class="dp-card" style="${escapeAttr(swatchStyle(preset))}"></div></div>` +
     `<div class="dp-ghost__chip">` +
     `<span class="dp-ghost__name">${escapeHtml(name)}</span>` +
     `<span class="dp-ghost__meta">${escapeHtml(t(preset.label))} · ` +
-    `${Math.round(current.scale * 100)}% · ` +
+    `${Math.round(current.scale * 100)}% · ${type}` +
     `${escapeHtml(t(current.audience === "everyone" ? "DP.ghost.audienceAll" : "DP.ghost.audienceNone"))}` +
     `</span></div>${lines}`
   );
@@ -213,6 +255,92 @@ function renderChip(current: GhostState): void {
   if (markup === lastChip) return;
   lastChip = markup;
   element.innerHTML = markup;
+  // The rewrite just replaced the body with the swatch; put the resolved page back.
+  applyPreview();
+}
+
+// ---------------------------------------------------------------------------
+// The preview: the real page at the chosen type size
+// ---------------------------------------------------------------------------
+
+let previewKey = "";
+let previewHtml = "";
+let previewGeneration = 0;
+let fitGeneration = 0;
+
+/** What the preview's content depends on. Not the box: the card fills whatever box. */
+function previewKeyOf(current: GhostState): string {
+  return [
+    current.mode,
+    current.source.uuid ?? current.source.src ?? "",
+    CORE_PRESETS[current.effectIndex].id,
+    current.typeSize,
+  ].join("|");
+}
+
+/** The pin the ghost would place, so the preview is resolved by the same rules. */
+function ghostPin(current: GhostState): DpPinFlags {
+  return validatePin({
+    ...defaultPin(),
+    mode: current.mode,
+    source: current.source,
+    effect: { ...defaultPin().effect, id: CORE_PRESETS[current.effectIndex].id },
+    display: {
+      ...defaultPin().display,
+      typeSize: current.typeSize,
+      margin: DEFAULT_MARGIN_EM,
+    },
+  }).pin;
+}
+
+function applyPreview(): void {
+  if (!element || !state || !previewHtml || previewKey !== previewKeyOf(state)) return;
+  const body = element.querySelector<HTMLElement>(".dp-ghost__body");
+  if (body) body.innerHTML = previewHtml;
+}
+
+/**
+ * Resolve the real content once per key, and never let a slow resolve overwrite a
+ * newer one — the same generation guard the DOM tier uses.
+ */
+function renderPreview(current: GhostState): void {
+  if (current.mode !== "prop") return;
+  const key = previewKeyOf(current);
+  if (key === previewKey) {
+    applyPreview();
+    return;
+  }
+  previewKey = key;
+  previewHtml = "";
+  const generation = ++previewGeneration;
+
+  void resolveCard(ghostPin(current), sizeOf(current, gridSize()), { tier: "L2b", baked: false })
+    .then((card) => {
+      if (generation !== previewGeneration || !state || previewKeyOf(state) !== key) return;
+      previewHtml = card.html;
+      applyPreview();
+    })
+    .catch(() => {});
+}
+
+/**
+ * `F`: fit the ghost's height to its content at the current width and type size.
+ *
+ * Measured from the resolved preview, so it needs one; before the page has resolved the
+ * key is simply consumed, and pressing it again a moment later works.
+ */
+function requestFit(): void {
+  if (!state || !state.fitPending) return;
+  state = { ...state, fitPending: false };
+  if (!previewHtml || state.mode !== "prop") return;
+
+  const generation = ++fitGeneration;
+  const width = sizeOf(state, gridSize()).width;
+  void measureCardHeight(previewHtml, width).then((height) => {
+    if (generation !== fitGeneration || !state || height === null) return;
+    state = { ...state, heightOverride: Math.round(height) };
+    render();
+  });
 }
 
 /** The position, which changes on every pointer move and is a batched style write only. */
@@ -237,7 +365,9 @@ function renderPosition(current: GhostState): void {
 function render(): void {
   if (!state || !element) return;
   renderChip(state);
+  renderPreview(state);
   renderPosition(state);
+  requestFit();
 }
 
 /** Arm placement. Returns false when there is nothing to place onto. */
@@ -245,7 +375,7 @@ export function arm(source: DpSource, mode?: DpMode): boolean {
   if (!isGM() || !cv()?.ready) return false;
   disarm();
 
-  state = initialState(source, mode ?? settings.get("defaultMode"));
+  state = initialState(source, mode ?? settings.get("defaultMode"), gridSize());
   element = document.createElement("div");
   element.className = "dp-ghost";
   element.setAttribute("aria-hidden", "true");
@@ -271,6 +401,10 @@ export function disarm(): void {
   element = null;
   state = null;
   lastChip = "";
+  previewKey = "";
+  previewHtml = "";
+  previewGeneration++;
+  fitGeneration++;
 }
 
 function on<K extends keyof WindowEventMap>(
@@ -405,9 +539,12 @@ async function place(keepArmed: boolean): Promise<void> {
     elevation: 0,
     effectId: preset.id,
     audienceKind: current.audience,
+    typeSize: current.typeSize,
+    margin: DEFAULT_MARGIN_EM,
   });
 
   await settings.set("lastPreset", preset.id);
+  await settings.set("lastTypeSize", current.typeSize);
   if (anchor) announce(anchor, current);
 }
 
