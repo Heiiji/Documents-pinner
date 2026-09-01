@@ -98,6 +98,13 @@
   border-radius: 50%;
 }
 
+/* A held modifier lights the entries it changes. */
+.dp-ghost[data-dp-free="true"] .dp-ghost__legend [data-dp-key~="ctrl"],
+.dp-ghost[data-dp-sticky="true"] .dp-ghost__legend [data-dp-key~="shift"] {
+  color: var(--color-warm-1, #c9ad6a);
+  opacity: 1;
+}
+
 /*
  * The preview.
  *

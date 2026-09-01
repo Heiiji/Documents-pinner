@@ -146,11 +146,6 @@
     font-style: italic;
   }
 
-  &:focus-visible {
-    outline: 2px solid var(--color-warm-1, #c9ad6a);
-    outline-offset: -2px;
-  }
-
   /* The drop line, instant: a target that lags the pointer is worse than none. */
   &[data-dp-drop="before"] {
     box-shadow: inset 0 2px 0 var(--color-warm-1, #c9ad6a);
@@ -283,4 +278,15 @@
 .dp-danger {
   border-color: color-mix(in oklab, #b03a2e 70%, transparent);
   color: color-mix(in oklab, #e8907f 85%, var(--color-text-primary, #eee));
+}
+
+/* Hover eases; selection, filters and counts arrive by re-render and stay instant. */
+.dp-row,
+.dp-board__filter,
+.dp-row__fx,
+.dp-row__icon {
+  transition:
+    background-color var(--dp-dur-state, 120ms) var(--dp-ease-out, ease-out),
+    border-color var(--dp-dur-state, 120ms) var(--dp-ease-out, ease-out),
+    opacity var(--dp-dur-state, 120ms) var(--dp-ease-out, ease-out);
 }

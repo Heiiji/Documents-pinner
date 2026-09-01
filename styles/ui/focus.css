@@ -1,0 +1,26 @@
+/*
+ * One focus treatment.
+ *
+ * Imported last in the `dp.ui` layer, so it wins ties by order. Every window and the
+ * overlay's own controls get the same ring: the rings used to be declared surface by
+ * surface — three variants, and four surfaces with none at all, plus three places that
+ * cleared the outline on hover and took the ring away from keyboard users too. Rows and
+ * picker items pull the ring inward, because they sit edge to edge in a scrolling list.
+ * Rings never transition.
+ */
+
+.dp-scope button:focus-visible,
+.dp-scope input:focus-visible,
+.dp-scope select:focus-visible,
+.dp-scope textarea:focus-visible,
+.dp-scope [tabindex]:focus-visible,
+#documents-pinner-overlay button:focus-visible,
+#documents-pinner-overlay [tabindex]:focus-visible {
+  outline: 2px solid var(--dp-accent, #c9ad6a);
+  outline-offset: var(--dp-ring-offset, 2px);
+}
+
+.dp-row,
+.dp-picker__item {
+  --dp-ring-offset: -2px;
+}

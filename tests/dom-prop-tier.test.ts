@@ -38,6 +38,7 @@ import {
   clearDomTier,
   domPropCount,
   followDomProp,
+  previewIntensity,
   setDomPropHover,
   syncDomTier,
 } from "../src/canvas/DomPropTier";
@@ -316,6 +317,23 @@ describe("hover", () => {
     setDomPropHover("t1", false);
     await settle();
     expect(card.dataset.dpHover).toBeUndefined();
+  });
+});
+
+describe("previewIntensity", () => {
+  it("writes the intensity onto the mounted card, for the compositor to interpolate", async () => {
+    syncDomTier([entry({ pin: sized() })]);
+    await settle();
+    previewIntensity("t1", 0.3);
+    await settle();
+    const card = overlay()!.querySelector<HTMLElement>(".dp-prop .dp-card")!;
+    expect(card.style.getPropertyValue("--dp-i")).toBe("0.3");
+  });
+
+  it("is a no-op for a prop that is not mounted", async () => {
+    previewIntensity("nope", 0.3);
+    await settle();
+    expect(domPropCount()).toBe(0);
   });
 });
 

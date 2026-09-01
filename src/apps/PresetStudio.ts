@@ -142,11 +142,21 @@ function paramsMarkup(preset: DpPreset, editable: boolean): string {
     );
   }).join("");
 
+  // A user preset can be named. A duplicate used to be "(copy)" forever, because there
+  // was no name field anywhere in the window.
+  const name = editable
+    ? `<label class="dp-presets__param dp-presets__name-field">` +
+      `<span>${escapeHtml(t("DP.presets.name"))}</span>` +
+      `<input type="text" name="_label" value="${escapeAttr(preset.label)}" maxlength="64">` +
+      `</label>`
+    : "";
+
   return (
     `<div class="dp-presets__params">` +
     (editable
       ? ""
       : `<p class="dp-presets__locked">${escapeHtml(t("DP.presets.readOnlyHint"))}</p>`) +
+    name +
     sliders +
     `<p class="dp-presets__cost" data-dp-cost="${escapeAttr(cost.tier)}">` +
     escapeHtml(t("DP.presets.cost", { tier: t(`DP.cost.${cost.tier}`), score: cost.score })) +
@@ -245,9 +255,21 @@ export function definePresetStudio(): any {
 
       result.addEventListener("change", (event) => {
         const input = event.target as HTMLInputElement;
+        if (input?.name === "_label") {
+          void this.#rename(input.value);
+          return;
+        }
         if (input?.type !== "range" || input.disabled) return;
         void this.#setParam(input.name, Number(input.value));
       });
+    }
+
+    async #rename(label: string) {
+      const preset = this.selected;
+      const next = label.trim().slice(0, 64);
+      if (preset.author === "core" || !next || next === preset.label) return;
+      await library.savePreset({ ...preset, label: next });
+      this.render();
     }
 
     async #setParam(path: string, value: number) {
@@ -336,10 +358,12 @@ async function onExport(this: any) {
   }
 }
 
-export function openPresetStudio(): any {
+/** Open the studio, on a given preset when one is named — from the galleries. */
+export function openPresetStudio(id?: string): any {
   const Studio = definePresetStudio();
   if (!Studio) return null;
   instance ??= new Studio();
+  if (id && library.findPreset(id)) instance.selectedId = id;
   instance.render(true);
   return instance;
 }

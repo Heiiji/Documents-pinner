@@ -114,3 +114,14 @@ describe("describeChips", () => {
     expect(notice.data).toEqual({ seeing: 2, total: 2, mismatched: 1 });
   });
 });
+
+describe("the chip's tooltip", () => {
+  it("states the result first and the two gestures second, the same on every surface", () => {
+    const markup = chipMarkup(user({ canSee: true, canOpen: false }), { t });
+    const title = markup.match(/title="([^"]*)"/)![1];
+    expect(title.startsWith("DP.chip.seesButCannotOpen")).toBe(true);
+    expect(title).toContain("DP.chip.actions");
+    // The accessible name stays the state alone.
+    expect(markup).toMatch(/aria-label="DP\.chip\.seesButCannotOpen[^"]*"/);
+  });
+});

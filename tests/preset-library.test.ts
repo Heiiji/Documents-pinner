@@ -106,3 +106,13 @@ describe("presetStudioMarkup", () => {
     expect(frozen).toContain('data-action="toggleFreeze" aria-pressed="true"');
   });
 });
+
+describe("naming a preset", () => {
+  it("offers a name field for a user preset and none for a shipped one", () => {
+    const own = { ...parchment(), id: "mine", label: "Mine", author: "user" as const };
+    expect(presetStudioMarkup([own], own, "map", false)).toContain('name="_label"');
+    expect(presetStudioMarkup([parchment()], parchment(), "map", false)).not.toContain(
+      'name="_label"'
+    );
+  });
+});

@@ -18,7 +18,9 @@
  *   should never have to learn a second vocabulary for the module's central idea.
  */
 
+import { MODULE_ID } from "../const";
 import { cv, ns } from "../fvtt";
+import { previewIntensity } from "../canvas/DomPropTier";
 import { t, tn } from "../i18n";
 import { escapeAttr, escapeHtml } from "../html";
 import * as api from "../api";
@@ -203,6 +205,8 @@ function appearanceTab(doc: any, pin: DpPinFlags): string {
     `<div class="dp-studio__swatches" role="group" aria-label="${escapeAttr(t("DP.studio.effect"))}">` +
     swatches +
     `</div>` +
+    `<button type="button" class="dp-studio__link" data-action="editPresets">` +
+    `${escapeHtml(t("DP.presets.edit"))}</button>` +
     field("DP.studio.intensity", range("effect.intensity", pin.effect.intensity)) +
     field("DP.studio.speed", range("effect.speed", pin.effect.speed, 0, 4, 0.1)) +
     field(
@@ -385,6 +389,7 @@ export function definePinStudio(): any {
         locate: onLocate,
         fitHeight: onFitHeight,
         resetSize: onResetSize,
+        editPresets: onEditPresets,
         deletePin: onDeletePin,
       },
     };
@@ -434,6 +439,10 @@ export function definePinStudio(): any {
         if (target?.type !== "range") return;
         const output = target.nextElementSibling;
         if (output?.tagName === "OUTPUT") output.textContent = target.value;
+        // The prop previews the intensity as the slider moves; the commit is on change.
+        if (target.name === "effect.intensity") {
+          previewIntensity(this.doc?.id, Number(target.value));
+        }
       });
 
       root.addEventListener("click", (event) => {
@@ -532,6 +541,10 @@ function onFitHeight(this: any) {
   void api.fitToContent(this.doc).then(() => this.render());
 }
 
+function onEditPresets(this: any) {
+  Hooks.call(`${MODULE_ID}.openPresets`, readPin(this.doc)?.effect.id);
+}
+
 function onResetSize(this: any) {
   void api.resetSize(this.doc).then(() => this.render());
 }
@@ -579,3 +592,5 @@ export function refreshStudios(): void {
     else open.delete(id);
   }
 }
+
+declare const Hooks: any;

@@ -72,7 +72,6 @@
       var(--color-warm-1, #c9ad6a) 22%,
       var(--color-bg-option, #1b1b23)
     );
-    outline: none;
   }
 
   &[aria-pressed="true"] {
@@ -179,12 +178,6 @@
     background: color-mix(in oklab, var(--color-warm-1, #c9ad6a) 18%, transparent);
   }
 
-  /* The palette is opened from the keyboard as often as from the pointer, and the
-     disclosure moves focus into it — so the landing spot has to be visible. */
-  &:focus-visible {
-    outline: 2px solid var(--color-warm-1, #c9ad6a);
-    outline-offset: 1px;
-  }
 }
 
 .dp-hud__swatch-preview {
@@ -213,4 +206,24 @@
   & input {
     flex: 1;
   }
+}
+
+/* Hover and press ease; a pressed state arrives by re-render and stays instant. */
+.dp-hud__quick,
+.dp-hud__swatch {
+  transition:
+    background-color var(--dp-dur-state, 120ms) var(--dp-ease-out, ease-out),
+    border-color var(--dp-dur-state, 120ms) var(--dp-ease-out, ease-out);
+}
+
+.dp-hud__link {
+  align-self: flex-start;
+  padding: 0.1rem 0.4rem;
+  border: none;
+  background: transparent;
+  color: var(--color-warm-1, #c9ad6a);
+  font-size: 0.8em;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
 }

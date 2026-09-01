@@ -96,6 +96,9 @@ export function chipMarkup(user: ChipUser, options: ChipMarkupOptions): string {
     : `<span class="dp-chip__initial" aria-hidden="true">${escapeHtml(initialOf(user.name))}</span>`;
 
   const key = isMismatch(state) ? `<span class="dp-chip__key" aria-hidden="true">⚿</span>` : "";
+  // The state first, then the gestures: the tooltip is the one place the modifier
+  // vocabulary is taught, and it is the same two gestures on every surface.
+  const title = `${label}\n${options.t({ key: "DP.chip.actions", data: { name: user.name } })}`;
 
   return [
     `<button type="button" class="dp-chip"`,
@@ -103,7 +106,7 @@ export function chipMarkup(user: ChipUser, options: ChipMarkupOptions): string {
     ` data-dp-user="${escapeAttr(user.id)}"`,
     ` data-dp-state="${state}"`,
     ` style="--dp-chip-color:${safeColor(user.color)}"`,
-    ` title="${escapeAttr(label)}" aria-label="${escapeAttr(label)}">`,
+    ` title="${escapeAttr(title)}" aria-label="${escapeAttr(label)}">`,
     inner,
     key,
     `</button>`,

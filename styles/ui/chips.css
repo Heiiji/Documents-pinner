@@ -45,7 +45,6 @@
   &:hover,
   &:focus-visible {
     transform: scale(1.12);
-    outline: none;
     box-shadow: 0 0 0 2px color-mix(in oklab, var(--dp-chip-color) 60%, transparent);
   }
 

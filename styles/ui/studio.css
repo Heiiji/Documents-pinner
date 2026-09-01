@@ -121,11 +121,6 @@
     background: color-mix(in oklab, var(--color-warm-1, #c9ad6a) 16%, transparent);
   }
 
-  /* The gallery is walked with Tab as often as it is clicked. */
-  &:focus-visible {
-    outline: 2px solid var(--color-warm-1, #c9ad6a);
-    outline-offset: 1px;
-  }
 }
 
 .dp-studio__swatch-name {
@@ -231,4 +226,24 @@
 .dp-studio__tab[data-dp-pdf="true"] .dp-studio__field:has([name="effect.motion"]) {
   opacity: 0.45;
   pointer-events: none;
+}
+
+/* Hover and press ease; a selected tab or swatch arrives by re-render and stays instant. */
+.dp-studio__tabbtn,
+.dp-studio__swatch {
+  transition:
+    background-color var(--dp-dur-state, 120ms) var(--dp-ease-out, ease-out),
+    border-color var(--dp-dur-state, 120ms) var(--dp-ease-out, ease-out);
+}
+
+.dp-studio__link {
+  align-self: flex-start;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--color-warm-1, #c9ad6a);
+  font-size: 0.85em;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
 }

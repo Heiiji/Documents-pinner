@@ -23,6 +23,8 @@ import {
   arm,
   disarm,
   initialState,
+  legendLines,
+  modifierGlyphs,
   sizeOf,
   snap,
   stepKey,
@@ -125,6 +127,22 @@ describe("the type size", () => {
 
   it("ignores a fitted height in pin mode, which is one grid square", () => {
     expect(sizeOf(ghost({ mode: "pin", heightOverride: 900 }), 100).height).toBe(100);
+  });
+});
+
+describe("the legend", () => {
+  it("names the modifiers in the keyboard's own language", () => {
+    expect(modifierGlyphs("mac").alt).toBe("⌥");
+    expect(modifierGlyphs("other").alt).toBe("Alt+");
+    expect(modifierGlyphs("other").ctrl).toBe("Ctrl+");
+  });
+
+  it("emits one span per key, so a held modifier can light its own entries", () => {
+    const markup = legendLines();
+    const keys = [...markup.matchAll(/data-dp-key="([^"]+)"/g)].map((m) => m[1]);
+    expect(keys).toContain("ctrl");
+    expect(keys.filter((k) => k.split(" ").includes("shift")).length).toBeGreaterThanOrEqual(2);
+    expect(keys.length).toBeGreaterThanOrEqual(10);
   });
 });
 

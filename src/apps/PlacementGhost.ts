@@ -32,7 +32,7 @@ import {
   validatePin,
 } from "../data/pin-schema";
 import { scaleOf, screenToScene, stageMatrix } from "../canvas/transform";
-import { CORE_PRESETS } from "../effects/presets/core-presets";
+import { allPresets } from "../effects/preset-library";
 import { swatchStyle } from "../effects/preset-css";
 import { resolveCard } from "../render/ContentResolver";
 import { measureCardHeight } from "../render/measure";
@@ -74,6 +74,26 @@ export const SCALE_MAX = 6;
 export const TYPE_SIZE_GHOST_MAX = 72;
 export const TYPE_SIZE_STEP = 0.5;
 
+/**
+ * The modifier glyphs the legend prints, by platform.
+ *
+ * PURE. The legend used to be one string of Mac glyphs for everyone; on a Windows or
+ * Linux keyboard "⌥" names a key that does not exist. The letters E, V, R and F are
+ * window handlers rather than keybindings, so this cannot be derived from Configure
+ * Controls — but the modifiers can at least be named in the language of the keyboard.
+ */
+export function modifierGlyphs(platform: "mac" | "other") {
+  return platform === "mac"
+    ? { alt: "⌥", shift: "⇧", ctrl: "⌃", wheel: "⟳", space: "␣", esc: "⎋" }
+    : { alt: "Alt+", shift: "Shift+", ctrl: "Ctrl+", wheel: "⟳", space: "Space", esc: "Esc" };
+}
+
+function platform(): "mac" | "other" {
+  const nav = (globalThis as any).navigator;
+  const name = nav?.userAgentData?.platform ?? nav?.platform ?? "";
+  return /mac/i.test(String(name)) ? "mac" : "other";
+}
+
 export function initialState(source: DpSource, mode: DpMode, gridSize = 100): GhostState {
   return {
     source,
@@ -86,7 +106,7 @@ export function initialState(source: DpSource, mode: DpMode, gridSize = 100): Gh
     fitPending: false,
     effectIndex: Math.max(
       0,
-      CORE_PRESETS.findIndex((p) => p.id === settings.get("lastPreset"))
+      allPresets().findIndex((p) => p.id === settings.get("lastPreset"))
     ),
     audience: settings.get("defaultAudience"),
     sticky: false,
@@ -157,7 +177,7 @@ export function stepKey(
     case "e":
     case "E": {
       const step = mods.shift ? -1 : 1;
-      const next = (state.effectIndex + step + CORE_PRESETS.length) % CORE_PRESETS.length;
+      const next = (state.effectIndex + step + allPresets().length) % allPresets().length;
       return { ...state, effectIndex: next };
     }
     case "v":
@@ -215,16 +235,10 @@ function gridSize(): number {
 }
 
 function legendMarkup(current: GhostState): string {
-  const preset = CORE_PRESETS[current.effectIndex];
+  const preset = allPresets()[current.effectIndex];
   const name = api.labelForSource(current.source);
 
-  const lines = settings.get("placementLegend")
-    ? `<div class="dp-ghost__legend">` +
-      `<span>${escapeHtml(t("DP.ghost.keysRotate"))}</span>` +
-      `<span>${escapeHtml(t("DP.ghost.keysMode"))}</span>` +
-      `<span>${escapeHtml(t("DP.ghost.keysPlace"))}</span>` +
-      `</div>`
-    : "";
+  const lines = settings.get("placementLegend") ? legendLines() : "";
 
   const type = current.mode === "prop" ? `${Math.round(current.typeSize)} px · ` : "";
 
@@ -246,6 +260,49 @@ function legendMarkup(current: GhostState): string {
   );
 }
 
+/**
+ * The legend, one span per key so a held modifier can light its own entries.
+ *
+ * Nobody reads documentation mid-prep, so the gestures are printed beside the thing
+ * they operate on — and when Ctrl or Shift is down, the entries that key changes go
+ * warm, which is the legend teaching by showing rather than by telling.
+ */
+export function legendLines(): string {
+  const g = modifierGlyphs(platform());
+  const key = (keys: string, text: string) =>
+    `<span data-dp-key="${escapeAttr(keys)}">${escapeHtml(text)}</span>`;
+  const sep = " · ";
+  return (
+    `<div class="dp-ghost__legend">` +
+    `<span>` +
+    key("wheel", `${g.wheel} ${t("DP.ghost.rotate")}`) +
+    sep +
+    key("shift", `${g.shift}${g.wheel} ${t("DP.ghost.fine")}`) +
+    sep +
+    key("alt", `${g.alt}${g.wheel} ${t("DP.ghost.scale")}`) +
+    sep +
+    key("shift alt", `${g.shift}${g.alt}${g.wheel} ${t("DP.ghost.textSize")}`) +
+    `</span>` +
+    `<span>` +
+    key("space", `${g.space} ${t("DP.ghost.shape")}`) +
+    sep +
+    key("e", `E ${t("DP.ghost.effect")}`) +
+    sep +
+    key("v", `V ${t("DP.ghost.audience")}`) +
+    sep +
+    key("f", `F ${t("DP.ghost.fit")}`) +
+    `</span>` +
+    `<span>` +
+    key("ctrl", `${g.ctrl}${t("DP.ghost.freePlace")}`) +
+    sep +
+    key("shift", `${g.shift}${t("DP.ghost.click")} ${t("DP.ghost.stamp")}`) +
+    sep +
+    key("esc", `${g.esc} ${t("DP.ghost.cancel")}`) +
+    `</span>` +
+    `</div>`
+  );
+}
+
 /** The legend as last drawn, so a pointer move does not rebuild it. */
 let lastChip = "";
 
@@ -258,7 +315,7 @@ let lastChip = "";
  */
 function renderChip(current: GhostState): void {
   if (!element) return;
-  const preset = CORE_PRESETS[current.effectIndex];
+  const preset = allPresets()[current.effectIndex];
   element.dataset.dpFx = preset.id;
   element.dataset.dpMode = current.mode;
 
@@ -291,7 +348,7 @@ function previewKeyOf(current: GhostState): string {
   return [
     current.mode,
     current.source.uuid ?? current.source.src ?? "",
-    CORE_PRESETS[current.effectIndex].id,
+    allPresets()[current.effectIndex].id,
     current.typeSize,
   ].join("|");
 }
@@ -302,7 +359,7 @@ function ghostPin(current: GhostState): DpPinFlags {
     ...defaultPin(),
     mode: current.mode,
     source: current.source,
-    effect: { ...defaultPin().effect, id: CORE_PRESETS[current.effectIndex].id },
+    effect: { ...defaultPin().effect, id: allPresets()[current.effectIndex].id },
     display: {
       ...defaultPin().display,
       typeSize: current.typeSize,
@@ -552,7 +609,7 @@ async function place(keepArmed: boolean): Promise<void> {
   const current = state;
   const scene = cv()?.scene;
   const size = sizeOf(current, gridSize());
-  const preset = CORE_PRESETS[current.effectIndex];
+  const preset = allPresets()[current.effectIndex];
 
   // The ghost holds until the prop exists. Disarming first left one server round trip
   // with nothing on the map at all; now the real card mounts under the fading ghost.

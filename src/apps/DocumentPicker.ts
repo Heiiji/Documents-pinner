@@ -71,10 +71,11 @@ export function filterEntries(entries: readonly PickerEntry[], search: string): 
   return entries.filter((e) => fold(e.name).includes(needle) || fold(e.context).includes(needle));
 }
 
-function entryMarkup(entry: PickerEntry): string {
+function entryMarkup(entry: PickerEntry, index: number, active: boolean): string {
   const icon = entry.kind === "entry" ? "fa-book" : "fa-file-lines";
   return (
-    `<li class="dp-picker__item" role="option" data-dp-uuid="${escapeAttr(entry.uuid)}" tabindex="-1">` +
+    `<li class="dp-picker__item" role="option" id="dp-picker-opt-${index}"` +
+    ` data-dp-uuid="${escapeAttr(entry.uuid)}" aria-selected="${active}">` +
     `<i class="fa-solid ${icon}" aria-hidden="true"></i>` +
     `<span class="dp-picker__name">${escapeHtml(entry.name)}</span>` +
     (entry.context ? `<span class="dp-picker__context">${escapeHtml(entry.context)}</span>` : "") +
@@ -83,17 +84,30 @@ function entryMarkup(entry: PickerEntry): string {
   );
 }
 
-export function pickerMarkup(entries: readonly PickerEntry[], search: string): string {
+/**
+ * A combobox, not a list of tab stops: the focus never leaves the search box, and the
+ * arrows move an active row that Enter takes. Typing must stay live while navigating,
+ * which is why this is not the Pinboard's roving tabindex — there the rows are the
+ * surface, here the search box is.
+ */
+export function pickerMarkup(
+  entries: readonly PickerEntry[],
+  search: string,
+  activeIndex = 0
+): string {
+  const active = Math.max(0, Math.min(entries.length - 1, activeIndex));
   const list = entries.length
-    ? entries.map(entryMarkup).join("")
+    ? entries.map((entry, index) => entryMarkup(entry, index, index === active)).join("")
     : `<li class="dp-picker__empty">${escapeHtml(t("DP.picker.none"))}</li>`;
 
   return [
     `<div class="dp-picker">`,
     `<input type="search" class="dp-picker__search" data-action="search" autofocus`,
+    ` role="combobox" aria-expanded="true" aria-controls="dp-picker-list" aria-autocomplete="list"`,
+    entries.length ? ` aria-activedescendant="dp-picker-opt-${active}"` : "",
     ` value="${escapeAttr(search)}" placeholder="${escapeAttr(t("DP.picker.search"))}"`,
     ` aria-label="${escapeAttr(t("DP.picker.search"))}">`,
-    `<ul class="dp-picker__list" role="listbox" aria-label="${escapeAttr(t("DP.picker.list"))}">`,
+    `<ul class="dp-picker__list" id="dp-picker-list" role="listbox" aria-label="${escapeAttr(t("DP.picker.list"))}">`,
     list,
     `</ul>`,
     `<footer class="dp-picker__foot">`,
@@ -123,6 +137,8 @@ export function definePicker(): any {
     };
 
     search = "";
+    /** The row the arrows have moved to, which Enter takes. Reset by typing. */
+    activeIndex = 0;
     /**
      * A tile or note this picker is choosing a source FOR, rather than placing a new pin.
      *
@@ -135,7 +151,11 @@ export function definePicker(): any {
 
     async _renderHTML() {
       const wrapper = document.createElement("div");
-      wrapper.innerHTML = pickerMarkup(filterEntries(pickerEntries(), this.search), this.search);
+      wrapper.innerHTML = pickerMarkup(
+        filterEntries(pickerEntries(), this.search),
+        this.search,
+        this.activeIndex
+      );
       return wrapper.firstElementChild ?? wrapper;
     }
 
@@ -159,6 +179,10 @@ export function definePicker(): any {
       } else {
         search?.focus();
       }
+      // Keep the active row in view as the arrows move it.
+      content
+        .querySelector<HTMLElement>('.dp-picker__item[aria-selected="true"]')
+        ?.scrollIntoView?.({ block: "nearest" });
     }
 
     #wire(root: HTMLElement) {
@@ -166,6 +190,7 @@ export function definePicker(): any {
         const input = event.target as HTMLInputElement;
         if (input?.dataset?.action !== "search") return;
         this.search = input.value;
+        this.activeIndex = 0;
         this.render();
       });
 
@@ -174,14 +199,50 @@ export function definePicker(): any {
         if (item?.dataset.dpUuid) this.#choose(item.dataset.dpUuid);
       });
 
-      // Enter from the search box takes the first match, so a GM who knows the name
-      // types four letters and presses Enter without ever leaving the keyboard.
+      // The keyboard contract, all from the search box: the arrows move the active
+      // row (clamped — a list with a top and a bottom should feel like one), Home and
+      // End jump, PageUp and PageDown step by ten, Enter takes the active row (the
+      // first by default, so "type four letters, press Enter" still holds), and Escape
+      // clears the search before it closes. A resting pointer never moves the active
+      // row: `:hover` is a wash, the marker is the keyboard's.
       root.addEventListener("keydown", (event) => {
-        if (event.key !== "Enter") return;
-        const first = root.querySelector<HTMLElement>(".dp-picker__item");
-        if (first?.dataset.dpUuid) {
+        const items = root.querySelectorAll<HTMLElement>(".dp-picker__item");
+        const count = items.length;
+        const move = (delta: number) => {
+          if (!count) return;
+          this.activeIndex = Math.max(0, Math.min(count - 1, this.activeIndex + delta));
           event.preventDefault();
-          this.#choose(first.dataset.dpUuid);
+          this.render();
+        };
+        switch (event.key) {
+          case "ArrowDown":
+            return move(1);
+          case "ArrowUp":
+            return move(-1);
+          case "PageDown":
+            return move(10);
+          case "PageUp":
+            return move(-10);
+          case "Home":
+            return move(-count);
+          case "End":
+            return move(count);
+          case "Escape":
+            if (this.search) {
+              event.preventDefault();
+              this.search = "";
+              this.activeIndex = 0;
+              this.render();
+            }
+            return;
+          case "Enter": {
+            const active = items[Math.max(0, Math.min(count - 1, this.activeIndex))];
+            if (active?.dataset.dpUuid) {
+              event.preventDefault();
+              this.#choose(active.dataset.dpUuid);
+            }
+            return;
+          }
         }
       });
     }

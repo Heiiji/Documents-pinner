@@ -58,6 +58,27 @@ async function openAudiencePalette() {
   hud.dispatch("togglePalette", paletteButton("dp-hud-audience"));
 }
 
+describe("the HUD and Escape", () => {
+  it("closes an open palette first, and lets go of the pin when none is open", async () => {
+    tile.object.release = vi.fn();
+    const root = contentOf(hud).querySelector<HTMLElement>(".dp-hud")!;
+    const escape = () =>
+      root.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+
+    await openAudiencePalette();
+    escape();
+    expect(palette("dp-hud-audience").hidden).toBe(true);
+    expect(tile.object.release).not.toHaveBeenCalled();
+
+    escape();
+    expect(tile.object.release).toHaveBeenCalledTimes(1);
+  });
+
+  it("offers a way to the Preset Studio from the effects palette", () => {
+    expect(contentOf(hud).querySelector('[data-action="editPresets"]')).not.toBeNull();
+  });
+});
+
 describe("the HUD audience palette", () => {
   it("opens when its button is pressed", async () => {
     await openAudiencePalette();

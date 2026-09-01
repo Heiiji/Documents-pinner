@@ -176,7 +176,7 @@ Hooks.on(`${MODULE_ID}.openPicker`, () => openPicker());
 Hooks.on(`${MODULE_ID}.openBoard`, () => openPinboard());
 Hooks.on(`${MODULE_ID}.openReader`, (doc: any) => void openReader(doc));
 Hooks.on(`${MODULE_ID}.openStudio`, (doc: any, tab?: any) => openStudio(doc, tab));
-Hooks.on(`${MODULE_ID}.openPresets`, () => openPresetStudio());
+Hooks.on(`${MODULE_ID}.openPresets`, (id?: string) => openPresetStudio(id));
 Hooks.on(`${MODULE_ID}.peek`, (active: boolean) => propManager().setPeeking(active));
 
 // --- Keeping surfaces in step with the world --------------------------------

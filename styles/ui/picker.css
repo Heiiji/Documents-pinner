@@ -39,15 +39,13 @@
   content-visibility: auto;
   contain-intrinsic-size: auto 1.9rem;
 
-  &:hover,
-  &:focus-visible {
+  &:hover {
     background: color-mix(in oklab, var(--color-warm-1, #c9ad6a) 16%, transparent);
-    outline: none;
   }
 
-  /* The first row is what Enter takes, so it is marked as such rather than left to
-     be discovered by pressing Enter and seeing what happens. */
-  &:first-child {
+  /* The active row is what Enter takes — the first by default, or wherever the arrows
+     moved it — so it is marked rather than left to be discovered by pressing Enter. */
+  &[aria-selected="true"] {
     box-shadow: inset 3px 0 0 var(--color-warm-1, #c9ad6a);
   }
 }

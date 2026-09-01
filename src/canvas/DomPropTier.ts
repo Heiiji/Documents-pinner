@@ -302,6 +302,21 @@ export function followDomProp(doc: any): void {
   placeGeometry(prop, doc);
 }
 
+/**
+ * Preview an intensity as a slider moves.
+ *
+ * One custom-property write: `--dp-i` is registered and every effect layer consumes it
+ * through `calc()`, so the compositor interpolates the change on its own. The commit
+ * arrives on `change`, re-resolves the card, and lands on an identical look.
+ */
+export function previewIntensity(id: string | undefined, intensity: number): void {
+  const prop = id ? props.get(id) : null;
+  const card = prop?.element.querySelector<HTMLElement>(".dp-card");
+  if (!card) return;
+  const value = String(Math.min(1, Math.max(0, intensity)));
+  write(card, () => card.style.setProperty("--dp-i", value));
+}
+
 /** Warm light on the paper while the pointer is over it. The stylesheet draws it. */
 export function setDomPropHover(id: string, hovering: boolean): void {
   const prop = props.get(id);

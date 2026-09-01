@@ -33,6 +33,7 @@ import { logger } from "../log";
 import { t, tn } from "../i18n";
 import { escapeAttr, escapeHtml } from "../html";
 import * as api from "../api";
+import { previewIntensity } from "../canvas/DomPropTier";
 import { readPin } from "../data/PinData";
 import { allPresets } from "../effects/preset-library";
 import { swatchStyle } from "../effects/preset-css";
@@ -136,6 +137,9 @@ function effectsPaletteMarkup(pin: DpPinFlags): string {
   return (
     `<div class="dp-hud__palette" id="dp-hud-effects" data-dp-palette="effects" hidden>` +
     `<div class="dp-hud__swatches">${swatches}</div>` +
+    // Where a preset is chosen is where a GM decides they want one that is not there.
+    `<button type="button" class="dp-hud__link" data-action="editPresets">` +
+    `${escapeHtml(t("DP.presets.edit"))}</button>` +
     `<label class="dp-hud__slider">${escapeHtml(t("DP.hud.intensity"))}` +
     `<input type="range" min="0" max="100" step="5" value="${Math.round(pin.effect.intensity * 100)}"` +
     ` data-action="setIntensity"></label>` +
@@ -241,6 +245,7 @@ export function definePinHUD(): any {
         configure: onConfigure,
         setAudienceKind: onSetAudienceKind,
         setEffect: onSetEffect,
+        editPresets: onEditPresets,
       },
     };
 
@@ -332,7 +337,10 @@ export function definePinHUD(): any {
       root.addEventListener("keydown", (event) => {
         const target = event.target as HTMLElement;
         if (event.key === "Escape") {
-          this.#closePalettes(root);
+          // A palette closes first; with none open, Escape lets go of the pin, which is
+          // what closes the HUD — it used to do nothing at all.
+          if (this.openPaletteId) this.#closePalettes(root);
+          else this.object?.release?.();
           return;
         }
         if (!target?.classList?.contains("dp-hud__btn")) return;
@@ -346,7 +354,10 @@ export function definePinHUD(): any {
       });
 
       // Chips are not `actions` because they carry a modifier vocabulary of their own:
-      // plain toggles, Shift solos, Alt changes access without changing presence.
+      // plain toggles, Shift solos — the same two gestures on every surface. Alt-click
+      // used to flip the pin-wide access sync from here, which duplicated the checkbox
+      // three lines up, ignored WHICH chip was clicked, and peeked the whole map on the
+      // way, because Alt is the peek key.
       root.addEventListener("click", (event) => {
         const chip = (event.target as HTMLElement)?.closest?.<HTMLElement>(".dp-chip");
         if (!chip) return;
@@ -354,8 +365,16 @@ export function definePinHUD(): any {
         const userId = chip.dataset.dpUser ?? "";
         const doc = this.anchorDoc;
         if (event.shiftKey) void api.soloUser(doc, userId);
-        else if (event.altKey) void toggleAccessOnly(doc);
         else void api.setUserVisible(doc, userId, chip.getAttribute("aria-checked") !== "true");
+      });
+
+      // The slider previews as it moves: one custom-property write the compositor
+      // interpolates, on the DOM tier only — a texture cannot preview, and faking it
+      // would be the lie A15 forbids. The commit lands on `change`.
+      root.addEventListener("input", (event) => {
+        const input = event.target as HTMLInputElement;
+        if (input?.dataset?.action !== "setIntensity") return;
+        previewIntensity(this.anchorDoc?.id, Number(input.value) / 100);
       });
 
       root.addEventListener("change", (event) => {
@@ -566,11 +585,8 @@ function onSetEffect(this: any, _event: Event, target: HTMLElement) {
   void api.patch(this.anchorDoc, { effect: { id } })?.then(() => this.render());
 }
 
-/** Alt-click on a chip: flip content access without touching who can see the pin. */
-function toggleAccessOnly(anchorDoc: any): Promise<void> | undefined {
-  const pin = readPin(anchorDoc);
-  if (!pin) return undefined;
-  return api.setOwnershipSync(anchorDoc, !pin.audience.ownershipSync.enabled);
+function onEditPresets(this: any) {
+  Hooks.call(`${MODULE_ID}.openPresets`, readPin(this.anchorDoc)?.effect.id);
 }
 
 declare const Hooks: any;

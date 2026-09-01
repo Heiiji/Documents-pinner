@@ -27,4 +27,5 @@
 @import url("./ui/prop.css") layer(dp.ui);
 @import url("./ui/reader.css") layer(dp.ui);
 @import url("./ui/config.css") layer(dp.ui);
+@import url("./ui/focus.css") layer(dp.ui);
 @import url("./theme.css") layer(dp.theme);

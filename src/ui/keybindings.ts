@@ -95,7 +95,8 @@ export function registerKeybindings(): void {
     hint: "DP.keys.peekHint",
     editable: [{ key: "AltLeft" }],
     onDown: () => {
-      setPeek(true);
+      // Alt is also the ghost's scale modifier; scaling a ghost must not fade the map.
+      if (!isArmed()) setPeek(true);
       return false;
     },
     onUp: () => {
