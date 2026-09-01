@@ -93,7 +93,7 @@ function buildLayerClass(CanvasLayer: any): any {
         // unreachable for everyone it was written for. `rotatedPolygon` is already
         // mode-agnostic; nothing else needed to change.
         if (!pin) continue;
-        if (pin.interaction.open === "never" || pin.interaction.clickThrough) continue;
+        if (pin.interaction.open === "never") continue;
         if (!tile.isVisible) continue;
 
         this.addChild(this.#buildHit(tile, pin));

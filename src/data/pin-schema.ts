@@ -46,13 +46,33 @@ export interface PinValidationResult {
 
 const MODES = ["pin", "prop"] as const;
 const SOURCE_KINDS = ["document", "image"] as const;
-const LABEL_POSITIONS = ["above", "below", "inside", "none"] as const;
 const MOTIONS = ["loop", "onReveal", "none"] as const;
 const AUDIENCE_KINDS = ["hidden", "everyone", "selected", "discovered"] as const;
 const OPEN_MODES = ["single", "double", "readInPlace", "never"] as const;
 
 const BAD_ENUM = "DP.pin.warn.badEnum";
 const UNKNOWN_KEY = "DP.pin.warn.unknownKey";
+
+/**
+ * Keys a previous schema stored and this one does not.
+ *
+ * Dropped silently rather than reported: a payload written by version 1 is not a
+ * stranger's typo, and warning about it on every read until the migration sweeps it
+ * would be noise about a decision the module made. Nothing ever read any of them.
+ */
+const RETIRED = {
+  display: ["showLabel", "labelPosition"],
+  interaction: ["openPage", "clickThrough"],
+} as const;
+
+function withoutRetired(
+  input: Record<string, unknown>,
+  keys: readonly string[]
+): Record<string, unknown> {
+  const out = { ...input };
+  for (const key of keys) delete out[key];
+  return out;
+}
 
 /** Preset ids, matching the rule in `preset-schema.ts`. */
 const EFFECT_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
@@ -94,8 +114,6 @@ export function defaultSource(): DpSource {
 export function defaultDisplay(): DpDisplay {
   return {
     label: "",
-    showLabel: true,
-    labelPosition: "below",
     paper: "parchment",
     showTitle: true,
     padding: 0.06,
@@ -115,7 +133,7 @@ export function defaultEffect(): DpEffectRef {
 }
 
 export function defaultInteraction(): DpInteraction {
-  return { open: "double", openPage: true, clickThrough: false, tooltip: "" };
+  return { open: "double", tooltip: "" };
 }
 
 /**
@@ -180,20 +198,11 @@ function normaliseSource(raw: unknown, warnings: DpNotice[], errors: DpNotice[])
 
 function normaliseDisplay(raw: unknown, warnings: DpNotice[]): DpDisplay {
   const d = defaultDisplay();
-  const s = obj(raw);
+  const s = withoutRetired(obj(raw), RETIRED.display);
   warnUnknownKeys(s, Object.keys(d), warnings, "display", UNKNOWN_KEY);
 
   return {
     label: str(s.label, d.label),
-    showLabel: bool(s.showLabel, d.showLabel),
-    labelPosition: oneOf(
-      s.labelPosition,
-      LABEL_POSITIONS,
-      d.labelPosition,
-      warnings,
-      "display.labelPosition",
-      BAD_ENUM
-    ),
     paper: str(s.paper, d.paper, 64) || d.paper,
     showTitle: bool(s.showTitle, d.showTitle),
     // Half the short edge is the point at which padding leaves no content area at all.
@@ -320,13 +329,20 @@ function normaliseAudience(raw: unknown, warnings: DpNotice[]): DpAudience {
 
 function normaliseInteraction(raw: unknown, warnings: DpNotice[]): DpInteraction {
   const d = defaultInteraction();
-  const s = obj(raw);
+  const raw0 = obj(raw);
+  const s = withoutRetired(raw0, RETIRED.interaction);
   warnUnknownKeys(s, Object.keys(d), warnings, "interaction", UNKNOWN_KEY);
 
+  // Version 1's `clickThrough` was indistinguishable from `open: "never"` — both build
+  // no hit area — so a pin that had it becomes one, here rather than in the migration:
+  // an unmigrated payload on a player's client must already behave as it will after.
+  const open =
+    raw0.clickThrough === true
+      ? "never"
+      : oneOf(s.open, OPEN_MODES, d.open, warnings, "interaction.open", BAD_ENUM);
+
   return {
-    open: oneOf(s.open, OPEN_MODES, d.open, warnings, "interaction.open", BAD_ENUM),
-    openPage: bool(s.openPage, d.openPage),
-    clickThrough: bool(s.clickThrough, d.clickThrough),
+    open,
     tooltip: str(s.tooltip, d.tooltip),
   };
 }
@@ -421,8 +437,8 @@ export function mergePin(current: DpPinFlags, patch: PinPatch): PinValidationRes
  *
  * A pin is one grid square, matching a Map Note's footprint so the two read as peers
  * on the same map. A prop is a portrait sheet four squares wide — the shape of nearly
- * every letter, warrant and handbill a GM pins — which content-fitting then refines
- * once the source has actually been measured.
+ * every letter, warrant and handbill a GM pins. Fitting the height to the content is an
+ * action the GM takes (`api.fitToContent`), not something placement does on its own.
  *
  * Pure and shared, because the store, the placement ghost and the mode switch must all
  * arrive at the same number or a pin changes size when you look at it twice.

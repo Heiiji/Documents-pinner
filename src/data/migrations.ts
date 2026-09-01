@@ -18,6 +18,11 @@
  *    rewriting hundreds of documents in a world someone just opened is not a decision
  *    a module gets to make on its own.
  *
+ * Version 2 stores the type size that version 1 derived from the tile. The sweep writes
+ * the number each prop is ALREADY drawn at, so it changes nothing on any map — it only
+ * makes the next resize a change of window rather than a change of zoom. A pin-mode
+ * anchor with no remembered prop size is left to decide when it becomes a prop.
+ *
  * `planMigration` is pure and unit-tested; everything below it performs the writes.
  */
 
@@ -25,7 +30,8 @@ import { logger } from "../log";
 import { FLAGS, MODULE_ID, SCHEMA_VERSION } from "../const";
 import { g, internal, isPrimaryGM, notify } from "../fvtt";
 import * as settings from "../settings";
-import { validatePin } from "./pin-schema";
+import { freezeMetrics, validatePin } from "./pin-schema";
+import type { DpPinFlags } from "../types/dp";
 
 const log = logger("migrate");
 
@@ -57,7 +63,9 @@ export function planMigration(tiles: readonly any[]): MigrationUpdate[] {
     const stored = tile?.flags?.[MODULE_ID]?.[FLAGS.PIN];
     if (stored === null || stored === undefined) continue;
 
-    const { pin } = validatePin(stored);
+    const validated = validatePin(stored).pin;
+    const size = propSizeOf(tile, validated);
+    const pin = size ? freezeMetrics(validated, size) : validated;
     if (stable(pin) === stable(stored)) continue;
 
     updates.push({
@@ -67,6 +75,20 @@ export function planMigration(tiles: readonly any[]): MigrationUpdate[] {
   }
 
   return updates;
+}
+
+/**
+ * The size a pin's PROP look is drawn at: the tile's own for a prop, the remembered
+ * prop size for a pin-mode anchor, or nothing — in which case there is no look to
+ * freeze and `convertMode` does it on the way in.
+ */
+function propSizeOf(tile: any, pin: DpPinFlags): { width: number; height: number } | null {
+  if (pin.mode === "prop") {
+    const width = Number(tile?.width);
+    const height = Number(tile?.height);
+    return width > 0 && height > 0 ? { width, height } : null;
+  }
+  return pin.geometry.prop;
 }
 
 /** How many pins on this scene would be rewritten. Used to size the offer. */

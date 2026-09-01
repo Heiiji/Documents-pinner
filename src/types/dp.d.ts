@@ -23,8 +23,6 @@ export interface DpSource {
 export interface DpDisplay {
   /** Empty string means "use the source document's name". */
   label: string;
-  showLabel: boolean;
-  labelPosition: "above" | "below" | "inside" | "none";
   /** Asset key for the card backing (parchment, vellum, plain…). */
   paper: string;
   showTitle: boolean;
@@ -102,11 +100,8 @@ export interface DpEffectRef {
 }
 
 export interface DpInteraction {
+  /** `never` also lets pointer events fall through: no hit area is built at all. */
   open: "single" | "double" | "readInPlace" | "never";
-  /** Open the specific page rather than the whole entry. */
-  openPage: boolean;
-  /** Let pointer events fall through to the canvas when `open === "never"`. */
-  clickThrough: boolean;
   tooltip: string;
 }
 

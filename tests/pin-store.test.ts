@@ -6,6 +6,7 @@ import {
   batchUpdate,
   convertMode,
   enqueue,
+  resize,
   settled,
   unpin,
   update,
@@ -316,5 +317,53 @@ describe("batchUpdate and the per-anchor queue", () => {
     const written = scene.calls[0].updates[0][FLAG_PATH];
     expect(written.display.label).toBe("toggled");
     expect(written.mode).toBe("pin");
+  });
+});
+
+describe("the type size and the mode switch", () => {
+  it("freezes the type size when an anchor first becomes a prop", async () => {
+    const doc = fakeDoc({ pin: { mode: "pin" }, width: 100, height: 100 });
+    await convertMode(doc, "prop", { width: 400, height: 566 });
+    const pin = doc.flags[MODULE_ID][FLAGS.PIN];
+    expect(pin.display.typeSize).toBeCloseTo(400 / 26, 6);
+    expect(pin.display.margin).not.toBeNull();
+    expect(doc.width).toBe(400);
+  });
+
+  it("leaves a stored type size alone", async () => {
+    const doc = fakeDoc({
+      pin: { mode: "pin", display: { ...defaultPin().display, typeSize: 20, margin: 2 } },
+    });
+    await convertMode(doc, "prop", { width: 400, height: 566 });
+    expect(doc.flags[MODULE_ID][FLAGS.PIN].display.typeSize).toBe(20);
+  });
+
+  it("does not freeze anything on the way to pin mode", async () => {
+    const doc = fakeDoc({ pin: { mode: "prop" } });
+    await convertMode(doc, "pin");
+    expect(doc.flags[MODULE_ID][FLAGS.PIN].display.typeSize).toBeNull();
+  });
+});
+
+describe("resize", () => {
+  it("writes width and height through the queue with the internal option, and nothing else", async () => {
+    const doc = fakeDoc();
+    await resize(doc, { width: 640.4, height: 900.6 });
+    expect(doc.writes.length).toBe(1);
+    expect(Object.keys(doc.writes[0].data).sort()).toEqual(["height", "width"]);
+    expect(doc.writes[0].data).toEqual({ width: 640, height: 901 });
+    expect(doc.writes[0].options[INTERNAL_OPTION]).toBe(true);
+  });
+
+  it("refuses a tile that is not a pin", async () => {
+    const doc = fakeDoc({ noPin: true });
+    await expect(resize(doc, { width: 640, height: 900 })).resolves.toBeNull();
+    expect(doc.writes).toEqual([]);
+  });
+
+  it("never writes a size below one pixel", async () => {
+    const doc = fakeDoc();
+    await resize(doc, { width: 0, height: -5 });
+    expect(doc.writes[0].data).toEqual({ width: 1, height: 1 });
   });
 });

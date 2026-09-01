@@ -8,8 +8,14 @@
 
 export const MODULE_ID = "documents-pinner";
 
-/** Version of the `flags[MODULE_ID].pin` payload. Bump when the shape changes. */
-export const SCHEMA_VERSION = 1;
+/**
+ * Version of the `flags[MODULE_ID].pin` payload. Bump when the shape changes.
+ *
+ * 2: the type size and margin are stored per pin (a prop is a window, not a zoom), and
+ *    four fields nothing read are gone — `display.showLabel`, `display.labelPosition`,
+ *    `interaction.openPage`, `interaction.clickThrough` (folded into `open: "never"`).
+ */
+export const SCHEMA_VERSION = 2;
 
 /** Version of the `flags[MODULE_ID].grants` ownership ledger. */
 export const LEDGER_VERSION = 1;

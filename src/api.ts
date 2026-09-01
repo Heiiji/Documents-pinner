@@ -18,7 +18,14 @@ import { cv, g, isGM, notify, playerIds, resolveUuid, resolveUuidSync } from "./
 import * as audience from "./data/audience";
 import * as store from "./data/PinStore";
 import { readPin } from "./data/PinData";
-import { defaultPin, type PinPatch } from "./data/pin-schema";
+import {
+  DEFAULT_MARGIN_EM,
+  defaultPin,
+  defaultTypeSize,
+  freezeMetrics,
+  naturalSize,
+  type PinPatch,
+} from "./data/pin-schema";
 import { releaseAnchor, syncAnchor } from "./data/ownership-sync";
 import * as settings from "./settings";
 import type { DpAudience, DpMode, DpPinFlags, DpSource } from "./types/dp";
@@ -124,6 +131,10 @@ export interface PinPlacement {
   elevation?: number;
   effectId?: string;
   audienceKind?: DpAudience["kind"];
+  /** Type size in scene px; defaults to what a natural-size prop on this grid derives. */
+  typeSize?: number;
+  /** Margin in em of the type size. */
+  margin?: number;
   /** Place centred on (x, y) rather than with its top-left corner there. */
   centred?: boolean;
 }
@@ -140,14 +151,22 @@ export async function pinAt(scene: any, source: DpSource, at: PinPlacement): Pro
 
   const mode = at.mode ?? settings.get("defaultMode");
   const grid = scene.grid?.size ?? 100;
-  const width = at.width ?? (mode === "pin" ? grid : grid * 4);
-  const height = at.height ?? (mode === "pin" ? grid : Math.round(grid * 4 * 1.414));
+  const natural = naturalSize(mode, grid);
+  const width = at.width ?? natural.width;
+  const height = at.height ?? natural.height;
 
   const kind = at.audienceKind ?? settings.get("defaultAudience");
   const pin: DpPinFlags = {
     ...defaultPin(),
     mode,
     source,
+    // Stored from the start, in BOTH modes, so a pin that later becomes a prop already
+    // knows its type and a prop's first resize is a change of window, never of zoom.
+    display: {
+      ...defaultPin().display,
+      typeSize: at.typeSize ?? defaultTypeSize(grid),
+      margin: at.margin ?? DEFAULT_MARGIN_EM,
+    },
     audience: audience.makeAudience({
       kind,
       ownershipSync: {
@@ -442,7 +461,10 @@ export async function adoptTile(tileDoc: any, source: DpSource): Promise<void> {
     source,
     audience: audience.makeAudience({ kind: tileDoc.hidden ? "hidden" : "everyone" }),
   };
-  await store.attach(tileDoc, pin);
+  // A tile adopted as a prop is drawn at its own size from the first frame; freeze the
+  // proportional look there, exactly as the migration does for an existing prop.
+  const frozen = pin.mode === "prop" ? freezeMetrics(pin, tileDoc) : pin;
+  await store.attach(tileDoc, frozen);
   await syncAnchor(tileDoc);
 }
 

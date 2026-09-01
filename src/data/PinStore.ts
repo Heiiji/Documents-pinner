@@ -26,7 +26,14 @@ import { g, internal } from "../fvtt";
 import type { DpMode, DpPinFlags } from "../types/dp";
 import { anchorHidden } from "./audience";
 import { readPin } from "./PinData";
-import { defaultPin, mergePin, naturalSize, validatePin, type PinPatch } from "./pin-schema";
+import {
+  defaultPin,
+  freezeMetrics,
+  mergePin,
+  naturalSize,
+  validatePin,
+  type PinPatch,
+} from "./pin-schema";
 
 // ---------------------------------------------------------------------------
 // Per-anchor serialisation
@@ -211,13 +218,37 @@ export function convertMode(
       [current.mode]: { width: doc.width, height: doc.height },
     };
     const target = remembered[mode] ?? fallback ?? derivedSize(mode);
-    const { pin } = mergePin(current, { mode, geometry: remembered });
+    const merged = mergePin(current, { mode, geometry: remembered }).pin;
+    // An anchor becoming a prop for the first time has no stored type: freeze the
+    // proportional look at the size it is entering, so it draws as it always would have
+    // and the NEXT resize is a change of window.
+    const pin = mode === "prop" ? freezeMetrics(merged, target) : merged;
 
     return doc.update(
       {
         width: Math.max(1, Math.round(target.width)),
         height: Math.max(1, Math.round(target.height)),
         [`flags.${MODULE_ID}.${FLAGS.PIN}`]: pin,
+      },
+      internal()
+    );
+  });
+}
+
+/**
+ * Resize the anchor. The one write that touches nothing but the box.
+ *
+ * `geometry` is deliberately not written here: it is read only when RETURNING to a
+ * mode, and `convertMode` captures the live size on the way out, so a copy written now
+ * could only ever disagree with the tile.
+ */
+export function resize(doc: any, size: { width: number; height: number }): Promise<any> {
+  return enqueue(doc?.id ?? "", async () => {
+    if (!readPin(doc)) return null;
+    return doc.update(
+      {
+        width: Math.max(1, Math.round(size.width)),
+        height: Math.max(1, Math.round(size.height)),
       },
       internal()
     );
