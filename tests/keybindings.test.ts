@@ -10,7 +10,17 @@
  * The gate was redundant regardless: `restricted: true` is Foundry's own GM gate, and the
  * four bindings beside it already relied on exactly that.
  */
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+const board = { focused: null as any };
+vi.mock("../src/apps/Pinboard", () => ({
+  openPinboard: vi.fn(),
+  pinboardFocusedDoc: () => board.focused,
+}));
+vi.mock("../src/apps/DocumentPicker", () => ({ openPicker: vi.fn() }));
+
+import * as api from "../src/api";
+import { openPicker } from "../src/apps/DocumentPicker";
 import { registerKeybindings } from "../src/ui/keybindings";
 import { installWorld, uninstallWorld } from "./helpers/fake-foundry";
 
@@ -67,5 +77,46 @@ describe("registerKeybindings", () => {
   it("leaves peek unrestricted — it is the one binding players get", () => {
     const registered = registerDuringInit();
     expect(registered.find((r) => r.key === "peek")!.options.restricted).toBeUndefined();
+  });
+});
+
+/**
+ * Three bindings returned `false` in silence when nothing was selected, so a GM who
+ * pressed Alt+M learned nothing about why. Now they act on the Pinboard's focused row,
+ * or say what to select.
+ */
+describe("a pin binding with nothing selected", () => {
+  afterEach(() => {
+    board.focused = null;
+    vi.restoreAllMocks();
+  });
+
+  function binding(key: string) {
+    const world = installWorld({ isGM: true });
+    registerKeybindings();
+    const found = world.game.keybindings.registered.find((r: any) => r.key === key)!;
+    return { world, onDown: found.options.onDown as () => boolean };
+  }
+
+  it("says so rather than doing nothing", () => {
+    const { world, onDown } = binding("toggleMode");
+    expect(onDown()).toBe(true);
+    expect(world.notifications.map((n) => n.type)).toContain("warn");
+  });
+
+  it("acts on the Pinboard's focused row when the board is open", () => {
+    const doc = { id: "focused" };
+    board.focused = doc;
+    const spy = vi.spyOn(api, "toggleMode").mockImplementation(async () => {});
+    const { world, onDown } = binding("toggleMode");
+    onDown();
+    expect(spy).toHaveBeenCalledWith(doc);
+    expect(world.notifications).toEqual([]);
+  });
+
+  it("opens the picker on Shift+P when nothing has been placed yet", () => {
+    const { onDown } = binding("pinLastUsed");
+    expect(onDown()).toBe(true);
+    expect(openPicker).toHaveBeenCalled();
   });
 });

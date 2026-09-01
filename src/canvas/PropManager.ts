@@ -444,6 +444,22 @@ class Manager {
     return awaitingTexture ? 0 : alpha;
   }
 
+  /**
+   * Warm light on a canvas-tier prop while the pointer is over it.
+   *
+   * The DOM tier draws its cue in CSS; a mesh has one channel that reads as light and
+   * is not core's transform — the tint. Written directly: 120 ms is short enough that
+   * an eased tint would not be told from a set one, and colour interpolation through
+   * `CanvasAnimation` is not something this module has watched work.
+   */
+  setHover(id: string, hovering: boolean): void {
+    const tile = cv()?.tiles?.get(id);
+    const pin = tile ? readPin(tile.document) : null;
+    if (!tile?.mesh || !pin || this.#domModeFor(pin)) return;
+    const rest = tile.document.texture?.tint ?? 0xffffff;
+    tile.mesh.tint = hovering ? 0xfff1dc : rest;
+  }
+
   setFocused(id: string | null): void {
     if (this.#focusedId === id) return;
     this.#focusedId = id;

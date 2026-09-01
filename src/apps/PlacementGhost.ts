@@ -43,7 +43,13 @@ import type { DpMode, DpPinFlags, DpSource } from "../types/dp";
 export interface GhostState {
   source: DpSource;
   mode: DpMode;
+  /** Wrapped into 0..359, which is what the document stores. */
   rotation: number;
+  /**
+   * The same angle, unwrapped, which is what the element is drawn at: a CSS transition
+   * from 345° to 0° turns the long way round, so the shown angle only ever accumulates.
+   */
+  rotationShown: number;
   /** Multiplier on the mode's natural size — the BOX. */
   scale: number;
   /** Type size in scene px — the density. The box and the type are two gestures. */
@@ -73,6 +79,7 @@ export function initialState(source: DpSource, mode: DpMode, gridSize = 100): Gh
     source,
     mode,
     rotation: 0,
+    rotationShown: 0,
     scale: 1,
     typeSize: settings.get("lastTypeSize") || defaultTypeSize(gridSize),
     heightOverride: null,
@@ -123,7 +130,7 @@ export function stepWheel(
   }
   const step = mods.shift ? 1 : 15;
   const rotation = (((state.rotation + direction * step) % 360) + 360) % 360;
-  return { ...state, rotation };
+  return { ...state, rotation, rotationShown: state.rotationShown + direction * step };
 }
 
 /**
@@ -157,8 +164,11 @@ export function stepKey(
     case "V":
       return { ...state, audience: state.audience === "everyone" ? "hidden" : "everyone" };
     case "r":
-    case "R":
-      return { ...state, rotation: 0 };
+    case "R": {
+      // Back to square by the shortest turn: the nearest full rotation of the shown angle.
+      const turns = Math.round(state.rotationShown / 360);
+      return { ...state, rotation: 0, rotationShown: turns === 0 ? 0 : turns * 360 };
+    }
     default:
       return null;
   }
@@ -231,6 +241,7 @@ function legendMarkup(current: GhostState): string {
     `<span class="dp-ghost__meta">${escapeHtml(t(preset.label))} · ` +
     `${Math.round(current.scale * 100)}% · ${type}` +
     `${escapeHtml(t(current.audience === "everyone" ? "DP.ghost.audienceAll" : "DP.ghost.audienceNone"))}` +
+    `${current.sticky ? ` · ${escapeHtml(t("DP.ghost.stamping"))}` : ""}` +
     `</span></div>${lines}`
   );
 }
@@ -250,6 +261,13 @@ function renderChip(current: GhostState): void {
   const preset = CORE_PRESETS[current.effectIndex];
   element.dataset.dpFx = preset.id;
   element.dataset.dpMode = current.mode;
+
+  // The held modifiers, as attributes the stylesheet can show: a solid border while
+  // placing free of the grid, a stamp mark while a run of markers is armed.
+  if (current.freePlace) element.dataset.dpFree = "true";
+  else delete element.dataset.dpFree;
+  if (current.sticky) element.dataset.dpSticky = "true";
+  else delete element.dataset.dpSticky;
 
   const markup = legendMarkup(current);
   if (markup === lastChip) return;
@@ -357,7 +375,7 @@ function renderPosition(current: GhostState): void {
     element.style.top = `${current.y}px`;
     element.style.width = `${size.width}px`;
     element.style.height = `${size.height}px`;
-    element.style.transform = `rotate(${current.rotation}deg)`;
+    element.style.transform = `rotate(${current.rotationShown}deg)`;
     element.style.setProperty("--dp-ghost-zoom", String(1 / (k || 1)));
   });
 }
@@ -473,7 +491,7 @@ function attach(): void {
       }
       event.preventDefault();
       event.stopPropagation();
-      void place(event.shiftKey);
+      void place(state.sticky || event.shiftKey);
     },
     { capture: true }
   );
@@ -485,6 +503,12 @@ function attach(): void {
       if (!state) return;
       if (event.key === "Control" || event.key === "Meta") {
         state = { ...state, freePlace: true };
+        renderChip(state);
+        return;
+      }
+      if (event.key === "Shift") {
+        state = { ...state, sticky: true };
+        renderChip(state);
         return;
       }
       const next = stepKey(state, event.key, { shift: event.shiftKey });
@@ -502,7 +526,14 @@ function attach(): void {
 
   on(window, "keyup", (event: KeyboardEvent) => {
     if (!state) return;
-    if (event.key === "Control" || event.key === "Meta") state = { ...state, freePlace: false };
+    if (event.key === "Control" || event.key === "Meta") {
+      state = { ...state, freePlace: false };
+      renderChip(state);
+    }
+    if (event.key === "Shift") {
+      state = { ...state, sticky: false };
+      renderChip(state);
+    }
   });
 
   // Losing the window mid-placement leaves a ghost stuck to a cursor that is no longer
@@ -513,14 +544,20 @@ function attach(): void {
   });
 }
 
+/** Whether a placement is in flight, so a double press cannot place twice. */
+let placing = false;
+
 async function place(keepArmed: boolean): Promise<void> {
-  if (!state) return;
+  if (!state || placing) return;
   const current = state;
   const scene = cv()?.scene;
   const size = sizeOf(current, gridSize());
   const preset = CORE_PRESETS[current.effectIndex];
 
-  if (!keepArmed) disarm();
+  // The ghost holds until the prop exists. Disarming first left one server round trip
+  // with nothing on the map at all; now the real card mounts under the fading ghost.
+  placing = true;
+  if (keepArmed) stamp();
 
   const anchor = await api.pinAt(scene, current.source, {
     x: current.x,
@@ -544,9 +581,28 @@ async function place(keepArmed: boolean): Promise<void> {
     margin: DEFAULT_MARGIN_EM,
   });
 
+  placing = false;
+  if (!keepArmed) disarm();
+
   await settings.set("lastPreset", preset.id);
   await settings.set("lastTypeSize", current.typeSize);
   if (anchor) announce(anchor, current);
+}
+
+/**
+ * The stamp: a one-shot pulse on the preview when a pin lands and the ghost stays
+ * armed, so a run of markers acknowledges each one without a glance at the toast.
+ */
+function stamp(): void {
+  const body = element?.querySelector<HTMLElement>(".dp-ghost__body");
+  if (!body) return;
+  body.classList.remove("dp-ghost--stamp");
+  // Reflow between remove and add, or a second stamp in a row never restarts.
+  void body.offsetWidth;
+  body.classList.add("dp-ghost--stamp");
+  body.addEventListener("animationend", () => body.classList.remove("dp-ghost--stamp"), {
+    once: true,
+  });
 }
 
 /**

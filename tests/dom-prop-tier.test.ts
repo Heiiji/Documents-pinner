@@ -38,6 +38,7 @@ import {
   clearDomTier,
   domPropCount,
   followDomProp,
+  setDomPropHover,
   syncDomTier,
 } from "../src/canvas/DomPropTier";
 import { resolveCard } from "../src/render/ContentResolver";
@@ -301,6 +302,20 @@ describe("the overflow mark", () => {
     await settle();
     const card = overlay()!.querySelector<HTMLElement>(".dp-prop .dp-card")!;
     expect(card.dataset.dpOverflow).toBeUndefined();
+  });
+});
+
+describe("hover", () => {
+  it("marks the card while the pointer is over it, and unmarks it after", async () => {
+    syncDomTier([entry({ pin: sized() })]);
+    await settle();
+    setDomPropHover("t1", true);
+    await settle();
+    const card = overlay()!.querySelector<HTMLElement>(".dp-prop")!;
+    expect(card.dataset.dpHover).toBe("true");
+    setDomPropHover("t1", false);
+    await settle();
+    expect(card.dataset.dpHover).toBeUndefined();
   });
 });
 

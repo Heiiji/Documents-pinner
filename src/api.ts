@@ -227,8 +227,21 @@ function anchorTexture(source: DpSource): string {
  */
 export async function setAudience(anchorDoc: any, next: DpAudience): Promise<void> {
   if (!isGM()) return;
+  const before = readPin(anchorDoc);
   await store.update(anchorDoc, { audience: next });
   await syncAnchor(anchorDoc);
+
+  // A prop reads in place whatever the ownership says; a PIN opens the sheet, and the
+  // sheet refuses without access. Revealing one with sync off is the exact moment a GM
+  // ships "I can see it but it won't open" to the table, so say so once, here.
+  if (
+    before?.mode === "pin" &&
+    before.audience.kind === "hidden" &&
+    next.kind !== "hidden" &&
+    !next.ownershipSync.enabled
+  ) {
+    notify({ key: "DP.notice.revealedNoAccess" }, "info");
+  }
 }
 
 /**
@@ -382,6 +395,18 @@ export async function openLocally(anchorDoc: any): Promise<void> {
     notify({ key: "DP.notice.sourceMissing" }, "warn");
     return;
   }
+
+  // The player-side half of the key glyph. A GM sees ⚿ on a chip whose player can see
+  // the pin but not open the document; the player used to get core's generic refusal,
+  // or nothing. Say what the state is — not a fault, a "not yet".
+  const canOpen = source.testUserPermission
+    ? source.testUserPermission(g()?.user, "OBSERVER") === true
+    : true;
+  if (!isGM() && !canOpen) {
+    notify({ key: "DP.notice.cannotOpenYet" }, "info");
+    return;
+  }
+
   // A page opens inside its parent's sheet, which is where its navigation lives.
   if (source.documentName === "JournalEntryPage" && source.parent?.sheet) {
     source.parent.sheet.render(true, { pageId: source.id });
@@ -448,19 +473,32 @@ export async function resetSize(anchorDoc: any): Promise<boolean> {
 }
 
 /**
- * Draw attention to a pin on every connected client.
+ * Draw attention to a pin.
  *
- * `canvas.ping` already displays locally and remotely, so the flash costs no socket of
- * our own — and it lands for players who can see the pin and is simply invisible
- * against a hidden one, which is the behaviour a GM wants anyway.
+ * `canvas.ping` displays locally AND remotely, so the flash costs no socket of our own.
+ * It also draws at coordinates on every client's canvas whether or not a pin is there
+ * — a ping is not "invisible against a hidden pin", it is a pulse on an empty patch of
+ * map that says "something is here". So a hidden pin is flashed on this client only,
+ * through the layer that draws pings, and the copy on the button says who sees it.
  */
 export function flash(anchorDoc: any): void {
   const canvas = cv();
-  if (!canvas?.ping || !anchorDoc) return;
-  canvas.ping({
+  if (!canvas || !anchorDoc) return;
+  const origin = {
     x: anchorDoc.x + anchorDoc.width / 2,
     y: anchorDoc.y + anchorDoc.height / 2,
-  });
+  };
+
+  if (anchorDoc.hidden) {
+    const controls = canvas.controls;
+    if (typeof controls?.handlePing === "function") {
+      controls.handlePing(g()?.user, origin, {});
+    } else {
+      notify({ key: "DP.notice.flashHidden" }, "warn");
+    }
+    return;
+  }
+  canvas.ping?.(origin);
 }
 
 /**

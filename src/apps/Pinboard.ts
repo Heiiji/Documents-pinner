@@ -46,12 +46,25 @@ import {
 let PinboardClass: any = null;
 let instance: any = null;
 
+/**
+ * The anchor the open Pinboard has focused, or null.
+ *
+ * The keyboard bindings fall back to it when nothing on the canvas is selected: a GM
+ * driving the board from the keyboard has a row under the cursor, and "select a pin
+ * first" would be wrong advice to them.
+ */
+export function pinboardFocusedDoc(): any {
+  if (!instance?.rendered || !instance.focusedId) return null;
+  return instance.docFor(instance.focusedId) ?? null;
+}
+
 const FILTERS: { id: PinboardFilter; key: string }[] = [
   { id: "all", key: "DP.board.filterAll" },
   { id: "visible", key: "DP.board.filterVisible" },
   { id: "hidden", key: "DP.board.filterHidden" },
   { id: "props", key: "DP.board.filterProps" },
   { id: "pins", key: "DP.board.filterPins" },
+  { id: "mismatch", key: "DP.board.filterMismatch" },
 ];
 
 /** Build the row model for a scene. The only place documents become plain data. */
@@ -131,7 +144,9 @@ function filterBarMarkup(rows: PinboardRow[], query: PinboardQuery): string {
           ? counts.hidden
           : id === "props"
             ? counts.props
-            : counts.pins;
+            : id === "pins"
+              ? counts.pins
+              : counts.mismatched;
 
   const chips = FILTERS.map(
     (f) =>

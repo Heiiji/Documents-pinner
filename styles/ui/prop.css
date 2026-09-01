@@ -68,6 +68,30 @@
 }
 
 /*
+ * Hover: warm light falls on the paper.
+ *
+ * The cue that says "this opens" — physical, like everything a prop is allowed to do,
+ * and rejected in favour of a ring because a ring reads as selection UI on a scene
+ * object. On the sheet rather than the card, so the torn-edge mask on the card carves
+ * it too, and `::before` because the sheet's `::after` is the overflow fade. Driven
+ * by the hit layer's hover hook, never by `:hover`: the card is pointer-transparent.
+ */
+.dp-prop .dp-card__sheet::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: #ffb454;
+  mix-blend-mode: multiply;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dp-dur-state, 120ms) var(--dp-ease-out, ease-out);
+}
+
+.dp-prop[data-dp-hover="true"] .dp-card__sheet::before {
+  opacity: 0.12;
+}
+
+/*
  * A prop is not the reader: its text is decoration at this size, and letting a drag
  * select it would make panning across a scene full of props feel broken.
  */

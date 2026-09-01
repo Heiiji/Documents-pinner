@@ -302,6 +302,17 @@ export function followDomProp(doc: any): void {
   placeGeometry(prop, doc);
 }
 
+/** Warm light on the paper while the pointer is over it. The stylesheet draws it. */
+export function setDomPropHover(id: string, hovering: boolean): void {
+  const prop = props.get(id);
+  if (!prop) return;
+  const element = prop.element;
+  write(element, () => {
+    if (hovering) element.dataset.dpHover = "true";
+    else delete element.dataset.dpHover;
+  });
+}
+
 /** The token fade and the peek, pushed to a card that has no mesh to carry them. */
 export function setDomPropAlpha(id: string, alpha: number): void {
   const prop = props.get(id);

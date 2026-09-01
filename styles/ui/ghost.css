@@ -23,7 +23,21 @@
   display: flex;
   align-items: flex-end;
   justify-content: flex-end;
-  transition: opacity var(--dp-dur-exit, 140ms) var(--dp-ease-in, ease-in);
+  /* A rotation step, a scale step and the pin ⇄ prop swap ease rather than snap. Width
+     and height are layout, but this is one element that exists only while placing, and
+     honesty about its size outranks compositor purity here. The rotation is written
+     unwrapped, so a step from 345° to 0° never turns the long way. */
+  transition:
+    opacity var(--dp-dur-exit, 140ms) var(--dp-ease-in, ease-in),
+    transform var(--dp-dur-state, 120ms) var(--dp-ease-out, ease-out),
+    width var(--dp-dur-state, 120ms) var(--dp-ease-out, ease-out),
+    height var(--dp-dur-state, 120ms) var(--dp-ease-out, ease-out),
+    border-radius var(--dp-dur-enter, 200ms) var(--dp-ease-out, ease-out);
+
+  /* Ctrl held: off the grid, and the border says so. */
+  &[data-dp-free="true"] {
+    border-style: solid;
+  }
 
   /* Cancelled, or placed: it fades rather than vanishing from under the cursor. */
   &.dp-ghost--out {
@@ -105,4 +119,33 @@
   overflow: hidden;
   opacity: 0.9;
   pointer-events: none;
+  transition: border-radius var(--dp-dur-enter, 200ms) var(--dp-ease-out, ease-out);
+
+  /* The stamp: one pulse when a pin lands and the ghost stays armed — the only keyframe
+     in the UI, and the acknowledgement that a marker landed without a glance at the toast. */
+  &.dp-ghost--stamp {
+    animation: dp-stamp var(--dp-dur-emphasis, 320ms) var(--dp-ease-out, ease-out);
+  }
+}
+
+.dp-ghost[data-dp-mode="pin"] .dp-ghost__body {
+  border-radius: 50%;
+}
+
+@keyframes dp-stamp {
+  from {
+    scale: 0.96;
+  }
+
+  to {
+    scale: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dp-ghost,
+  .dp-ghost__body {
+    transition: none;
+    animation: none;
+  }
 }

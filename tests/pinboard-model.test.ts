@@ -207,3 +207,15 @@ describe("focusIndex", () => {
     expect(focusIndex(0, -1, 1)).toBe(-1);
   });
 });
+
+describe("the mismatch filter", () => {
+  it("keeps only the rows where someone can see the pin but not open the document", () => {
+    const rows = [
+      row({ id: "ok", users: [user(true, true)] }),
+      row({ id: "stuck", users: [user(true, false)] }),
+      row({ id: "hidden", users: [user(false, false)] }),
+    ];
+    const visible = filterRows(rows, { filter: "mismatch", search: "", level: null });
+    expect(visible.map((r) => r.id)).toEqual(["stuck"]);
+  });
+});

@@ -128,6 +128,23 @@ describe("the type size", () => {
   });
 });
 
+describe("the shown rotation", () => {
+  it("accumulates rather than wrapping, so a step across zero never turns the long way", () => {
+    let state = ghost();
+    for (let i = 0; i < 24; i++) state = stepWheel(state, 1, {});
+    expect(state.rotation).toBe(0);
+    expect(state.rotationShown).toBe(360);
+    state = stepWheel(state, -1, {});
+    expect(state.rotation).toBe(345);
+    expect(state.rotationShown).toBe(345);
+  });
+
+  it("resets to square by the nearest full turn", () => {
+    expect((stepKey(ghost({ rotation: 30, rotationShown: 390 }), "r") as GhostState).rotationShown).toBe(360);
+    expect((stepKey(ghost({ rotation: 330, rotationShown: -30 }), "r") as GhostState).rotationShown).toBe(0);
+  });
+});
+
 describe("stepKey", () => {
   it("claims only the keys it handles, so other shortcuts still work while armed", () => {
     expect(stepKey(ghost(), "a")).toBeNull();
@@ -237,6 +254,35 @@ describe("placement elevation", () => {
 
     expect(created).toHaveLength(1);
     expect(created[0].elevation).toBe(0);
+  });
+
+  it("places once for two presses while the first is still landing", async () => {
+    arm(source);
+    const board = document.getElementById("board")!;
+    board.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0 }));
+    board.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0 }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(created).toHaveLength(1);
+  });
+
+  it("shows the held modifiers on the ghost and keeps stamping across a shifted press", async () => {
+    arm(source);
+    const live = () => document.querySelector<HTMLElement>(".dp-ghost:not(.dp-ghost--out)")!;
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Control" }));
+    expect(live().dataset.dpFree).toBe("true");
+    window.dispatchEvent(new KeyboardEvent("keyup", { key: "Control" }));
+    expect(live().dataset.dpFree).toBeUndefined();
+
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Shift" }));
+    expect(live().dataset.dpSticky).toBe("true");
+    expect(live().textContent).toContain("DP.ghost.stamping");
+
+    document
+      .getElementById("board")!
+      .dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0 }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(created).toHaveLength(1);
+    expect(document.querySelector(".dp-ghost:not(.dp-ghost--out)")).not.toBeNull();
   });
 
   it("passes the chosen type size to the pin it places", async () => {

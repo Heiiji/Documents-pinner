@@ -76,6 +76,18 @@ describe("the HUD audience palette", () => {
     expect(palette("dp-hud-audience").classList.contains("dp-hud__palette--in")).toBe(true);
   });
 
+  it("says what to do when 'Some' is pressed with nobody chosen, instead of silently moving focus", async () => {
+    tile.flags["documents-pinner"].pin.audience.users = [];
+    await hud.render();
+    await openAudiencePalette();
+    const some = contentOf(hud).querySelector<HTMLElement>('[data-dp-kind="selected"]')!;
+    hud.dispatch("setAudienceKind", some);
+
+    const status = contentOf(hud).querySelector<HTMLElement>(".dp-hud__status")!;
+    expect(status.textContent).toContain("chooseWho");
+    expect(tile.updates).toEqual([]);
+  });
+
   it("STAYS open across the re-render a chip click causes", async () => {
     await openAudiencePalette();
     await hud.render();

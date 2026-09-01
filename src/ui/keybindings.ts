@@ -15,9 +15,10 @@
  */
 
 import { MODULE_ID } from "../const";
-import { cv, g } from "../fvtt";
+import { cv, g, notify } from "../fvtt";
 import * as api from "../api";
-import { openPinboard } from "../apps/Pinboard";
+import { openPicker } from "../apps/DocumentPicker";
+import { openPinboard, pinboardFocusedDoc } from "../apps/Pinboard";
 import { armLastUsed, disarm, isArmed } from "../apps/PlacementGhost";
 import { readPin } from "../data/PinData";
 
@@ -29,6 +30,20 @@ function selectedPins(): any[] {
   return (cv()?.tiles?.controlled ?? [])
     .map((tile: any) => tile.document)
     .filter((doc: any) => readPin(doc));
+}
+
+/**
+ * What a pin binding acts on: the selection, else the Pinboard's focused row, else
+ * nothing — and "nothing" is said out loud. These used to return false in silence, so
+ * a GM who pressed Alt+M with nothing selected learned nothing about why.
+ */
+function targets(): any[] {
+  const selected = selectedPins();
+  if (selected.length) return selected;
+  const focused = pinboardFocusedDoc();
+  if (focused) return [focused];
+  notify({ key: "DP.notice.selectFirst" }, "warn");
+  return [];
 }
 
 export function registerKeybindings(): void {
@@ -45,7 +60,9 @@ export function registerKeybindings(): void {
         disarm();
         return true;
       }
-      return armLastUsed();
+      // Nothing placed yet this session: what the GM wanted was to pick something.
+      if (!armLastUsed()) openPicker();
+      return true;
     },
   });
 
@@ -66,9 +83,7 @@ export function registerKeybindings(): void {
     editable: [{ key: "KeyV", modifiers: ["Alt", "Shift"] }],
     restricted: true,
     onDown: () => {
-      const pins = selectedPins();
-      if (!pins.length) return false;
-      for (const doc of pins) void api.cycleAudience(doc);
+      for (const doc of targets()) void api.cycleAudience(doc);
       return true;
     },
   });
@@ -114,9 +129,7 @@ export function registerKeybindings(): void {
     editable: [{ key: "KeyM", modifiers: ["Alt"] }],
     restricted: true,
     onDown: () => {
-      const pins = selectedPins();
-      if (!pins.length) return false;
-      for (const doc of pins) void api.toggleMode(doc);
+      for (const doc of targets()) void api.toggleMode(doc);
       return true;
     },
   });
@@ -129,9 +142,7 @@ export function registerKeybindings(): void {
     editable: [{ key: "KeyF", modifiers: ["Alt", "Shift"] }],
     restricted: true,
     onDown: () => {
-      const pins = selectedPins();
-      if (!pins.length) return false;
-      for (const doc of pins) void api.fitToContent(doc);
+      for (const doc of targets()) void api.fitToContent(doc);
       return true;
     },
   });

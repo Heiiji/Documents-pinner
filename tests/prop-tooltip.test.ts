@@ -61,6 +61,16 @@ describe("the tooltip", () => {
     expect(node()!.classList.contains("dp-tooltip--in")).toBe(false);
   });
 
+  it("sits above the prop as it actually lies, not at its unrotated top", async () => {
+    // 400x560 at (100,200), turned on its side: the bounds are 560x400, top at 280.
+    const tile = pinned("a", "A letter");
+    tile.rotation = 90;
+    setPropHover(tile, true);
+    await frame();
+    expect(node()!.style.top).toBe("280px");
+    expect(node()!.style.left).toBe("300px");
+  });
+
   it("shows nothing for a pin with no tooltip", async () => {
     setPropHover(pinned("a", "   "), true);
     await frame();

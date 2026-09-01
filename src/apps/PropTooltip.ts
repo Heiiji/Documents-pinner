@@ -20,7 +20,7 @@
 
 import { escapeHtml } from "../html";
 import { readPin } from "../data/PinData";
-import { scaleOf, stageMatrix } from "../canvas/transform";
+import { rotatedBounds, scaleOf, stageMatrix } from "../canvas/transform";
 import { mount, write } from "./OverlayRoot";
 
 let element: HTMLElement | null = null;
@@ -47,10 +47,12 @@ export function setPropHover(doc: any, hovering: boolean): void {
   }
 
   const zoom = 1 / (scaleOf(stageMatrix()) || 1);
+  // Above the prop as it actually lies: a rotated letter's top edge is not `doc.y`.
+  const bounds = rotatedBounds(doc);
   write(node, () => {
     // Centred above the pin, in scene coordinates.
-    node.style.left = `${doc.x + doc.width / 2}px`;
-    node.style.top = `${doc.y}px`;
+    node.style.left = `${bounds.x + bounds.width / 2}px`;
+    node.style.top = `${bounds.y}px`;
     node.style.setProperty("--dp-tooltip-zoom", String(zoom));
     node.classList.add("dp-tooltip--in");
   });

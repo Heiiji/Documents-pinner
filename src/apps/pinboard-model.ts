@@ -15,7 +15,7 @@
 import type { DpMode } from "../types/dp";
 import type { ChipUser } from "./chips";
 
-export type PinboardFilter = "all" | "visible" | "hidden" | "props" | "pins";
+export type PinboardFilter = "all" | "visible" | "hidden" | "props" | "pins" | "mismatch";
 
 export interface PinboardRow {
   id: string;
@@ -65,6 +65,10 @@ function matchesFilter(row: PinboardRow, filter: PinboardFilter): boolean {
       return row.mode === "prop";
     case "pins":
       return row.mode === "pin";
+    // The rows a GM fixes in one pass during prep: someone can see the pin but not
+    // open the document, which is the bug the key glyph exists to predict.
+    case "mismatch":
+      return row.users.some((u) => u.canSee !== u.canOpen);
     case "all":
     default:
       return true;

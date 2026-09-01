@@ -545,9 +545,14 @@ function onSetAudienceKind(this: any, _event: Event, target: HTMLElement) {
   if (!pin || !kind) return;
 
   // "Some" with nobody chosen yet would mean nobody, which is indistinguishable from
-  // hidden. Open the chips instead of applying a state the GM cannot tell apart.
+  // hidden. Open the chips instead of applying a state the GM cannot tell apart — and
+  // say so on the status line, because a click that only moved the focus read as a
+  // click that did nothing.
   if (kind === "selected" && !pin.audience.users.length) {
-    target.closest(".dp-hud")?.querySelector<HTMLElement>(".dp-chip")?.focus();
+    const root = target.closest(".dp-hud");
+    const status = root?.querySelector<HTMLElement>(".dp-hud__status");
+    if (status) status.textContent = t("DP.hud.chooseWho");
+    root?.querySelector<HTMLElement>(".dp-chip")?.focus();
     return;
   }
   void api

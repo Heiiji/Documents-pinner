@@ -43,7 +43,7 @@ import {
   onSourceRenamed,
 } from "./ui/entry-points";
 import { readPin } from "./data/PinData";
-import { followDomProp } from "./canvas/DomPropTier";
+import { followDomProp, setDomPropHover } from "./canvas/DomPropTier";
 
 const log = logger("boot");
 
@@ -151,7 +151,12 @@ Hooks.on("refreshTile", (tile: any) => {
 // `interaction.tooltip` was offered by the Pin Studio, validated, stored — and read by
 // nothing, while `PropHitLayer` fired this hook into a void. A player hovering a pin got
 // no feedback at all beyond the cursor.
-Hooks.on(`${MODULE_ID}.propHover`, (doc: any, hovering: boolean) => setPropHover(doc, hovering));
+Hooks.on(`${MODULE_ID}.propHover`, (doc: any, hovering: boolean) => {
+  setPropHover(doc, hovering);
+  // The cue that says "this opens": warm light on the paper, on whichever tier draws it.
+  setDomPropHover(doc?.id, hovering);
+  propManager().setHover(doc?.id, hovering);
+});
 
 // --- Entry points -----------------------------------------------------------
 
