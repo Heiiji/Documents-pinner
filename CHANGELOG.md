@@ -9,7 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Nothing yet.
 
-## [0.2.0] — unreleased
+## [0.2.1] — unreleased
+
+### Fixed
+
+- **The Studio's and the HUD's effect galleries overflowed their buttons.** Core gives
+  every `<button>` a fixed height and a centred flex row, and the swatch buttons declared
+  neither, so each preview and cost label painted over the row below and every HUD swatch
+  name was cut to three letters. The buttons now declare their own layout. Also in the
+  Studio: slider readouts sit beside their sliders instead of wrapping underneath, the
+  placement strip is two deliberate rows — the geometry, then the verbs — and the window
+  opens tall enough to show the gallery.
+
+## [0.2.0] — 2026-09-01
 
 The resize release, and a product pass over every surface a GM and a player touch.
 The pin payload schema is now version 2; the migration changes nothing on any map.
@@ -413,7 +425,8 @@ occluded. The module detects this at startup rather than failing visibly.
 
 The full list is in the README and in `docs/DESIGN.md` §10.
 
-[Unreleased]: https://github.com/Heiiji/Documents-pinner/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/Heiiji/Documents-pinner/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/Heiiji/Documents-pinner/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/Heiiji/Documents-pinner/compare/v0.1.8...v0.2.0
 [0.1.8]: https://github.com/Heiiji/Documents-pinner/compare/v0.1.7...v0.1.8
 [0.1.7]: https://github.com/Heiiji/Documents-pinner/compare/v0.1.6...v0.1.7

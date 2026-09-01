@@ -308,6 +308,7 @@ export function studioMarkup(
     // at any of the others, and hiding it behind a tab would mean leaving the effect
     // they are judging to answer it.
     `<footer class="dp-studio__strip">` +
+    `<div class="dp-studio__strip-row">` +
     `<label>${escapeHtml(t("DP.studio.elevation"))}` +
     `<input type="number" name="_elevation" value="${Number(doc.elevation ?? 0)}" step="1"></label>` +
     `<label>${escapeHtml(t("DP.studio.rotation"))}` +
@@ -323,6 +324,8 @@ export function studioMarkup(
     `<input type="checkbox" name="_aspect"${options.aspectLocked ? " checked" : ""}></label>` +
     `<label>${escapeHtml(t("DP.studio.locked"))}` +
     `<input type="checkbox" name="_locked"${doc.locked ? " checked" : ""}></label>` +
+    `</div>` +
+    `<div class="dp-studio__strip-row dp-studio__strip-row--actions">` +
     // Fit is a prop's verb: a pin is one grid square and has no content to fit.
     `<button type="button" data-action="fitHeight"${pin.mode !== "prop" ? " disabled" : ""}>` +
     `${escapeHtml(t("DP.studio.fitHeight"))}</button>` +
@@ -330,6 +333,7 @@ export function studioMarkup(
     `<button type="button" data-action="locate">${escapeHtml(t("DP.board.locate"))}</button>` +
     `<button type="button" class="dp-danger" data-action="deletePin">` +
     `${escapeHtml(t("DP.studio.delete"))}</button>` +
+    `</div>` +
     `</footer>` +
     `</div>`
   );
@@ -379,7 +383,9 @@ export function definePinStudio(): any {
       classes: ["dp-scope", "dp-studio-app"],
       tag: "form",
       window: { title: "DP.studio.title", icon: "fa-solid fa-sliders", resizable: true },
-      position: { width: 460, height: 620 },
+      // Tall enough for the Appearance tab's gallery to show without a scroll on a
+      // laptop; the window is resizable for anything narrower.
+      position: { width: 500, height: 700 },
       form: { submitOnChange: true, closeOnSubmit: false },
       actions: {
         setTab: onSetTab,
