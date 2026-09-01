@@ -404,12 +404,20 @@ export function definePinStudio(): any {
     }
 
     _replaceHTML(result: HTMLElement, content: HTMLElement) {
+      // Every change re-renders the whole form, which started the tab at the top again
+      // on each slider tick. Keep the scroll when the tab is the same one.
+      const before = content.querySelector<HTMLElement>(".dp-studio__tab");
+      const scrollTop = before?.dataset.dpTab === this.tab ? before.scrollTop : 0;
+
       content.replaceChildren(result);
       // Wired to `result`, the NEW subtree, not to `content`. ApplicationV2 hands back
       // the same `content` element on every render, so listeners attached there
       // accumulate one set per render — and because these handlers trigger renders, the
       // growth compounds.
       this.#wire(result);
+
+      const after = content.querySelector<HTMLElement>(".dp-studio__tab");
+      if (after && scrollTop) after.scrollTop = scrollTop;
     }
 
     #wire(root: HTMLElement) {

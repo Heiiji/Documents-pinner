@@ -145,6 +145,24 @@ export function planReorder(
   return updates;
 }
 
+/**
+ * Where a dragged row lands: before or after the row under the pointer, as the index
+ * `planReorder` inserts at once the moved row has been taken out of the list.
+ */
+export function dropIndex(
+  rows: readonly PinboardRow[],
+  movedId: string,
+  targetId: string,
+  after: boolean
+): number {
+  const from = rows.findIndex((r) => r.id === movedId);
+  let index = rows.findIndex((r) => r.id === targetId);
+  if (from < 0 || index < 0) return from;
+  if (after) index += 1;
+  if (from < index) index -= 1;
+  return index;
+}
+
 export interface PinboardCounts {
   total: number;
   visible: number;

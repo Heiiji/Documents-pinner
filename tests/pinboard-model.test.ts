@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  dropIndex,
   filterRows,
   focusIndex,
   fold,
@@ -217,5 +218,29 @@ describe("the mismatch filter", () => {
     ];
     const visible = filterRows(rows, { filter: "mismatch", search: "", level: null });
     expect(visible.map((r) => r.id)).toEqual(["stuck"]);
+  });
+});
+
+describe("dropIndex", () => {
+  const rows = [row({ id: "a" }), row({ id: "b" }), row({ id: "c" })];
+  const order = (movedId: string, targetId: string, after: boolean) =>
+    (() => {
+      const index = dropIndex(rows, movedId, targetId, after);
+      const next = rows.filter((r) => r.id !== movedId);
+      next.splice(index, 0, rows.find((r) => r.id === movedId)!);
+      return next.map((r) => r.id);
+    })();
+
+  it("lands after the row under the pointer when the line was below it", () => {
+    expect(order("a", "b", true)).toEqual(["b", "a", "c"]);
+  });
+
+  it("lands before it when the line was above", () => {
+    expect(order("c", "a", false)).toEqual(["c", "a", "b"]);
+  });
+
+  it("lands exactly where the line was whichever direction the row came from", () => {
+    expect(order("a", "c", false)).toEqual(["b", "a", "c"]);
+    expect(order("c", "b", false)).toEqual(["a", "c", "b"]);
   });
 });

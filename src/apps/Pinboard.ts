@@ -31,6 +31,7 @@ import { allPresets, findPreset } from "../effects/preset-library";
 import { chipsMarkup } from "./chips";
 import { chipUsersFor } from "./PinHUD";
 import {
+  dropIndex,
   filterRows,
   focusIndex,
   levelsIn,
@@ -173,12 +174,44 @@ function filterBarMarkup(rows: PinboardRow[], query: PinboardQuery): string {
   return `<div class="dp-board__filters" role="group">${chips}${levelPicker}</div>`;
 }
 
+/** Where the row menu sits, relative to the board, so the list's clipping cannot cut it. */
+export interface MenuPlacement {
+  id: string;
+  top: number;
+  right: number;
+}
+
+/**
+ * The row menu: every verb the row has, in one place, because the "…" button used to
+ * open the Studio, which is what Enter already did — a control that lied about what it
+ * was. Anchored to the board rather than inside the row, whose paint containment would
+ * clip it.
+ */
+function menuMarkup(row: PinboardRow, at: MenuPlacement): string {
+  const item = (act: string, key: string, danger = false) =>
+    `<button type="button" role="menuitem" data-action="menuAct" data-dp-act="${act}"` +
+    `${danger ? ' class="dp-danger"' : ""}>${escapeHtml(t(key))}</button>`;
+  return (
+    `<div class="dp-menu" role="menu" data-dp-id="${escapeAttr(row.id)}"` +
+    ` style="top:${Math.round(at.top)}px;right:${Math.round(at.right)}px">` +
+    item("visibility", row.visible ? "DP.hud.hide" : "DP.hud.reveal") +
+    item("show", "DP.board.menuShow") +
+    item("shape", "DP.board.menuShape") +
+    (row.mode === "prop" ? item("fit", "DP.board.menuFit") : "") +
+    item("locate", "DP.board.locate") +
+    item("studio", "DP.board.menuStudio") +
+    item("delete", "DP.board.deleteSelected", true) +
+    `</div>`
+  );
+}
+
 export function boardMarkup(
   rows: PinboardRow[],
   query: PinboardQuery,
   selected: readonly string[],
   focusedId: string | null,
-  sceneName: string
+  sceneName: string,
+  menu: MenuPlacement | null = null
 ): string {
   const visible = filterRows(rows, query);
   const counts = summarise(rows);
@@ -187,14 +220,19 @@ export function boardMarkup(
     ? visible.map((row) => rowMarkup(row, selected.includes(row.id), row.id === focusedId)).join("")
     : `<li class="dp-board__empty">${escapeHtml(t(rows.length ? "DP.board.noMatches" : "DP.board.noPins"))}</li>`;
 
-  const bulk = selected.length
-    ? `<div class="dp-board__bulk" role="group" aria-label="${escapeAttr(t("DP.board.bulk"))}">` +
-      `<span class="dp-board__selected">${escapeHtml(t("DP.board.selectedN", { count: selected.length }))}</span>` +
-      `<button type="button" data-action="bulkReveal">${escapeHtml(t("DP.board.revealSelected"))}</button>` +
-      `<button type="button" data-action="bulkHide">${escapeHtml(t("DP.board.hideSelected"))}</button>` +
-      `<button type="button" class="dp-danger" data-action="bulkDelete">${escapeHtml(t("DP.board.deleteSelected"))}</button>` +
-      `</div>`
-    : "";
+  // Always rendered, with nothing selected as a state of its own: a bar that appears on
+  // the first shift-click steals a row's height from the list at the moment the GM is
+  // aiming at it. Stable layout beats an entrance.
+  const none = selected.length ? "" : " disabled";
+  const bulk =
+    `<div class="dp-board__bulk" role="group" aria-label="${escapeAttr(t("DP.board.bulk"))}">` +
+    `<span class="dp-board__selected">${escapeHtml(t("DP.board.selectedN", { count: selected.length }))}</span>` +
+    `<button type="button" data-action="bulkReveal"${none}>${escapeHtml(t("DP.board.revealSelected"))}</button>` +
+    `<button type="button" data-action="bulkHide"${none}>${escapeHtml(t("DP.board.hideSelected"))}</button>` +
+    `<button type="button" class="dp-danger" data-action="bulkDelete"${none}>${escapeHtml(t("DP.board.deleteSelected"))}</button>` +
+    `</div>`;
+
+  const menuRow = menu ? rows.find((row) => row.id === menu.id) : null;
 
   return [
     `<div class="dp-board">`,
@@ -220,6 +258,7 @@ export function boardMarkup(
     `</span>`,
     `</footer>`,
     `<p class="dp-board__help">${escapeHtml(t("DP.board.help"))}</p>`,
+    menuRow && menu ? menuMarkup(menuRow, menu) : "",
     `</div>`,
   ].join("");
 }
@@ -251,6 +290,7 @@ export function definePinboard(): any {
         locate: onLocate,
         cycleEffect: onCycleEffect,
         rowMenu: onRowMenu,
+        menuAct: onMenuAct,
         // ApplicationV2 invokes an action as `handler.call(app, event, target)`, so
         // `this` is the application and the first argument is the PointerEvent. These
         // four read the event as the application: two threw, and two — the global ones
@@ -279,6 +319,10 @@ export function definePinboard(): any {
     hasFocusedList = false;
     /** The anchor of a shift-range, kept so a range can be extended repeatedly. */
     rangeAnchor: string | null = null;
+    /** The open row menu, if any, and where it sits. */
+    menu: MenuPlacement | null = null;
+    /** The row whose "…" button should get the focus back once its menu has closed. */
+    menuReturnTo: string | null = null;
 
     get scene(): any {
       return cv()?.scene ?? g()?.scenes?.current ?? null;
@@ -316,7 +360,8 @@ export function definePinboard(): any {
         this.query,
         this.selected,
         this.focusedId,
-        this.scene?.name ?? ""
+        this.scene?.name ?? "",
+        this.menu
       );
       return wrapper.firstElementChild ?? wrapper;
     }
@@ -329,8 +374,12 @@ export function definePinboard(): any {
       // `#select` re-renders, and `replaceChildren` then destroyed the focus the click
       // had just established — so a GM could focus a row but never keep it.
       const hadRowFocus = !!(document.activeElement as HTMLElement)?.closest?.(".dp-row");
+      // A re-render replaces the scrolling list wholesale, which starts it at the top.
+      const scrollTop = content.querySelector(".dp-board__list")?.scrollTop ?? 0;
 
       content.replaceChildren(result);
+      const list = content.querySelector(".dp-board__list");
+      if (list && scrollTop) list.scrollTop = scrollTop;
       // Wired to `result`, the NEW subtree, not to `content`. ApplicationV2 hands back
       // the same `content` element on every render, so listeners attached there
       // accumulate one set per render — and because these handlers trigger renders, the
@@ -341,6 +390,20 @@ export function definePinboard(): any {
         const search = content.querySelector<HTMLInputElement>(".dp-board__search");
         search?.focus();
         search?.setSelectionRange(caret, caret);
+        return;
+      }
+
+      // The menu takes the focus while open and gives it back to its button after.
+      if (this.menu) {
+        content.querySelector<HTMLElement>(".dp-menu button")?.focus({ preventScroll: true });
+        return;
+      }
+      if (this.menuReturnTo) {
+        const id = this.menuReturnTo;
+        this.menuReturnTo = null;
+        content
+          .querySelector<HTMLElement>(`.dp-row[data-dp-id="${CSS.escape(id)}"] [data-action="rowMenu"]`)
+          ?.focus({ preventScroll: true });
         return;
       }
 
@@ -430,8 +493,35 @@ export function definePinboard(): any {
      * cannot hold a chord. Nothing here is destructive, so a mistyped key costs one
      * keystroke to undo.
      */
+    /** Close the row menu, remembering whose button gets the focus back. */
+    closeMenu() {
+      if (!this.menu) return;
+      this.menuReturnTo = this.menu.id;
+      this.menu = null;
+    }
+
     #onKey(event: KeyboardEvent) {
       const target = event.target as HTMLElement;
+
+      // While the row menu is open it owns Escape and the arrows.
+      if (this.menu) {
+        if (event.key === "Escape") {
+          this.closeMenu();
+          this.render();
+          event.preventDefault();
+          return;
+        }
+        if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+          const items = [
+            ...(event.currentTarget as HTMLElement).querySelectorAll<HTMLElement>(".dp-menu button"),
+          ];
+          const at = items.indexOf(document.activeElement as HTMLElement);
+          const next = focusIndex(items.length, at, event.key === "ArrowDown" ? 1 : -1);
+          items[next]?.focus();
+          event.preventDefault();
+          return;
+        }
+      }
       // BUTTON and contenteditable are here because Space and the single letters are
       // real keystrokes for them: Space on a focused button activates it, and stealing
       // that would make the row controls unusable from the keyboard.
@@ -472,6 +562,14 @@ export function definePinboard(): any {
       const visible = this.visibleRows;
       const current = visible.findIndex((r) => r.id === this.focusedId);
 
+      if ((event.key === "ArrowDown" || event.key === "ArrowUp") && event.altKey) {
+        // Reorder from the keyboard: the reveal order is a script, and a script is
+        // edited without reaching for the mouse.
+        if (this.focusedId) void this.#move(this.focusedId, event.key === "ArrowDown" ? 1 : -1);
+        event.preventDefault();
+        return;
+      }
+
       if (event.key === "ArrowDown" || event.key === "ArrowUp") {
         const next = focusIndex(visible.length, current, event.key === "ArrowDown" ? 1 : -1);
         if (next >= 0) {
@@ -510,18 +608,76 @@ export function definePinboard(): any {
       }
     }
 
-    /** Dragging a grip reorders the reveal order and persists it to `sort`. */
+    /** Persist a new position for one row, in one scene write. */
+    async #reorder(updates: { id: string; sort: number }[]) {
+      if (!updates.length) return;
+      await this.scene?.updateEmbeddedDocuments(
+        "Tile",
+        updates.map((u) => ({ _id: u.id, sort: u.sort })),
+        internal()
+      );
+      this.render();
+    }
+
+    /** Move a row one step in the full list. */
+    #move(id: string, delta: number) {
+      const rows = this.rows;
+      const from = rows.findIndex((r) => r.id === id);
+      const to = from + delta;
+      if (from < 0 || to < 0 || to >= rows.length) return Promise.resolve();
+      return this.#reorder(planReorder(rows, id, to));
+    }
+
+    /**
+     * Dragging a grip reorders the reveal order and persists it to `sort`.
+     *
+     * The row under the pointer shows a line above or below itself, decided by which
+     * half the pointer is in — instant, because a drop target that lags the pointer is
+     * worse than none — and the drop lands exactly where the line was.
+     */
     #wireDrag(root: HTMLElement) {
       let dragging: string | null = null;
+
+      const clearMarks = () => {
+        for (const row of root.querySelectorAll<HTMLElement>(".dp-row[data-dp-drop]")) {
+          delete row.dataset.dpDrop;
+        }
+      };
 
       root.addEventListener("dragstart", (event) => {
         const row = (event.target as HTMLElement).closest<HTMLElement>(".dp-row");
         dragging = row?.dataset.dpId ?? null;
+        row?.classList.add("dp-row--dragging");
         event.dataTransfer?.setData("text/plain", dragging ?? "");
       });
 
       root.addEventListener("dragover", (event) => {
-        if (dragging) event.preventDefault();
+        if (!dragging) return;
+        event.preventDefault();
+        const row = (event.target as HTMLElement).closest<HTMLElement>(".dp-row");
+        if (!row || row.dataset.dpId === dragging) {
+          clearMarks();
+          return;
+        }
+        // A read in an event handler, not a frame: one rect per pointer move.
+        const rect = row.getBoundingClientRect();
+        const after = event.clientY > rect.top + rect.height / 2;
+        const mark = after ? "after" : "before";
+        if (row.dataset.dpDrop === mark) return;
+        clearMarks();
+        row.dataset.dpDrop = mark;
+      });
+
+      root.addEventListener("dragleave", (event) => {
+        if (!(event.currentTarget as HTMLElement).contains(event.relatedTarget as Node)) {
+          clearMarks();
+        }
+      });
+
+      root.addEventListener("dragend", () => {
+        clearMarks();
+        root.querySelector(".dp-row--dragging")?.classList.remove("dp-row--dragging");
+        dragging = null;
       });
 
       root.addEventListener("drop", (event) => {
@@ -529,19 +685,16 @@ export function definePinboard(): any {
         if (!dragging || !row) return;
         event.preventDefault();
 
+        const after = row.dataset.dpDrop === "after";
+        clearMarks();
         const rows = this.rows;
-        const targetIndex = rows.findIndex((r) => r.id === row.dataset.dpId);
-        const updates = planReorder(rows, dragging, targetIndex);
+        const updates = planReorder(
+          rows,
+          dragging,
+          dropIndex(rows, dragging, row.dataset.dpId ?? "", after)
+        );
         dragging = null;
-        if (!updates.length) return;
-
-        void this.scene
-          ?.updateEmbeddedDocuments(
-            "Tile",
-            updates.map((u) => ({ _id: u.id, sort: u.sort })),
-            internal()
-          )
-          .then(() => this.render());
+        void this.#reorder(updates);
       });
     }
   };
@@ -583,8 +736,59 @@ function onCycleEffect(this: any, event: Event, target: HTMLElement) {
   void api.patch(doc, { effect: { id: next.id } })?.then(() => this.render());
 }
 
+/** Open the row's menu beside its button, or close it if it is already open. */
 function onRowMenu(this: any, _event: Event, target: HTMLElement) {
-  Hooks.call(`${MODULE_ID}.openStudio`, this.docFor(rowIdOf(target)));
+  const id = rowIdOf(target);
+  if (this.menu?.id === id) {
+    this.closeMenu();
+    this.render();
+    return;
+  }
+  const board = target.closest<HTMLElement>(".dp-board");
+  const at = board?.getBoundingClientRect();
+  const button = target.getBoundingClientRect();
+  this.menu = {
+    id,
+    top: at ? button.bottom - at.top : 0,
+    right: at ? at.right - button.right : 0,
+  };
+  this.render();
+}
+
+/** One verb from the row menu, then the menu closes. */
+async function onMenuAct(this: any, _event: Event, target: HTMLElement) {
+  const act = target.dataset.dpAct;
+  const doc = this.menu ? this.docFor(this.menu.id) : null;
+  this.closeMenu();
+  if (!doc || !act) {
+    this.render();
+    return;
+  }
+
+  switch (act) {
+    case "visibility":
+      await api.toggleVisibility(doc);
+      break;
+    case "show":
+      await api.showToAudience(doc);
+      break;
+    case "shape":
+      await api.toggleMode(doc);
+      break;
+    case "fit":
+      await api.fitToContent(doc);
+      break;
+    case "locate":
+      await api.locate(doc);
+      break;
+    case "studio":
+      Hooks.call(`${MODULE_ID}.openStudio`, doc);
+      break;
+    case "delete":
+      await deleteRows(this, [doc]);
+      return;
+  }
+  this.render();
 }
 
 function rowIdOf(target: HTMLElement): string {
@@ -639,6 +843,10 @@ function audienceFor(current: any, reveal: boolean) {
  */
 async function onBulkDelete(this: any) {
   const docs = this.selected.map((id: string) => this.docFor(id)).filter(Boolean);
+  await deleteRows(this, docs);
+}
+
+async function deleteRows(app: any, docs: any[]) {
   if (!docs.length) return;
 
   const DialogV2 = ns("applications.api.DialogV2");
@@ -654,14 +862,14 @@ async function onBulkDelete(this: any) {
   // N round trips, which for a dozen selected pins is a visible stagger on every client
   // and N separate undo entries.
   for (const doc of docs) await releaseAnchor(doc);
-  await this.scene?.deleteEmbeddedDocuments(
+  await app.scene?.deleteEmbeddedDocuments(
     "Tile",
     docs.map((doc: any) => doc.id),
     internal()
   );
 
-  this.selected = [];
-  this.render();
+  app.selected = app.selected.filter((id: string) => !docs.some((doc) => doc.id === id));
+  app.render();
 }
 
 function onPlace(this: any) {
