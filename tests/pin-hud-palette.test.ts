@@ -65,6 +65,17 @@ describe("the HUD audience palette", () => {
     expect(paletteButton("dp-hud-audience").getAttribute("aria-expanded")).toBe("true");
   });
 
+  it("fades in on the frame after it opens, and is simply open after a re-render", async () => {
+    await openAudiencePalette();
+    expect(palette("dp-hud-audience").classList.contains("dp-hud__palette--in")).toBe(false);
+    await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
+    expect(palette("dp-hud-audience").classList.contains("dp-hud__palette--in")).toBe(true);
+
+    // A chip click re-renders the HUD; the open palette must not blink.
+    await hud.render();
+    expect(palette("dp-hud-audience").classList.contains("dp-hud__palette--in")).toBe(true);
+  });
+
   it("STAYS open across the re-render a chip click causes", async () => {
     await openAudiencePalette();
     await hud.render();

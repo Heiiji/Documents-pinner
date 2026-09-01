@@ -21,8 +21,9 @@
  *
  * The mount point is DERIVED, never hardcoded: `#board`'s parent turned out to carry
  * no id in a real v14 world, so the overlay attaches as its sibling by reference. It
- * sits at `z-index: 90`, below core's HUD at 100, and passes pointer events through
- * except on the cards that opt in.
+ * sits at the canvas's own stacking level, immediately after `#board` — see
+ * `mountPoint` for why anything higher paints over the interface — and passes pointer
+ * events through except on the cards that opt in.
  */
 
 import { cv } from "../fvtt";

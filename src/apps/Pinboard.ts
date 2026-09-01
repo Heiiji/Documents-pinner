@@ -17,7 +17,6 @@
  *   ritual completes, all three glyphs light up" is one moment, not three.
  * - **Row order is reveal order**, hand-sortable and persisted, which quietly turns
  *   the list into a scene script.
- * - **Detachable**, so it can live on a second monitor for the whole session.
  */
 
 import { MODULE_ID } from "../const";

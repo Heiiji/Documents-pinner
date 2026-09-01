@@ -38,9 +38,9 @@
   overflow: visible;
   cursor: pointer;
   transition:
-    background-color 120ms ease,
-    opacity 120ms ease,
-    transform 120ms ease;
+    background-color var(--dp-dur-state, 120ms) var(--dp-ease-out, ease),
+    opacity var(--dp-dur-state, 120ms) var(--dp-ease-out, ease),
+    transform var(--dp-dur-state, 120ms) var(--dp-ease-out, ease);
 
   &:hover,
   &:focus-visible {

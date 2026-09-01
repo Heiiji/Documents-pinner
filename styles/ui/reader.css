@@ -25,8 +25,8 @@
   opacity: 0;
   filter: blur(6px);
   transition:
-    opacity 220ms ease-out,
-    filter 220ms ease-out;
+    opacity var(--dp-dur-reveal, 400ms) var(--dp-ease-resolve, ease-out),
+    filter var(--dp-dur-reveal, 400ms) var(--dp-ease-resolve, ease-out);
 
   &.dp-reader--in {
     opacity: 1;
@@ -52,7 +52,7 @@
   & .dp-card__sheet::after {
     content: "";
     opacity: 0;
-    transition: opacity 120ms ease-out;
+    transition: opacity var(--dp-dur-state, 120ms) var(--dp-ease-out, ease-out);
   }
 
   &[data-dp-more="true"] .dp-card__sheet::after {
@@ -88,7 +88,7 @@
  */
 .dp-peeking .dp-reader {
   opacity: 0.15;
-  transition: opacity 90ms linear;
+  transition: opacity var(--dp-dur-state, 120ms) linear;
 }
 
 /*

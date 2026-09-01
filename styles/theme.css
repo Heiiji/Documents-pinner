@@ -19,3 +19,53 @@
   --dp-accent: var(--color-warm-1, #c9ad6a);
   --dp-scrim: color-mix(in oklab, var(--dp-paper) 80%, transparent);
 }
+
+/*
+ * Motion tokens.
+ *
+ * Mirrored from `src/motion.ts` and kept equal by `tests/motion.test.ts`, so the canvas
+ * tier (which animates through CanvasAnimation and cannot read this file) and the DOM
+ * tier arrive on the same clock. Scoped to the windows AND the overlay: the overlay's
+ * children — props, the reader, the ghost, the tooltip — carry neither class. The level
+ * rule below outranks these by specificity, which is the order the cascade needs.
+ *
+ * Never referenced from `card.css`: that file is inlined into an isolated SVG document
+ * where these do not exist, and nothing inside a rasterised card moves anyway.
+ */
+.dp-scope,
+#documents-pinner-overlay {
+  --dp-dur-state: 120ms;
+  --dp-dur-enter: 200ms;
+  --dp-dur-exit: 140ms;
+  --dp-dur-reveal: 400ms;
+  --dp-dur-emphasis: 320ms;
+  --dp-ease-out: cubic-bezier(0.2, 0, 0, 1);
+  --dp-ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --dp-ease-resolve: cubic-bezier(0.37, 0, 0.63, 1);
+}
+
+/* A stated preference outranks every duration at once. The explicit `filter: none`
+   guards in prop.css and reader.css stay, so nothing is ever left soft. */
+@media (prefers-reduced-motion: reduce) {
+  .dp-scope,
+  #documents-pinner-overlay {
+    --dp-dur-state: 0ms;
+    --dp-dur-enter: 0ms;
+    --dp-dur-exit: 0ms;
+    --dp-dur-reveal: 0ms;
+    --dp-dur-emphasis: 0ms;
+  }
+}
+
+/*
+ * The effects level, which PropManager writes on the overlay once per LOD pass. At
+ * `reduced` and `off` the arrivals go — the canvas tier already skips its reveal there —
+ * while state feedback and exits keep theirs: a 120 ms ease on a hover is feedback, not
+ * an effect, and "reduced keeps each effect's look and drops only its animation" is
+ * about effects.
+ */
+#documents-pinner-overlay[data-dp-level="reduced"],
+#documents-pinner-overlay[data-dp-level="off"] {
+  --dp-dur-reveal: 0ms;
+  --dp-dur-enter: 0ms;
+}

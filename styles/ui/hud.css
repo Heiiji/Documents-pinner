@@ -61,8 +61,8 @@
   color: inherit;
   cursor: pointer;
   transition:
-    background-color 120ms ease,
-    border-color 120ms ease;
+    background-color var(--dp-dur-state, 120ms) var(--dp-ease-out, ease),
+    border-color var(--dp-dur-state, 120ms) var(--dp-ease-out, ease);
 
   &:hover,
   &:focus-visible {
@@ -96,8 +96,26 @@
   background: color-mix(in oklab, var(--color-bg-option, #1b1b23) 94%, transparent);
   box-shadow: 0 6px 18px rgb(0 0 0 / 45%);
 
+  /* Opening and closing both move. The `--in` class lands on the frame after `hidden`
+     is cleared, so the palette has a style to run from; on a re-render it is put back
+     synchronously, so a chip click never makes the open palette blink. Closing keeps
+     `hidden` as the state and lets `display` wait for the fade to finish. */
+  opacity: 0;
+  translate: 0 -0.25rem;
+  transition:
+    opacity var(--dp-dur-state, 120ms) var(--dp-ease-out, ease-out),
+    translate var(--dp-dur-state, 120ms) var(--dp-ease-out, ease-out),
+    display var(--dp-dur-state, 120ms) allow-discrete;
+
+  &.dp-hud__palette--in {
+    opacity: 1;
+    translate: 0 0;
+  }
+
   &[hidden] {
     display: none;
+    opacity: 0;
+    translate: 0 -0.25rem;
   }
 }
 

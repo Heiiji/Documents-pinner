@@ -303,6 +303,7 @@ export function definePinHUD(): any {
         );
         if (palette && button) {
           palette.hidden = false;
+          palette.classList.add("dp-hud__palette--in");
           button.setAttribute("aria-expanded", "true");
         } else {
           this.openPaletteId = null;
@@ -463,7 +464,10 @@ function onTogglePalette(this: any, _event: Event, target: HTMLElement) {
   const palette = root.querySelector<HTMLElement>(`#${CSS.escape(id)}`);
   const open = target.getAttribute("aria-expanded") === "true";
 
-  for (const other of root.querySelectorAll<HTMLElement>(".dp-hud__palette")) other.hidden = true;
+  for (const other of root.querySelectorAll<HTMLElement>(".dp-hud__palette")) {
+    other.hidden = true;
+    other.classList.remove("dp-hud__palette--in");
+  }
   for (const button of root.querySelectorAll<HTMLElement>("[aria-expanded]")) {
     button.setAttribute("aria-expanded", "false");
   }
@@ -473,6 +477,9 @@ function onTogglePalette(this: any, _event: Event, target: HTMLElement) {
 
   if (!open && palette) {
     palette.hidden = false;
+    // On the NEXT frame, so the palette has a style to transition from. `#restoreState`
+    // adds it synchronously instead, so a re-render never re-plays the opening.
+    requestAnimationFrame(() => palette.classList.add("dp-hud__palette--in"));
     target.setAttribute("aria-expanded", "true");
     palette.querySelector<HTMLElement>("button, input")?.focus();
   }

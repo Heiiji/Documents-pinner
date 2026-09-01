@@ -92,6 +92,7 @@ describe("localisation files", () => {
           "autoDegrade",
           "dropModifier",
           "placementLegend",
+          "logLevel",
           "defaultMode",
           "defaultAudience",
           "defaultOwnershipSync",

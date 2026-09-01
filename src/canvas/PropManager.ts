@@ -64,6 +64,7 @@ import { TextureCache, cacheKey } from "../render/TextureCache";
 import { currentLevel, sampleFrame, sampledFps } from "../effects/level";
 import { findPreset } from "../effects/preset-library";
 import { clearDomTier, setDomPropAlpha, syncDomTier, type DomPropEntry } from "./DomPropTier";
+import { overlay, write } from "../apps/OverlayRoot";
 
 const log = logger("props");
 
@@ -447,6 +448,20 @@ class Manager {
     this.#scheduleLod(0);
   }
 
+  /**
+   * Put the level on the overlay, so the DOM tier obeys the same rule the canvas tier
+   * applies to its reveal: the stylesheet zeroes its arrivals at `reduced` and `off`.
+   * Once per LOD pass and dirty-checked, so it costs one attribute read.
+   */
+  #publishLevel(): void {
+    const root = overlay();
+    if (!root || root.dataset.dpLevel === this.#level) return;
+    const level = this.#level;
+    write(root, () => {
+      root.dataset.dpLevel = level;
+    });
+  }
+
   #scheduleLod(delay: number): void {
     if (this.#lodTimer) window.clearTimeout(this.#lodTimer);
     this.#lodTimer = window.setTimeout(() => {
@@ -469,6 +484,7 @@ class Manager {
     // read, and `currentLevel` also builds a fresh `window.matchMedia` every call.
     this.#level = currentLevel();
     this.#autoDegrade = settings.get("autoDegrade");
+    this.#publishLevel();
 
     const matrix = stageMatrix();
     const viewport = visibleSceneRect(0);

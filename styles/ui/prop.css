@@ -24,8 +24,8 @@
   content-visibility: auto;
   /* The token fade and the peek arrive as an opacity write from PropManager. */
   transition:
-    opacity 120ms linear,
-    filter 260ms ease-out;
+    opacity var(--dp-dur-state, 120ms) linear,
+    filter var(--dp-dur-enter, 200ms) var(--dp-ease-out, ease-out);
 
   /* The reveal, matching the canvas tier's: a prop appearing instantly reads as a
      rendering glitch, the same prop resolving reads as something being revealed. */
@@ -48,7 +48,7 @@
 /* Peek: hold the key and every prop fades so the map underneath can be read. */
 .dp-peeking .dp-prop {
   opacity: 0.15 !important;
-  transition: opacity 90ms linear;
+  transition: opacity var(--dp-dur-state, 120ms) linear;
 }
 
 /*
@@ -76,12 +76,22 @@
   white-space: normal;
   pointer-events: none;
   box-shadow: 0 4px 14px rgb(0 0 0 / 50%);
+  /* One element for the whole session; showing and hiding is a class flip, so the exit
+     is the same node fading rather than a removal. */
   opacity: 0;
-  transition: opacity 120ms ease-out;
+  transition: opacity var(--dp-dur-exit, 140ms) var(--dp-ease-in, ease-in);
 }
 
 .dp-tooltip--in {
   opacity: 1;
+  transition-duration: var(--dp-dur-state, 120ms);
+  transition-timing-function: var(--dp-ease-out, ease-out);
+
+  /* The first show: a freshly mounted element has no earlier computed style to run
+     from, which is why the fade never used to play. */
+  @starting-style {
+    opacity: 0;
+  }
 }
 
 /*

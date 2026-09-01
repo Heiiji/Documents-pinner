@@ -1,9 +1,11 @@
 /*
  * The effect layers.
  *
- * These rules are inlined into the SVG the rasteriser draws AND applied live to the
- * focus reader, so a prop and its reader are the same object. Everything here is
- * either a paint-only property or a compositor-only animation; nothing triggers layout.
+ * Applied live to every DOM card — a prop, the reader, the ghost, the gallery swatches.
+ * Only `card.css` is inlined into the SVG the rasteriser draws; a baked effect reaches a
+ * texture through the custom properties the resolver writes on the card, not through
+ * this file. Everything here is either a paint-only property or a compositor-only
+ * animation; nothing triggers layout.
  *
  * Two prohibitions, both from DESIGN.md §6.2, both frame-rate bugs if broken:
  *

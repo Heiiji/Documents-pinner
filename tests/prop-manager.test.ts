@@ -164,6 +164,13 @@ describe("the texture cache key and the type size", () => {
   });
 });
 
+describe("the effects level on the overlay", () => {
+  it("is written once per LOD pass, so the DOM tier obeys the same level as the canvas tier", () => {
+    const root = document.getElementById("documents-pinner-overlay");
+    expect(root?.dataset.dpLevel).toBe("full");
+  });
+});
+
 describe("invalidate", () => {
   it("restores core's own texture BEFORE destroying ours", () => {
     const mesh = tiles[0].object.mesh;
