@@ -354,5 +354,8 @@
   "DP.whatsnew.v0_2.grab": "Cliquez une épingle sur le calque Notes pour la saisir — plus besoin de passer d'abord au calque Tuiles.",
   "DP.whatsnew.v0_2.menu": "Le bouton … du tableau de bord est un vrai menu, les lignes se réordonnent avec Alt+flèches, et un filtre liste les épingles que quelqu'un voit sans pouvoir les ouvrir.",
   "DP.whatsnew.v0_2.reader": "Ouvrir un accessoire rapproche la vue quand le texte est trop petit pour être lu ; un clic sur l'accessoire en cours de lecture le referme.",
-  "DP.whatsnew.v0_2.resize": "Un accessoire est une fenêtre sur son document : redimensionnez-le pour montrer plus ou moins de la page à la même taille de texte. Le texte qui ne tient pas s'estompe en bas."
+  "DP.whatsnew.v0_2.resize": "Un accessoire est une fenêtre sur son document : redimensionnez-le pour montrer plus ou moins de la page à la même taille de texte. Le texte qui ne tient pas s'estompe en bas.",
+  "DP.whatsnew.v0_3.ar": "Trois effets de réalité augmentée — Relevé projeté, Balisé et Perte de signal — et le Studio d'effets sait désormais modifier les couleurs et les formes, plus seulement les nombres.",
+  "DP.whatsnew.v0_3.firefox": "Firefox est un navigateur pris en charge, mesuré et non supposé. Plusieurs animations qui ne fonctionnaient que par accident sont désormais déclarées dans la feuille de style.",
+  "DP.whatsnew.v0_3.source": "Le Studio d'épingle peut changer le document affiché par une épingle, et la page choisie. L'épingle garde sa taille, son effet et son audience."
 }

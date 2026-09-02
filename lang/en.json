@@ -354,5 +354,8 @@
   "DP.whatsnew.v0_2.grab": "Click a pin on the Notes layer to grab it — no more switching to the Tiles layer first.",
   "DP.whatsnew.v0_2.menu": "The Pinboard's … button is a real menu, rows can be reordered with Alt+arrows, and a filter lists the pins someone can see but not open.",
   "DP.whatsnew.v0_2.reader": "Opening a prop brings the view in when the text is too small to read; a click on the prop you are reading closes it.",
-  "DP.whatsnew.v0_2.resize": "A prop is a window onto its document: resize it to show more or less of the page at the same text size. Text that does not fit fades out at the bottom."
+  "DP.whatsnew.v0_2.resize": "A prop is a window onto its document: resize it to show more or less of the page at the same text size. Text that does not fit fades out at the bottom.",
+  "DP.whatsnew.v0_3.ar": "Three augmented-reality effects — Projected Readout, Tagged and Signal Loss — and the Preset Studio can now edit colours and shapes, not only numbers.",
+  "DP.whatsnew.v0_3.firefox": "Firefox is a supported browser, measured rather than assumed. Several animations that only worked by accident now say so in the stylesheet.",
+  "DP.whatsnew.v0_3.source": "Pin Studio can change which document a pin shows, and which page of it. The pin keeps its size, its effect and its audience."
 }

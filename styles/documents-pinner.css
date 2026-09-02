@@ -7,9 +7,15 @@
  * and Foundry's own unlayered styles beat layered styles by definition, so this module
  * structurally CANNOT outrank core UI, even with a careless selector.
  *
- * Chromium 144 (Foundry v14 / Electron 40) supports @layer, @import ... layer(),
- * native nesting, @property, :has(), color-mix() and @container natively, so there is
- * no build step and no preprocessor anywhere in the CSS pipeline.
+ * No build step and no preprocessor anywhere in the CSS pipeline. The browsers this
+ * needs are stated in the README and held by tests/css-baseline.test.ts: Chrome 120 and
+ * Firefox 129, which are unprefixed mask-image and @starting-style respectively.
+ *
+ * NOTE the failure mode of the line below, because it is not the obvious one: if an
+ * engine cannot parse `layer()`, the WHOLE @import is invalid and NO module CSS loads at
+ * all. The symptom is an entirely unstyled module, not a cascade regression. There is no
+ * fallback to write — you cannot express "into this layer, or unlayered if layers are
+ * unavailable" without duplicating every import and double-applying where both work.
  */
 @layer dp.base, dp.pin, dp.fx, dp.ui, dp.theme;
 

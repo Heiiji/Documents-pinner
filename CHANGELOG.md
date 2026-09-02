@@ -9,6 +9,86 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Nothing yet.
 
+## [0.3.0] — unreleased
+
+Three asks in one release: choose which page a pin shows, run the module in Firefox, and
+an augmented-reality effect family. The pin payload is version 4 and the preset payload is
+version 2; both migrations are invisible on any map.
+
+### Added
+
+- **Choose which page of a journal a pin shows, and which page of a PDF.** The field for
+  it has existed since v1 and nothing ever wrote it, so a pinned journal always drew its
+  first page and a multi-page PDF always drew page 1. Both are now in the Pin Studio's
+  Content tab, and opening the pin lands on the same page. Choosing a page that is a PDF
+  also moves that pin onto the canvas tier, where it is lit, fogged and occluded like the
+  map itself — that part needed no new code at all.
+- **Change which document a pin shows, without losing the pin.** Re-pointing meant
+  unpinning and re-adopting, which reset the mode, the geometry, the effect, the
+  interaction and the audience. "Change document…" keeps all of it and moves only the
+  source and the access it granted, releasing the old document's grant as it goes.
+- **An augmented-reality effect family: Projected Readout, Tagged and Signal Loss.** The
+  first draws the document as light on a new translucent Projection stock; the second
+  leaves the paper as paper and marks it, the way a visor would; the third is the same
+  overlay degrading. What makes them subtle is one rule applied three ways — static
+  geometry plus exactly one slow-moving thing, and no border at all, so the panel's extent
+  is implied by corner marks and a grid rather than drawn.
+- **The Preset Studio can edit colours and shapes**, not only numbers. It had no control
+  for any colour or any enum, so the edge shape and the frame style had been uneditable
+  since they were added and a duplicated preset could not be recoloured.
+- **A stated browser baseline, and a test that holds it.** Chrome 120 and Firefox 129 —
+  ESR 140 yes, ESR 128 no. `tests/css-baseline.test.ts` fails when a stylesheet reaches
+  past it, and also when the effect system emits a custom property or a data attribute
+  that no rule reads.
+
+### Fixed
+
+- **Three selectors were Sass, not CSS.** `&--left`, `&--right` and `&--missing` are
+  parent concatenation, which native nesting does not have, so the rules were invalid and
+  dropped — in every browser, since the day they were written. Neither HUD column had a
+  grid area; the layout worked only because the name between them is placed explicitly.
+  The Pinboard's missing-thumbnail placeholder was never centred.
+- **The scanlines were invisible on three shipped presets.** The texture stack composited
+  with the tint's blend mode, and every layer in it is dark: black under `screen` is the
+  identity operation, so CRT Scanlines, Holographic Frame and Glitch lost their scanlines
+  on the HTML tier while a PDF kept them. One preset, two tiers, two different pictures.
+- **Coarse-tier props kept animating.** The rule that stops motion at a distance matched
+  the card and not its pseudo-elements, where the scanline roll and the glow pulse
+  actually live — so they ran on in exactly the size band where a scene has the most
+  props. The reduced-motion net had the same hole, for the same reason.
+- **A reduced-motion client saw the full animation until the first level pass.** The
+  stylesheet's own guard was a custom property that no rule anywhere read, while two
+  comments described it as the gate every animation runs through. There is now a real
+  `prefers-reduced-motion` media query.
+- **The reader's settle and the HUD palette's fade depended on when the browser happened
+  to flush style.** Both were primed by a single `requestAnimationFrame`, which is not a
+  specified moment: the palette animated only because the `focus()` call on the next line
+  forced a recalculation. Both now declare their starting style.
+- **A PDF prop's inert controls were dimmed by CSS and disabled by nothing.**
+  `pointer-events: none` does not stop a keyboard reaching a slider, in any engine.
+- **Renaming the page a pin had chosen redrew nothing**, and opening a pin whose chosen
+  page had been deleted asked the sheet for a page that was not there.
+- **A re-sourced pin could leave a player holding access forever.** The ledger sweep's
+  only test was "the anchor no longer exists", which was the same question as "this grant
+  is stale" only while a pin's source could not change.
+
+### Changed
+
+- **Pin payload version 4.** `source.pageId` is strictly a journal page's id and
+  `source.pdfPage` is the page of a PDF: one field held both meanings, and "page 4 of the
+  journal, and that page is a PDF, at its page 7" is a sentence it could not hold. A
+  number found in the old field is folded into the new one when the payload is READ, not
+  when it is migrated, so a player's client behaves correctly before the sweep reaches it.
+- **Preset payload version 2**, for the overlay parameters. Every preset written before it
+  renders byte-identically, and a preset from a newer version still degrades rather than
+  being rejected.
+- **A preset may name the paper stock it is drawn on**, and applying it brings that stock.
+  Projected Readout on parchment is a tinted sheet of paper rather than a projection. The
+  value is checked against the known stocks, so a preset pasted in from a stranger can at
+  worst print a legible card on a different paper.
+- **Firefox is a supported browser and says so.** Measured by hand in Firefox 155 against
+  a live world and a local harness, not reasoned about.
+
 ## [0.2.2] — unreleased
 
 ### Fixed

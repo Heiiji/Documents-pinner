@@ -7,9 +7,10 @@ Per-pin visibility the GM changes in one click. Foundry VTT **v14+**.
 
 > **Beta.** Journal props are drawn as an HTML layer over the canvas, not into it, so they
 > are **not lit, fogged or occluded** and do not sort behind tokens. That was the plan, and
-> it is not possible: an SVG containing a `foreignObject` taints the canvas in every
-> current browser, so the texture upload is refused. Verified on Chromium 144, not just
-> Safari — see [`docs/DESIGN.md`](docs/DESIGN.md) A10. **Pinned PDFs are the exception**
+> it was not possible: an SVG containing a `foreignObject` tainted the canvas in every
+> browser measured, so the texture upload was refused. Verified on Chromium 144, not just
+> Safari — see [`docs/DESIGN.md`](docs/DESIGN.md) A10, and A21 for a measurement that may
+> reopen it. **Pinned PDFs are the exception**
 > and *are* drawn into the scene. Keep a backup.
 
 *Version française plus bas.*
@@ -25,6 +26,22 @@ https://github.com/Heiiji/Documents-pinner/releases/latest/download/module.json
 ```
 
 Enable it in **Manage Modules**. Nothing else to configure.
+
+## Browsers
+
+Foundry's desktop app is Chromium 144, so nothing here constrains it. In a browser this
+module needs **Chrome or Edge 120+, or Firefox 129+** — Firefox ESR 140 yes, ESR 128 no.
+
+Those two numbers are the newest CSS features the module actually uses: unprefixed
+`mask-image`, which is what a torn or burnt edge is made of, and `@starting-style`, which
+is what makes the reader settle rather than appear. `tests/css-baseline.test.ts` fails if a
+stylesheet ever reaches past them, so the claim cannot quietly go stale.
+
+**Firefox is checked by hand each release** against a live world and against
+`tests/harness/effects.html`, a page that mounts every effect under the real stylesheet in
+two engines side by side. Safari is deliberately not claimed: nobody has measured it since
+the finding in [`docs/DESIGN.md`](docs/DESIGN.md) A17, and stating a number nobody has run
+would be worse than saying nothing.
 
 ## Use
 
@@ -110,19 +127,25 @@ If you need real secrecy, keep the document out of the world until you want it s
 
 1. Video renders as a single frame.
 2. A pinned **PDF** renders its page, and is the one prop type drawn *into* the scene —
-   so it is lit, fogged, occluded and behind tokens, unlike a journal page. Multi-page
-   PDFs show page 1.
-3. Images referenced by a journal page are inlined; anything the module cannot fetch is
+   so it is lit, fogged, occluded and behind tokens, unlike a journal page. Which page it
+   shows is set in Pin Studio.
+3. A pin on a **whole journal whose first page is a PDF** shows a placeholder rather than
+   the page: the module asks the resolved source's type, and that is the journal. Choose
+   the page explicitly in Pin Studio and it is drawn.
+4. Images referenced by a journal page are inlined; anything the module cannot fetch is
    dropped rather than left broken.
-4. **Props are not lit, fogged, occluded, or sorted behind tokens.** Drawing them into the
-   scene needs an HTML-to-texture step that every current browser refuses — an SVG with a
-   `foreignObject` taints the canvas, so the WebGL upload throws. The module detects this
-   at startup and draws props as an HTML layer over the canvas instead.
-5. Deleting a pinned document leaves the pin showing a placeholder — never auto-deleted.
-6. Compendium ownership is pack-wide, so there is no per-user grant for a compendium
+5. **Props are not lit, fogged, occluded, or sorted behind tokens.** Drawing them into the
+   scene needs an HTML-to-texture step: an SVG with a `foreignObject`, which tainted the
+   canvas in every browser measured, so the WebGL upload threw. The module probes for this
+   at startup and draws props as an HTML layer over the canvas instead. *That probe now
+   passes on current Chrome and Firefox* — see [`docs/DESIGN.md`](docs/DESIGN.md) A21 — so
+   the tier may be reachable again; nothing has been changed on that until the whole
+   pipeline is measured in a real world, not just the probe.
+6. Deleting a pinned document leaves the pin showing a placeholder — never auto-deleted.
+7. Compendium ownership is pack-wide, so there is no per-user grant for a compendium
    source. The pin still reveals its content.
-7. Pins are real Tiles and appear in `scene.tiles` to other modules, by design.
-8. *Fit to content* cannot measure a bare image pin — an image has no text to measure —
+8. Pins are real Tiles and appear in `scene.tiles` to other modules, by design.
+9. *Fit to content* cannot measure a bare image pin — an image has no text to measure —
    so it leaves that one's height alone and says so.
 
 ## Development
@@ -153,11 +176,12 @@ Une visibilité que le MJ change en un clic. Foundry VTT **v14+**.
 
 > **Bêta.** Les accessoires issus d'un journal sont dessinés en HTML par-dessus le canevas,
 > pas dedans : ils ne sont donc **ni éclairés, ni embrumés, ni occultés**, et ne passent pas
-> derrière les pions. C'était le plan, et c'est impossible : un SVG contenant un
-> `foreignObject` « contamine » le canevas dans tous les navigateurs actuels, si bien que
-> l'envoi de la texture est refusé. Vérifié sur Chromium 144, pas seulement Safari — voir
-> [`docs/DESIGN.md`](docs/DESIGN.md) A10. **Les PDF épinglés font exception** et sont bien
-> dessinés dans la scène. Gardez une sauvegarde.
+> derrière les pions. C'était le plan, et ce ne l'était pas : un SVG contenant un
+> `foreignObject` « contaminait » le canevas dans tous les navigateurs mesurés, si bien que
+> l'envoi de la texture était refusé. Vérifié sur Chromium 144, pas seulement Safari — voir
+> [`docs/DESIGN.md`](docs/DESIGN.md) A10, et A21 pour une mesure qui pourrait rouvrir la
+> voie. **Les PDF épinglés font exception** et sont bien dessinés dans la scène. Gardez une
+> sauvegarde.
 
 ## Installation
 
@@ -168,6 +192,25 @@ https://github.com/Heiiji/Documents-pinner/releases/latest/download/module.json
 ```
 
 Activez-le dans **Gérer les modules**. Rien d'autre à configurer.
+
+## Navigateurs
+
+L'application de bureau de Foundry est Chromium 144 : rien ici ne la contraint. Dans un
+navigateur, ce module demande **Chrome ou Edge 120+, ou Firefox 129+** — Firefox ESR 140
+oui, ESR 128 non.
+
+Ces deux nombres sont les fonctionnalités CSS les plus récentes que le module utilise
+réellement : `mask-image` sans préfixe, dont sont faits les bords déchirés ou brûlés, et
+`@starting-style`, qui fait que la liseuse se pose au lieu d'apparaître.
+`tests/css-baseline.test.ts` échoue si une feuille de style dépasse ces versions, pour que
+l'affirmation ne devienne pas silencieusement fausse.
+
+**Firefox est vérifié à la main à chaque version**, sur un monde réel et sur
+`tests/harness/effects.html`, une page qui monte tous les effets sous la vraie feuille de
+style dans les deux moteurs, côte à côte. Safari n'est délibérément pas revendiqué :
+personne ne l'a mesuré depuis la découverte décrite dans
+[`docs/DESIGN.md`](docs/DESIGN.md) A17, et annoncer un nombre que personne n'a essayé
+serait pire que de ne rien dire.
 
 ## Utilisation
 
@@ -262,21 +305,27 @@ voulu.
 1. Une vidéo n'affiche qu'une seule image.
 2. Un **PDF** épinglé affiche sa page, et c'est le seul type d'accessoire dessiné *dans*
    la scène : il est donc éclairé, embrumé, occulté et passe derrière les pions,
-   contrairement à une page de journal. Les PDF multipages affichent la page 1.
-3. Les images référencées par une page de journal sont intégrées ; ce que le module ne peut
+   contrairement à une page de journal. La page affichée se choisit dans le Studio.
+3. Une épingle posée sur un **journal entier dont la première page est un PDF** affiche un
+   substitut plutôt que la page : le module interroge le type de la source résolue, et
+   c'est le journal. Choisissez la page explicitement dans le Studio et elle est dessinée.
+4. Les images référencées par une page de journal sont intégrées ; ce que le module ne peut
    pas récupérer est retiré plutôt que laissé cassé.
-4. **Les accessoires ne sont ni éclairés, ni embrumés, ni occultés, ni placés derrière les
-   pions.** Les dessiner dans la scène exige une conversion HTML → texture que tous les
-   navigateurs actuels refusent : un SVG avec `foreignObject` contamine le canevas, et
-   l'envoi WebGL échoue. Le module le détecte au démarrage et dessine les accessoires en
-   HTML par-dessus le canevas.
-5. Supprimer un document épinglé laisse l'épingle sur un substitut — jamais supprimée
+5. **Les accessoires ne sont ni éclairés, ni embrumés, ni occultés, ni placés derrière les
+   pions.** Les dessiner dans la scène exige une conversion HTML → texture : un SVG avec
+   `foreignObject`, qui contaminait le canevas dans tous les navigateurs mesurés, si bien
+   que l'envoi WebGL échouait. Le module teste cela au démarrage et dessine les accessoires
+   en HTML par-dessus le canevas. *Ce test réussit désormais sur Chrome et Firefox
+   actuels* — voir [`docs/DESIGN.md`](docs/DESIGN.md) A21 — la voie est donc peut-être
+   rouverte ; rien n'a été changé tant que toute la chaîne n'aura pas été mesurée dans un
+   vrai monde, et pas seulement le test.
+6. Supprimer un document épinglé laisse l'épingle sur un substitut — jamais supprimée
    automatiquement.
-6. Les permissions d'un compendium valent pour tout le pack : pas d'octroi par joueur. Le
+7. Les permissions d'un compendium valent pour tout le pack : pas d'octroi par joueur. Le
    contenu est quand même révélé.
-7. Les épingles sont de vraies tuiles et apparaissent dans `scene.tiles` aux autres modules,
+8. Les épingles sont de vraies tuiles et apparaissent dans `scene.tiles` aux autres modules,
    par conception.
-8. *Ajuster au contenu* ne peut pas mesurer une épingle d'image nue — une image n'a pas
+9. *Ajuster au contenu* ne peut pas mesurer une épingle d'image nue — une image n'a pas
    de texte à mesurer — et laisse alors sa hauteur inchangée en le disant.
 
 ## Développement

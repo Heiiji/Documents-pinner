@@ -2,7 +2,7 @@
 
 **Status:** Beta. §11 criteria 2, 3 and 4 are UNREACHABLE — see amendment A10
 **Target:** Foundry VTT v14, `compatibility: { minimum: "14", verified: "14.365" }`
-**Last updated:** 2026-09-01
+**Last updated:** 2026-09-02
 
 ---
 
@@ -242,8 +242,11 @@ collapses to a blank card under `reduced`.
   immature — no stable release exists for any Foundry generation. esbuild strips types
   without checking them, so `npm run typecheck` is a separate, advisory CI job. A types
   regression can never block a release.
-- **Plain CSS, no preprocessor.** Chromium 144 supports `@layer`, `@import … layer()`,
-  native nesting, `@property`, `:has()`, `color-mix()` and `@container` natively.
+- **Plain CSS, no preprocessor.** The stated baseline is Chrome 120 and Firefox 129, held
+  by `tests/css-baseline.test.ts` — the two numbers being unprefixed `mask-image` and
+  `@starting-style`, which are the newest things the stylesheets actually use. Registering
+  a property with `@property` gives it a type and an initial value; nothing currently
+  interpolates one, so the cross-fade §7 once described here does not exist yet. See A21.
 - **Pure/impure split.** Pure modules never touch a Foundry global, at import time or
   inside a function body, so they are unit-testable under Node. Validators return i18n
   **keys**, never prose.
@@ -305,6 +308,12 @@ whether a public HTML sanitiser exists (assume not — strip explicitly).
 11. Scene padding changes do not move props — core does not reposition placeables either.
 12. A future PIXI 8 migration requires rewriting all GLSL. Shaders are isolated under
     `src/effects/shaders/`, and every preset has a bake or CSS rendition that survives.
+13. A pin on a whole journal whose FIRST page is a PDF shows a placeholder card rather
+    than the page. `pdfSourceOf` asks the resolved source's type and that is the entry;
+    making the null default fall through would desync four call sites that agree by
+    construction today — `isPdfPin`, `PropManager.drawsAsDom`, `migrations.drawnAsCard`
+    and `resolveCard` all read `resolveSourceSync`. Choosing the page explicitly is one
+    click and produces exactly the right result.
 
 ---
 
@@ -1099,3 +1108,102 @@ core's ring and grip on itself, in the rectangle core now shares with it; the ca
 pointer-transparent, so the press still goes through to core's handle. What core still
 owns is unchanged from A19: the drag and the resize are core's; this module only makes
 sure the paper is where core thinks the tile is.
+
+### A21 — Firefox was never on the list, and mostly did not need to be (2026-09-02)
+
+§8 justifies having no build step by naming Chromium 144 and listing the features it
+supports — one of which, `@container`, is used nowhere in the module. `vite.config.ts`
+targets `chrome144`. `grep -i firefox` over the repository returned nothing. So the
+module had no stated browser support at all, and the nearest thing to one was wrong.
+
+**What was measured.** Firefox 155.0 and Chrome 152, on the same machine, against a
+harness that mounts every shipped preset under the real stylesheet inside a real
+scene-transformed overlay (`tests/harness/effects.html`).
+
+| | Firefox 155 | Chrome 152 |
+|---|---|---|
+| `:has()`, `color-mix`, `allow-discrete`, `content-visibility`, `mask-image` | all supported | all supported |
+| `@property` honoured (measured, not inferred) | yes | yes |
+| cascade: an unlayered rule beats the module's | yes | yes |
+| glow, resolved from `color-mix` in a `box-shadow` | `oklab(0.670948 0.0506901 -0.176063 / 0.55)` | `oklab(0.670934 0.0507187 -0.176046 / 0.55)` |
+| torn mask, opaque pixels per row (40 rows of 400) | `0,16,374,371,373,…,362,19` | `0,21,373,371,372,…,364,21` |
+| generated `feTurbulence` SVG taints a canvas | no | no |
+
+The two rows that mattered most both came out clean. The glow's `color-mix` with a
+`calc()` percentage inside a `box-shadow` colour — the shakiest construct in the
+stylesheet — resolves to the same colour in both engines to four decimal places. And the
+`feDisplacementMap` edge mask, ranked the likeliest real difference, tracks within about
+one per cent per row: the same displacement field, differing only in antialiasing.
+
+**So the support question was a footnote, and four of its rows were wrong.** The real
+baseline is Chrome **120** and Firefox **129** — and the Chromium number is not
+`@starting-style` as assumed but unprefixed `mask-image`, which is what a torn edge is
+made of. `tests/css-baseline.test.ts` now holds both, and fails on any construct nobody
+has priced.
+
+**What the audit actually found was five Chromium bugs.** Three selectors were Sass
+(`&--left`, `&--right`, `&--missing`) and had never applied in any engine — the HUD's
+column layout worked only because the element between them is placed explicitly.
+`--dp-motion` was read by no rule while three separate comments described it as the gate
+every animation runs through, and the pure-CSS reduced-motion guard it stood for did not
+exist. A PDF's inert controls were disabled by `pointer-events: none`, which no engine
+applies to a keyboard. And the reader's settle and the HUD palette's fade were primed by a
+single `requestAnimationFrame`, which is not a specified moment: the palette animated only
+because the `focus()` call on the next line forced a style flush.
+
+**The failure modes are worse than the feature list suggests**, and that is the part worth
+carrying forward. `@import … layer()` failing to parse invalidates the whole `@import`, so
+the symptom is *no module CSS at all*, not a cascade regression. A `transition` shorthand
+is invalidated whole by one component the engine cannot read, so `allow-discrete` was
+taking the opacity and the translate down with it. A missing `:has()` did not merely undim
+the PDF controls, it re-offered them.
+
+**One finding is left open, deliberately.** The `foreignObject` probe — the same one
+`Rasterizer.probeRasterisation` runs — **passed in both engines**: the canvas drew and read
+back clean. A10 measured the opposite on Chromium 144 and concluded "every current
+browser". Nothing has been changed on the strength of it, and it must not be: this was an
+8×8 probe at `file://`, and the real path also uploads through `texImage2D` inside PIXI's
+own loop, where A17 showed that *where* an exception is thrown decides what it costs. What
+it justifies is re-running the real pipeline in a real world — not switching the tier.
+
+**The pattern.** A10 said there is no substitute for putting the thing on a screen. A21
+says the second screen is worth as much as the first, and that most of what it shows you is
+not about the second engine at all.
+
+### A22 — A field that means two things is a field neither reader can trust (2026-09-02)
+
+`source.pageId` was a `JournalEntryPage` id to `resolveSource` and a one-based PDF page to
+`ContentResolver.pageOf`. The overload survived a year because **nothing ever wrote the
+field**: every creation site hardcoded null, so a pinned journal always drew its first page
+and a multi-page PDF always drew page 1, and no reader ever disagreed with another. The
+moment a GM could set it, "page 4 of the Handouts journal, and that page is a PDF, show its
+page 7" became a sentence one field cannot hold.
+
+The fix is a split, and the placement of the legacy fold is the load-bearing decision: it
+lives in the **normaliser**, not the migration. This is A18's rule a second time — an
+unmigrated payload on a player's client must already behave as it will after — and the cost
+of getting it wrong is specific. In the migration, a player who loaded before the primary
+GM's sweep would read `pageId: "7"`, miss on `pages.get("7")`, fall back to the entry and
+draw page 1, while the GM saw page 7. A Foundry id is sixteen alphanumerics, so a
+one-to-five-digit guard can never eat a real one.
+
+**The new rule: a verb that RESETS is not the same verb as one that REDIRECTS.** The
+picker's `adopt` path builds a fresh `defaultPin()`, and its name says so truthfully.
+Wiring "change this pin's document" to it would have wiped the per-player audience — the
+one thing §1 says the module exists to control — and silently un-revealed a pin mid-session,
+through a code path doing exactly what it was named for. `retarget` moves the source and
+the ownership grant that follows it, and nothing else.
+
+Writing it exposed a repair `reconcile` could not make. Its orphan test was "the anchor no
+longer exists", which was the same question as "this grant is stale" **only while a pin's
+source was immutable**. A retargeted anchor is alive and points elsewhere: it passes the
+liveness test, and the old document stays granted to a player forever with no pin anywhere
+naming it. That fault class was unreachable before this verb existed, which is why it had
+never been looked for — and it is the reason the repair ships in the same commit as the
+verb rather than after it.
+
+It also came within one line of a deadlock that nothing would have reported.
+`PinStore.enqueue` registers a tracked promise derived from the task it is about to run, so
+a task that enqueues on the same anchor id awaits its own completion: no error, no timeout,
+the button simply never does anything. Only a test that puts work on the queue *first* can
+see it, and there is now one.
