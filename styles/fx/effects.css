@@ -292,6 +292,18 @@
   position: absolute;
   inset: 0;
   background-repeat: no-repeat;
+  /*
+   * The halo is what makes a mark legible on ANY stock, and it is not decoration.
+   *
+   * An overlay is hairlines in one colour, and one colour cannot read on both cream and
+   * slate: measured in the harness, Tagged's mint bracket was plainly visible on the dark
+   * stock and completely invisible on the parchment it is DESIGNED for — the preset whose
+   * whole idea is that the paper stays paper. A dark drop-shadow outlines the bright line
+   * on a light ground and disappears into a dark one, which is how a real projected mark
+   * stays readable over anything. Sized from the hairline, so it scales with the only
+   * parameter a preset has here.
+   */
+  filter: drop-shadow(0 0 calc(var(--dp-hud-w) * 1.5) rgb(0 0 0 / 60%));
 }
 
 .dp-card[data-dp-hud-marks="brackets"] .dp-card__hud::after {

@@ -225,8 +225,14 @@ const presets: DpPreset[] = [
       tint: { color: "#8ef4d4", amount: 0.05, blend: "screen" },
       glow: { color: "#8ef4d4", radius: 10, opacity: 0.18, pulseHz: 0 },
       hud: {
-        color: "#8ef4d4",
-        opacity: 0.65,
+        // NOT the mint of the tint and the glow, and this was measured rather than
+        // chosen: a pale mint hairline on cream parchment has almost no luminance
+        // difference from the paper, so on the stock this preset is DESIGNED for the
+        // bracket was invisible while being perfectly clear on slate. A mid-luminance
+        // teal is darker than parchment and lighter than slate, so it reads on both —
+        // which is what a mark projected onto a physical object has to do.
+        color: "#1f9c86",
+        opacity: 0.75,
         // One bracket, a rule along the top edge and a locator dot: the vocabulary of a
         // label rather than of a frame.
         marks: "callout",
@@ -260,8 +266,11 @@ const presets: DpPreset[] = [
       flicker: { amount: 0.14, hz: 2 },
       jitter: { amount: 1.5, hz: 5 },
       hud: {
-        color: "#6fd7ff",
-        opacity: 0.45,
+        // Mid-luminance for the same reason as Tagged, while the tint, glow and fringe
+        // keep the pale cyan that is this preset's identity. `hud.color` is its own
+        // field precisely so the overlay can be legible without recolouring the effect.
+        color: "#2f9fd0",
+        opacity: 0.6,
         // Every parameter says the same thing. The brackets have decayed to four
         // unconnected squares, the grid has dropped out to its intersections, and the
         // scan is hunting rather than idling.

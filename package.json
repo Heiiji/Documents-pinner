@@ -12,7 +12,8 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src tests",
-    "format": "prettier --write \"{src,tests}/**/*.{ts,js}\" \"styles/**/*.css\""
+    "format": "prettier --write \"{src,tests}/**/*.{ts,js}\" \"styles/**/*.css\"",
+    "harness": "vite-node scripts/build-harness.mts"
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",
