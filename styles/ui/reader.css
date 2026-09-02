@@ -35,6 +35,21 @@
     opacity: 1;
     filter: none;
     scale: 1;
+
+    /*
+     * The settle, declared rather than arranged.
+     *
+     * The reader is appended and the class added in the same task, one rAF apart, and
+     * whether a before-change style exists at that moment is unspecified. It happened to
+     * work; a browser is allowed to have skipped the transition entirely and simply shown
+     * a sharp, opaque reader. Now the starting point is declared, and the rAF is only the
+     * path for an engine older than `@starting-style`.
+     */
+    @starting-style {
+      opacity: 0;
+      filter: blur(6px);
+      scale: 0.98;
+    }
   }
 
   /* The exit: the opening in reverse, shorter, over the prop that has already been

@@ -60,7 +60,30 @@ function field(labelKey: string, control: string, hintKey?: string): string {
   );
 }
 
-function select(name: string, value: string, options: { value: string; label: string }[]): string {
+/**
+ * The Appearance controls a PDF prop cannot honour.
+ *
+ * They were dimmed by a `:has()` rule carrying `pointer-events: none`, which stops a
+ * mouse and not a keyboard — in ANY engine — so a GM tabbing through the tab could still
+ * move a slider that would do nothing. The stylesheet keeps the dimming as presentation;
+ * the markup carries the state. A15's rule, applied to a browser rather than a feature.
+ */
+const PDF_INERT = new Set([
+  "display.paper",
+  "display.typeSize",
+  "display.margin",
+  "effect.speed",
+  "effect.motion",
+]);
+
+const inert = (name: string, pdf: boolean) => (pdf && PDF_INERT.has(name) ? " disabled" : "");
+
+function select(
+  name: string,
+  value: string,
+  options: { value: string; label: string }[],
+  pdf = false
+): string {
   const items = options
     .map(
       (o) =>
@@ -68,17 +91,17 @@ function select(name: string, value: string, options: { value: string; label: st
         `${escapeHtml(o.label)}</option>`
     )
     .join("");
-  return `<select name="${escapeAttr(name)}">${items}</select>`;
+  return `<select name="${escapeAttr(name)}"${inert(name, pdf)}>${items}</select>`;
 }
 
 function checkbox(name: string, checked: boolean): string {
   return `<input type="checkbox" name="${escapeAttr(name)}"${checked ? " checked" : ""}>`;
 }
 
-function range(name: string, value: number, min = 0, max = 1, step = 0.05): string {
+function range(name: string, value: number, min = 0, max = 1, step = 0.05, pdf = false): string {
   return (
     `<input type="range" name="${escapeAttr(name)}" min="${min}" max="${max}" step="${step}"` +
-    ` value="${value}"><output>${Math.round(value * 100) / 100}</output>`
+    ` value="${value}"${inert(name, pdf)}><output>${Math.round(value * 100) / 100}</output>`
   );
 }
 
@@ -260,17 +283,18 @@ function appearanceTab(doc: any, pin: DpPinFlags): string {
       select(
         "display.paper",
         pin.display.paper,
-        Object.keys(PAPERS).map((id) => ({ value: id, label: t(`DP.paper.${id}`) }))
+        Object.keys(PAPERS).map((id) => ({ value: id, label: t(`DP.paper.${id}`) })),
+        pdf
       )
     ) +
     field(
       "DP.studio.typeSize",
-      range("display.typeSize", round2(metrics.fontPx), 6, 72, 0.5),
+      range("display.typeSize", round2(metrics.fontPx), 6, 72, 0.5, pdf),
       "DP.studio.typeSizeHint"
     ) +
     field(
       "DP.studio.margin",
-      range("display.margin", round2(marginEm), 0, 6, 0.1),
+      range("display.margin", round2(marginEm), 0, 6, 0.1, pdf),
       "DP.studio.marginHint"
     ) +
     `<div class="dp-studio__swatches" role="group" aria-label="${escapeAttr(t("DP.studio.effect"))}">` +
@@ -279,16 +303,21 @@ function appearanceTab(doc: any, pin: DpPinFlags): string {
     `<button type="button" class="dp-studio__link" data-action="editPresets">` +
     `${escapeHtml(t("DP.presets.edit"))}</button>` +
     field("DP.studio.intensity", range("effect.intensity", pin.effect.intensity)) +
-    field("DP.studio.speed", range("effect.speed", pin.effect.speed, 0, 4, 0.1)) +
+    field("DP.studio.speed", range("effect.speed", pin.effect.speed, 0, 4, 0.1, pdf)) +
     field(
       "DP.studio.motion",
       // `onReveal` is not offered: nothing implements a play-once animation, and the
       // renderer treats it exactly as `loop`. A third choice that behaves like the first
       // is a control that does not work.
-      select("effect.motion", pin.effect.motion === "none" ? "none" : "loop", [
-        { value: "loop", label: t("DP.studio.motionLoop") },
-        { value: "none", label: t("DP.studio.motionNone") },
-      ])
+      select(
+        "effect.motion",
+        pin.effect.motion === "none" ? "none" : "loop",
+        [
+          { value: "loop", label: t("DP.studio.motionLoop") },
+          { value: "none", label: t("DP.studio.motionNone") },
+        ],
+        pdf
+      )
     ) +
     field(
       "DP.studio.fadeUnderTokens",

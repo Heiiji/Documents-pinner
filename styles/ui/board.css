@@ -191,13 +191,15 @@
   border-radius: 0.2rem;
   object-fit: cover;
   background: color-mix(in oklab, var(--color-bg-option, #1b1b23) 70%, transparent);
+}
 
-  &--missing {
-    display: grid;
-    place-items: center;
-    font-size: 0.8em;
-    opacity: 0.5;
-  }
+/* Written out in full: `&--missing` is Sass concatenation, which native nesting does not
+   have, so this rule never applied and the "?" placeholder was never centred. */
+.dp-row__thumb--missing {
+  display: grid;
+  place-items: center;
+  font-size: 0.8em;
+  opacity: 0.5;
 }
 
 .dp-row__name {

@@ -270,14 +270,15 @@
  * Canvas2D, see `render/BakeEffects.ts`. What a PDF has no use for is the paper stock,
  * the type size and the margins, which describe a card it does not have, and anything
  * that moves, because a texture cannot animate.
+ *
+ * Presentation only. This used to carry `pointer-events: none` and be the WHOLE
+ * mechanism, which stops a mouse and not a keyboard, in any engine — so a GM tabbing
+ * through the tab could still move a slider that would do nothing. The controls now carry
+ * a real `disabled` from `PinStudio.ts`, and this dims them; an engine without `:has()`
+ * loses the dimming and keeps the state, which is the right way round.
  */
-.dp-studio__tab[data-dp-pdf="true"] .dp-studio__field:has([name="display.paper"]),
-.dp-studio__tab[data-dp-pdf="true"] .dp-studio__field:has([name="display.typeSize"]),
-.dp-studio__tab[data-dp-pdf="true"] .dp-studio__field:has([name="display.margin"]),
-.dp-studio__tab[data-dp-pdf="true"] .dp-studio__field:has([name="effect.speed"]),
-.dp-studio__tab[data-dp-pdf="true"] .dp-studio__field:has([name="effect.motion"]) {
+.dp-studio__tab[data-dp-pdf="true"] .dp-studio__field:has(:disabled) {
   opacity: 0.45;
-  pointer-events: none;
 }
 
 /* Hover and press ease; a selected tab or swatch arrives by re-render and stays instant. */

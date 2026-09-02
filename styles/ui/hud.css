@@ -24,13 +24,23 @@
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
+}
 
-  &--left {
-    grid-area: left;
-  }
-  &--right {
-    grid-area: right;
-  }
+/*
+ * Written out in full, not as `&--left`.
+ *
+ * Native CSS nesting has no parent CONCATENATION — that is Sass — so `&--left` is not a
+ * valid compound selector and the whole rule was dropped, in every browser, since the day
+ * it was written. Neither column has ever had a grid area. The layout worked by accident:
+ * `.dp-hud__name` is placed explicitly, so auto-placement flowed the two icon columns
+ * around it into columns one and three. Empty one column and it collapses.
+ */
+.dp-hud__col--left {
+  grid-area: left;
+}
+
+.dp-hud__col--right {
+  grid-area: right;
 }
 
 .dp-hud__name {
@@ -101,14 +111,37 @@
      `hidden` as the state and lets `display` wait for the fade to finish. */
   opacity: 0;
   translate: 0 -0.25rem;
-  transition:
-    opacity var(--dp-dur-state, 120ms) var(--dp-ease-out, ease-out),
-    translate var(--dp-dur-state, 120ms) var(--dp-ease-out, ease-out),
-    display var(--dp-dur-state, 120ms) allow-discrete;
+  /*
+   * Longhands, not the shorthand.
+   *
+   * `transition` is a shorthand, so a component an engine cannot parse invalidates the
+   * WHOLE declaration — an engine without `transition-behavior` would have lost the
+   * opacity and the translate along with the `display` it could not read. As longhands,
+   * only the unreadable line is dropped and the worst case is that closing snaps
+   * instead of fading. Two `transition` shorthands would not have worked either: the
+   * second resets everything the first set.
+   */
+  transition-property: opacity, translate, display;
+  transition-duration: var(--dp-dur-state, 120ms);
+  transition-timing-function: var(--dp-ease-out, ease-out);
+  transition-behavior: allow-discrete;
 
   &.dp-hud__palette--in {
     opacity: 1;
     translate: 0 0;
+
+    /*
+     * The opening, declared rather than arranged.
+     *
+     * This transitions out of `display: none`, which per spec cannot transition at all
+     * without a starting style — and it played anyway, because `PinHUD` calls `focus()`
+     * on the line after the class is added and that forces a style flush. A mechanism
+     * nobody chose, in a moment nobody specified. Now the stylesheet says it.
+     */
+    @starting-style {
+      opacity: 0;
+      translate: 0 -0.25rem;
+    }
   }
 
   &[hidden] {

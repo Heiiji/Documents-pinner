@@ -296,3 +296,51 @@ describe("the content tab and the document it shows", () => {
     expect(page).toBeLessThan(label);
   });
 });
+
+/**
+ * A PDF prop's inert controls are disabled, not merely dimmed.
+ *
+ * The dimming was the whole mechanism: a `:has()` rule carrying `pointer-events: none`,
+ * which stops a mouse and not a keyboard, in any engine. So a GM tabbing through the tab
+ * could still move a slider that would do nothing — and on an engine without `:has()` the
+ * controls were fully live again, re-offering exactly what A15 removed.
+ */
+describe("the appearance tab for a PDF prop", () => {
+  const pdfMarkup = () => {
+    (globalThis as any).fromUuidSync = () => ({
+      documentName: "JournalEntryPage",
+      type: "pdf",
+      src: "worlds/handout.pdf",
+    });
+    const markup = studioMarkup(
+      doc,
+      pin({ source: { ...pin().source, uuid: "JournalEntry.j.JournalEntryPage.p" } }),
+      "appearance"
+    );
+    delete (globalThis as any).fromUuidSync;
+    return markup;
+  };
+
+  it("carries a real disabled on every control a PDF cannot honour", () => {
+    const markup = pdfMarkup();
+    for (const name of [
+      "display.paper",
+      "display.typeSize",
+      "display.margin",
+      "effect.speed",
+      "effect.motion",
+    ]) {
+      expect(markup, name).toMatch(new RegExp(`name="${name.replace(".", "\\.")}"[^>]*disabled`));
+    }
+  });
+
+  it("leaves the controls a PDF DOES honour alone", () => {
+    const markup = pdfMarkup();
+    expect(markup).toMatch(/name="effect\.intensity"[^>]*>/);
+    expect(markup).not.toMatch(/name="effect\.intensity"[^>]*disabled/);
+  });
+
+  it("disables nothing on a card prop", () => {
+    expect(studioMarkup(doc, pin(), "appearance")).not.toContain("disabled");
+  });
+});
