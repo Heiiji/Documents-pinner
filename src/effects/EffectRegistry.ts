@@ -116,6 +116,15 @@ function proceduralLayers(context: EffectContext): CssVars {
   // Static scanlines are TEXTURE, not motion: they survive `reduced` and are baked in.
   out["--dp-scan-img"] = scanlineGradient(p.scanlines.spacing, p.scanlines.opacity);
 
+  // A negative delay starts the sweep mid-cycle. Seeded, so every client at the table
+  // sees the same phase — and DIFFERENT per pin, so twenty props do not sweep in
+  // lockstep. Lockstep is not merely uglier: it is a periodic full-screen luminance
+  // change, which is the one thing an effect this animated must not produce.
+  out["--dp-hud-sweep-delay"] =
+    p.hud.sweepSec > 0
+      ? `${-Math.round(((context.seed % 97) / 97) * p.hud.sweepSec * 1e4) / 1e4}s`
+      : "0s";
+
   return out;
 }
 

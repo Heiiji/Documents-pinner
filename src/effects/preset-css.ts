@@ -105,6 +105,19 @@ export function presetToCssVars(preset: DpPreset, intensity = 1): CssVars {
     "--dp-shadow-y": `${round(p.shadow.y)}px`,
     "--dp-shadow-blur": `${round(p.shadow.blur)}px`,
     "--dp-shadow-op": String(round(p.shadow.opacity)),
+
+    "--dp-hud": p.hud.color,
+    // The same colour at zero alpha. Every hud gradient fades to THIS rather than to the
+    // keyword `transparent`, which is rgb(0 0 0 / 0) and leaves engines free to disagree
+    // about premultiplication — a cyan hairline picking up a grey cast at its ends.
+    "--dp-hud-clear": `${p.hud.color}00`,
+    "--dp-hud-op": String(round(p.hud.opacity)),
+    "--dp-hud-gap": `${round(p.hud.pitch)}px`,
+    "--dp-hud-w": `${round(p.hud.weight)}px`,
+    // Derived here, not in calc(), so the stylesheet and the Canvas2D baker cannot
+    // disagree about the ratio between a hairline and the arm it draws.
+    "--dp-hud-arm": `${round(p.hud.weight * 9)}px`,
+    "--dp-hud-sweep-dur": p.hud.sweepSec > 0 ? `${round(p.hud.sweepSec)}s` : "0s",
   };
 }
 
@@ -118,7 +131,19 @@ export function presetToDataAttrs(preset: DpPreset): Record<string, string> {
     "data-dp-edge": preset.params.edge.style,
     "data-dp-frame": preset.params.frame.style,
     "data-dp-motion": preset.motion,
+    // Decided from the PRESET, never from the reduced variables: a reduced client still
+    // gets the element and every static layer in it. That is the whole accessibility
+    // contract here — the geometry IS the effect's identity, and only the sweep moves.
+    "data-dp-hud": hudActive(preset) ? "true" : "false",
+    "data-dp-hud-marks": preset.params.hud.marks,
+    "data-dp-hud-grid": preset.params.hud.grid,
   };
+}
+
+/** Whether this preset draws an overlay at all, which decides if the element is emitted. */
+export function hudActive(preset: DpPreset): boolean {
+  const h = preset.params.hud;
+  return h.opacity > 0 && (h.marks !== "none" || h.grid !== "none" || h.sweepSec > 0);
 }
 
 /**

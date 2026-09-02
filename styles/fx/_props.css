@@ -8,6 +8,18 @@
  *
  * `preset-css.ts` emits BASE values plus a single `--dp-i` multiplier; the rules that
  * consume these do the multiplication in calc(), so dragging intensity is one write.
+ *
+ * **Nothing currently interpolates one.** No `transition-property` in this module names a
+ * `--dp-*` property and no `@keyframes` animates one, so the cross-fade the paragraph
+ * above describes does not exist yet and the registrations are, today, only a type and an
+ * initial value. They stay because that is the mechanism the design wants and it is one
+ * edit from being load-bearing — the moment anything here is transitioned, this file is
+ * what makes it run on the compositor. `inherits: true` is likewise a statement of intent
+ * rather than an effect: custom properties inherit by default.
+ *
+ * `--dp-hud-sweep-delay` is deliberately NOT registered. It carries a negative time and
+ * is substituted textually into `animation-delay`; typing it would gain nothing and a
+ * registered `<time>` with a negative initial value is a needless edge.
  */
 
 @property --dp-i {
@@ -150,6 +162,37 @@
   initial-value: 0;
 }
 
+@property --dp-hud {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: transparent;
+}
+@property --dp-hud-clear {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: transparent;
+}
+@property --dp-hud-op {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 0;
+}
+@property --dp-hud-gap {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 24px;
+}
+@property --dp-hud-w {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 1px;
+}
+@property --dp-hud-arm {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 9px;
+}
+
 /* The pure-CSS half of the accessibility contract: correct before any JS runs, and
    still correct if the client setting is corrupt. `reduced` keeps static identity —
    tint, frame, texture, edge shape — and stops only motion. */
@@ -167,13 +210,21 @@
  *
  * `.dp-card` is the element every tier actually renders, in the SVG and in the DOM alike.
  */
+/*
+ * `*` does not match a pseudo-element, and the scan roll and the glow pulse live on
+ * `::before` and `::after` — so this net had a hole exactly where the motion is. The
+ * gates in `effects.css` carry the real stop; these two lines are the belt.
+ */
 [data-dp-level="reduced"] .dp-card,
-[data-dp-level="reduced"] .dp-card * {
+[data-dp-level="reduced"] .dp-card *,
+[data-dp-level="reduced"] .dp-card::before,
+[data-dp-level="reduced"] .dp-card::after {
   animation: none !important;
   transition: none !important;
 }
 
 [data-dp-level="off"] .dp-card::before,
-[data-dp-level="off"] .dp-card::after {
+[data-dp-level="off"] .dp-card::after,
+[data-dp-level="off"] .dp-card__hud {
   display: none;
 }

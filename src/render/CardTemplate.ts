@@ -17,19 +17,47 @@
 import { escapeAttr, escapeHtml } from "../html";
 
 /** The paper stocks a pin can be printed on. Ids are stored in `display.paper`. */
-export const PAPERS: Record<string, { base: string; ink: string; edge: string }> = {
+export const PAPERS: Record<
+  string,
+  { base: string; ink: string; edge: string; bloom?: string }
+> = {
   parchment: { base: "#e8dcc0", ink: "#3a2410", edge: "#c9b58d" },
   vellum: { base: "#f2ead8", ink: "#2f2a21", edge: "#d8cdb2" },
   paper: { base: "#f7f5f0", ink: "#22222a", edge: "#ddd9d0" },
   linen: { base: "#e4e0d4", ink: "#2c2f2a", edge: "#c6c1b0" },
   slate: { base: "#2a2d33", ink: "#e6e3da", edge: "#454952" },
   bloodied: { base: "#ddccb4", ink: "#3a1810", edge: "#a8846b" },
+  /**
+   * Not paper: light.
+   *
+   * The base is TRANSLUCENT, and that alpha is the whole mechanism. A card cannot blend
+   * against the WebGL canvas — the overlay is a different stacking context — so
+   * "projected onto the map" has to be faked with alpha, which composites correctly on
+   * every tier: over `#board` on the DOM path, into an RGBA texture in the rasteriser,
+   * and through `globalAlpha` in the Canvas2D baker. `bloom` is the halo the ink carries,
+   * which is what makes the type read as emitted rather than printed.
+   */
+  projection: { base: "#0b1a20d9", ink: "#dff6ff", edge: "#5fd8ec", bloom: "#7fe8ff66" },
 };
 
 export const DEFAULT_PAPER = "parchment";
 
 export function paperOf(id: string) {
   return PAPERS[id] ?? PAPERS[DEFAULT_PAPER];
+}
+
+/**
+ * A hex colour at zero alpha, whatever alpha it started with.
+ *
+ * `#rgb` and `#rrggbb` gain `00`; `#rgba` and `#rrggbbaa` have theirs replaced. Anything
+ * this does not recognise falls back to the keyword, which is the pre-existing behaviour
+ * and no worse than it was.
+ */
+export function transparentForm(hex: string): string {
+  if (/^#[0-9a-f]{3}$/i.test(hex) || /^#[0-9a-f]{6}$/i.test(hex)) return `${hex}00`;
+  if (/^#[0-9a-f]{4}$/i.test(hex)) return `${hex.slice(0, 4)}0`;
+  if (/^#[0-9a-f]{8}$/i.test(hex)) return `${hex.slice(0, 7)}00`;
+  return "transparent";
 }
 
 export interface CardOptions {
@@ -66,8 +94,14 @@ export function cardHtml(options: CardOptions): string {
 
   const style = [
     `--dp-paper-base:${paper.base}`,
+    // The same base at zero alpha, for every gradient that fades OUT of the stock. A
+    // gradient to the keyword `transparent` is rgb(0 0 0 / 0), which engines are free to
+    // premultiply differently — a parchment fade picking up a grey cast — and which is
+    // simply wrong for a translucent stock.
+    `--dp-paper-base-0:${transparentForm(paper.base)}`,
     `--dp-paper-ink:${paper.ink}`,
     `--dp-paper-edge:${paper.edge}`,
+    `--dp-paper-bloom:${paper.bloom ?? "transparent"}`,
     `--dp-card-pad:${options.padPx}px`,
     `font-size:${options.fontPx}px`,
     // The effect's own properties last, so a preset can override a paper default
@@ -91,10 +125,18 @@ export function cardHtml(options: CardOptions): string {
     .join("");
 
   return (
-    `<div class="dp-card" data-dp-fx="${escapeAttr(options.effectId)}"${attrs}` +
+    `<div class="dp-card" data-dp-fx="${escapeAttr(options.effectId)}"` +
+    // The stock as an attribute, so a stock can style its own ink — the projection's
+    // bloom and its technical caps are a property of the PAPER, not of any preset.
+    ` data-dp-paper="${escapeAttr(options.paper)}"${attrs}` +
     `${options.missing ? ' data-dp-missing="true"' : ""}` +
     `${options.overflow ? ' data-dp-overflow="true"' : ""} style="${escapeAttr(style)}">` +
     `<div class="dp-card__sheet">${title}${body}</div>` +
+    // Emitted only when the preset asks for it, so a parchment prop's markup is byte-
+    // identical to what it was and the nine presets without an overlay pay nothing.
+    (options.effectAttrs?.["data-dp-hud"] === "true"
+      ? `<div class="dp-card__hud" aria-hidden="true"><i class="dp-card__hud-sweep"></i></div>`
+      : "") +
     `</div>`
   );
 }

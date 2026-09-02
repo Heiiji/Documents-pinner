@@ -582,7 +582,7 @@ function onSetAudienceKind(this: any, _event: Event, target: HTMLElement) {
 function onSetEffect(this: any, _event: Event, target: HTMLElement) {
   const id = target.dataset.dpPreset;
   if (!id) return;
-  void api.patch(this.anchorDoc, { effect: { id } })?.then(() => this.render());
+  void api.setEffect(this.anchorDoc, id)?.then(() => this.render());
 }
 
 function onEditPresets(this: any) {

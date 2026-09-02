@@ -55,7 +55,17 @@
     100% 100%,
     180px 180px;
   background-repeat: repeat, no-repeat, repeat;
-  mix-blend-mode: var(--dp-tint-blend, multiply);
+  /*
+   * The SURFACE's blend, not the tint's.
+   *
+   * These layers are textures — scanlines, stains, grain — and every one of them is dark.
+   * Under the tint's blend they inherited `screen` from any preset with a coloured glow,
+   * and black under `screen` is the identity operation: `crt-scanlines`,
+   * `holographic-frame` and `glitch` all lost their scanlines entirely on this tier while
+   * `BakeEffects` drew them source-over and a PDF kept them. Two tiers, one preset, two
+   * different pictures. `--dp-surface-blend` was already emitted and read by nothing.
+   */
+  mix-blend-mode: var(--dp-surface-blend, multiply);
   opacity: var(--dp-i, 1);
 }
 
@@ -99,8 +109,23 @@
   animation-play-state: running;
 }
 
-.dp-card[data-dp-motion="loop"]:where([data-dp-level="reduced"], [data-dp-level="off"]),
-.dp-card[data-dp-tier="L2a"] {
+/*
+ * Everything animated, stopped.
+ *
+ * The pseudo-element selectors are the point. `.dp-card[data-dp-tier="L2a"]` matched the
+ * card and not `::before` or `::after`, where the scan roll and the glow pulse actually
+ * live — so coarse props kept animating in exactly the size band where a scene has the
+ * most of them. `theme.css`'s `.dp-card *` net has the same hole, because `*` does not
+ * match a pseudo-element either.
+ */
+.dp-card[data-dp-tier="L2a"],
+.dp-card[data-dp-tier="L2a"]::before,
+.dp-card[data-dp-tier="L2a"]::after,
+.dp-card[data-dp-tier="L2a"] .dp-card__hud-sweep,
+.dp-card:where([data-dp-level="reduced"], [data-dp-level="off"]),
+.dp-card:where([data-dp-level="reduced"], [data-dp-level="off"])::before,
+.dp-card:where([data-dp-level="reduced"], [data-dp-level="off"])::after,
+.dp-card:where([data-dp-level="reduced"], [data-dp-level="off"]) .dp-card__hud-sweep {
   animation: none;
 }
 
@@ -176,4 +201,195 @@
     var(--dp-shadow-x, 0px) var(--dp-shadow-y, 0px) var(--dp-shadow-blur, 0px)
       rgb(0 0 0 / calc(var(--dp-shadow-op, 0) * var(--dp-i, 1)))
   );
+}
+
+/*
+ * The projected overlay — the AR family's grid, corner geometry and sweep.
+ *
+ * Three layers on two elements, each with its own relative weight under one master
+ * strength, and deliberately built from NOTHING that the two engines can disagree about:
+ * no mix-blend-mode, no mask, no clip-path, no conic-gradient. Every one of those is a
+ * place Gecko and Blink diverge, and a multi-layer background is the one compositing
+ * primitive both have agreed on for a decade. The cost is that the grid does not screen
+ * against a light stock; the benefit is that it is the same picture in both browsers, in
+ * the rasteriser, and — through globalAlpha — in the Canvas2D bake for a PDF.
+ *
+ * The whole thing is under --dp-i, so the LOD ladder takes it to nothing at L1 and L0
+ * with no extra rule: `dressing()` already returns --dp-i:0 there.
+ */
+.dp-card__hud {
+  z-index: 3;
+  overflow: hidden;
+  opacity: calc(var(--dp-hud-op, 0) * var(--dp-i, 1));
+}
+
+/* The grid, at 22% of the master: one you notice only when it is gone. */
+.dp-card__hud::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  opacity: 0.22;
+}
+
+.dp-card[data-dp-hud-grid="square"] .dp-card__hud::before {
+  background-image:
+    repeating-linear-gradient(
+      to right,
+      var(--dp-hud) 0 var(--dp-hud-w),
+      var(--dp-hud-clear) var(--dp-hud-w) var(--dp-hud-gap)
+    ),
+    repeating-linear-gradient(
+      to bottom,
+      var(--dp-hud) 0 var(--dp-hud-w),
+      var(--dp-hud-clear) var(--dp-hud-w) var(--dp-hud-gap)
+    );
+}
+
+.dp-card[data-dp-hud-grid="hatch"] .dp-card__hud::before {
+  background-image: repeating-linear-gradient(
+    45deg,
+    var(--dp-hud) 0 var(--dp-hud-w),
+    var(--dp-hud-clear) var(--dp-hud-w) var(--dp-hud-gap)
+  );
+}
+
+/*
+ * The grid dropped out to its intersections.
+ *
+ * A radial gradient tiled at the pitch, not two crossed gradients multiplied together:
+ * `background-blend-mode` blends an element's own layers rather than the backdrop, so it
+ * carries none of `mix-blend-mode`'s risk — but a tiled radial is engine-identical and
+ * needs no second mechanism to reason about.
+ */
+.dp-card[data-dp-hud-grid="dot"] .dp-card__hud::before {
+  background-image: radial-gradient(
+    circle at center,
+    var(--dp-hud) 0 calc(var(--dp-hud-w) * 0.9),
+    var(--dp-hud-clear) calc(var(--dp-hud-w) * 0.9)
+  );
+  background-size: var(--dp-hud-gap) var(--dp-hud-gap);
+}
+
+/*
+ * The corner geometry.
+ *
+ * Eight solid-colour "images" for brackets — two arms per corner — positioned at the four
+ * corners with `background-position`. `linear-gradient(C 0 0)` is the standard
+ * solid-colour-as-image idiom, and the whole thing is one paint on one pseudo-element.
+ * The arm is nine times the hairline weight, derived in `preset-css.ts` so the stylesheet
+ * and the Canvas2D baker cannot disagree about the ratio.
+ */
+.dp-card__hud::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-repeat: no-repeat;
+}
+
+.dp-card[data-dp-hud-marks="brackets"] .dp-card__hud::after {
+  background-image:
+    linear-gradient(var(--dp-hud) 0 0), linear-gradient(var(--dp-hud) 0 0),
+    linear-gradient(var(--dp-hud) 0 0), linear-gradient(var(--dp-hud) 0 0),
+    linear-gradient(var(--dp-hud) 0 0), linear-gradient(var(--dp-hud) 0 0),
+    linear-gradient(var(--dp-hud) 0 0), linear-gradient(var(--dp-hud) 0 0);
+  background-size:
+    var(--dp-hud-arm) var(--dp-hud-w),
+    var(--dp-hud-w) var(--dp-hud-arm),
+    var(--dp-hud-arm) var(--dp-hud-w),
+    var(--dp-hud-w) var(--dp-hud-arm),
+    var(--dp-hud-arm) var(--dp-hud-w),
+    var(--dp-hud-w) var(--dp-hud-arm),
+    var(--dp-hud-arm) var(--dp-hud-w),
+    var(--dp-hud-w) var(--dp-hud-arm);
+  background-position:
+    left top,
+    left top,
+    right top,
+    right top,
+    left bottom,
+    left bottom,
+    right bottom,
+    right bottom;
+}
+
+/* Tracking half lost: the brackets have decayed to four unconnected squares. */
+.dp-card[data-dp-hud-marks="corners"] .dp-card__hud::after {
+  background-image:
+    linear-gradient(var(--dp-hud) 0 0), linear-gradient(var(--dp-hud) 0 0),
+    linear-gradient(var(--dp-hud) 0 0), linear-gradient(var(--dp-hud) 0 0);
+  background-size: calc(var(--dp-hud-w) * 3) calc(var(--dp-hud-w) * 3);
+  background-position:
+    left top,
+    right top,
+    left bottom,
+    right bottom;
+}
+
+/*
+ * A label rather than a frame: one bracket, a rule running out along the top edge, and a
+ * locator dot at its end. The rule is a percentage because a callout should scale with
+ * the object it labels, where a bracket's arm should not.
+ */
+.dp-card[data-dp-hud-marks="callout"] .dp-card__hud::after {
+  background-image:
+    linear-gradient(var(--dp-hud) 0 0), linear-gradient(var(--dp-hud) 0 0),
+    linear-gradient(var(--dp-hud) 0 0), linear-gradient(var(--dp-hud) 0 0);
+  background-size:
+    var(--dp-hud-arm) var(--dp-hud-w),
+    var(--dp-hud-w) var(--dp-hud-arm),
+    38% var(--dp-hud-w),
+    calc(var(--dp-hud-w) * 3) calc(var(--dp-hud-w) * 3);
+  background-position:
+    left top,
+    left top,
+    calc(var(--dp-hud-arm) + 6px) top,
+    42% top;
+}
+
+/*
+ * The one thing that moves.
+ *
+ * On its own element so the grid and the marks do not travel with it, and animated with
+ * `translate` rather than `background-position`: a transform on a composited layer costs
+ * one composite per frame where an animated background position repaints the whole layer.
+ * That distinction is the difference between one prop and twenty.
+ *
+ * At rest the un-animated `translate: 0 0` leaves the band's centre on the card's centre,
+ * so the frozen rendition a reduced client sees is a soft band across the middle rather
+ * than one stuck half off the top edge.
+ */
+.dp-card__hud-sweep {
+  inset-inline: 0;
+  inset-block: -50%;
+  opacity: 0.45;
+  background-image: linear-gradient(
+    to bottom,
+    var(--dp-hud-clear) 0%,
+    var(--dp-hud) 50%,
+    var(--dp-hud-clear) 100%
+  );
+}
+
+.dp-card[data-dp-motion="loop"] .dp-card__hud-sweep {
+  animation: dp-hud-sweep var(--dp-hud-sweep-dur, 0s) linear infinite;
+  animation-delay: var(--dp-hud-sweep-delay, 0s);
+}
+
+@keyframes dp-hud-sweep {
+  from {
+    translate: 0 -50%;
+  }
+  to {
+    translate: 0 50%;
+  }
+}
+
+/*
+ * A hairline is two or three screen pixels at the coarse tier and aliases into a shimmer
+ * nobody would miss. The GRID stays, at half strength through --dp-i: it is the layer
+ * that says "projection" at every size, and an effect that changes identity as the GM
+ * zooms out reads as a bug.
+ */
+.dp-card[data-dp-tier="L2a"] .dp-card__hud::after {
+  display: none;
 }

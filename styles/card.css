@@ -40,16 +40,57 @@
   color: var(--dp-paper-ink);
   font-family: "Signika", "Palatino Linotype", Palatino, Georgia, serif;
   line-height: 1.45;
-  /* Layered gradients rather than an image: a texture file cannot be referenced from
-     inside the SVG, and inlining a real paper scan would cost more than the card. */
+  /*
+   * Layered gradients rather than an image: a texture file cannot be referenced from
+   * inside the SVG, and inlining a real paper scan would cost more than the card.
+   *
+   * Washes of white and black OVER the base, not `color-mix` INTO it. A mix pulls the
+   * base's alpha towards opaque, so a translucent stock's highlight came out more solid
+   * than its body — backwards for glass. For the five opaque stocks the two forms are
+   * numerically identical, and this one is two `color-mix` calls cheaper in the hottest
+   * rule of the stylesheet the rasteriser inlines.
+   */
   background:
-    radial-gradient(
-      120% 90% at 50% 0%,
-      color-mix(in oklab, var(--dp-paper-base) 92%, white) 0%,
-      var(--dp-paper-base) 55%,
-      color-mix(in oklab, var(--dp-paper-base) 88%, black) 100%
-    ),
-    var(--dp-paper-base);
+    radial-gradient(120% 90% at 50% 0%, rgb(255 255 255 / 8%), transparent 55%),
+    radial-gradient(120% 90% at 50% 100%, rgb(0 0 0 / 12%), transparent 55%), var(--dp-paper-base);
+}
+
+/*
+ * Ink made of light.
+ *
+ * A property of the STOCK and not of any preset, which is why it keys off `data-dp-paper`:
+ * a tagged parchment must not glow, and a projected readout must, whichever effect is on
+ * it. Real uppercase at wide tracking rather than a condensed technical face — a new font
+ * would have to arrive as a data URI through `AssetInliner`, and this module ships no
+ * binary assets at all by design.
+ */
+.dp-card[data-dp-paper="projection"] .dp-card__title,
+.dp-card[data-dp-paper="projection"] .dp-card__body {
+  text-shadow: 0 0 0.4em var(--dp-paper-bloom, transparent);
+}
+
+.dp-card[data-dp-paper="projection"] .dp-card__title {
+  /* The shorthand first, or it resets the longhand beside it. */
+  font-variant: normal;
+  font-variant-numeric: tabular-nums;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 500;
+}
+
+/*
+ * The overlay's boxes, declared here because `card.css` is the stylesheet the rasteriser
+ * inlines — so an overlay can never push the sheet around even where `fx/effects.css`
+ * does not exist. Everything that PAINTS is in that file.
+ */
+.dp-card__hud {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.dp-card__hud-sweep {
+  position: absolute;
 }
 
 .dp-card__sheet {
@@ -160,7 +201,10 @@
   inset-inline: var(--dp-card-pad);
   inset-block-end: var(--dp-card-pad);
   block-size: 2.5em;
-  background: linear-gradient(to bottom, transparent, var(--dp-paper-base));
+  /* From the base at zero alpha, never from the KEYWORD transparent: that is
+     rgb(0 0 0 / 0), and engines may premultiply it differently — a parchment fade
+     picking up a grey cast. It is also simply wrong for a translucent stock. */
+  background: linear-gradient(to bottom, var(--dp-paper-base-0, transparent), var(--dp-paper-base));
   pointer-events: none;
 }
 

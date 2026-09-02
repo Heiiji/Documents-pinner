@@ -82,7 +82,7 @@ describe("localisation files", () => {
       ["DP.chip.", ["visible", "hidden", "seesButCannotOpen", "opensButCannotSee"]],
       ["DP.board.mode.", ["pin", "prop"]],
       ["DP.cost.", ["low", "medium", "high"]],
-      ["DP.paper.", ["parchment", "vellum", "paper", "linen", "slate", "bloodied"]],
+      ["DP.paper.", ["parchment", "vellum", "paper", "linen", "slate", "bloodied", "projection"]],
       [
         "DP.settings.",
         [

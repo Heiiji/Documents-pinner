@@ -652,7 +652,7 @@ function onSetTab(this: any, _event: Event, target: HTMLElement) {
 function onSetEffect(this: any, _event: Event, target: HTMLElement) {
   const id = target.dataset.dpPreset;
   if (!id) return;
-  void api.patch(this.doc, { effect: { id } })?.then(() => this.render());
+  void api.setEffect(this.doc, id)?.then(() => this.render());
 }
 
 function onLocate(this: any) {

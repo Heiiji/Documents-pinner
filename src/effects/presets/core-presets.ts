@@ -168,6 +168,113 @@ const presets: DpPreset[] = [
       shadow: { x: 0, y: 0, blur: 6, opacity: 0.3 },
     },
   }),
+  /*
+   * The augmented-reality family: three points in one set of parameters.
+   *
+   * What makes them read as modern rather than as the chunky HUD panels they descend
+   * from is one rule, applied three ways: **the overlay is static geometry plus exactly
+   * one slow-moving thing.** No border — the panel's extent is implied by four corner
+   * ticks and a grid rather than drawn. Hairlines at one or two card pixels, with arms at
+   * nine times that: a 2% tick where a bevel is 4% of the panel in thickness alone.
+   * `glow.pulseHz: 0` on all three, so the only motion in the family is a band of light
+   * with a period measured in seconds.
+   *
+   * That rule is also why the accessibility contract falls out for free. Freeze the
+   * sweep and the whole design is still there — which is the difference between an
+   * effect a reduced-motion player can use and a blank card.
+   */
+
+  defaultPreset({
+    id: "projected-readout",
+    label: "DP.preset.projectedReadout",
+    motion: "loop",
+    reveal: { animation: "materialise", durationMs: 560, sound: null },
+    // The document IS the light, so it needs the stock that is light. A tinted sheet of
+    // parchment is the wrong half of the idea.
+    paper: "projection",
+    params: {
+      // A bias on the ink rather than a wash over it: 0.08 against holographic-frame's
+      // 0.30, so the document still reads as a document.
+      tint: { color: "#7fe8ff", amount: 0.08, blend: "screen" },
+      glow: { color: "#7fe8ff", radius: 14, opacity: 0.3, pulseHz: 0 },
+      // Almost invisible, and the reason a flat translucent fill does not band and look
+      // like a CSS rectangle. This is most of the difference between "panel" and "div".
+      noise: { amount: 0.05, scale: 3.5 },
+      hud: {
+        color: "#7fe8ff",
+        opacity: 0.5,
+        marks: "brackets",
+        grid: "square",
+        pitch: 26,
+        weight: 1,
+        sweepSec: 9,
+      },
+      frame: { style: "none", thickness: 0, radius: 3, color: "#7fe8ff" },
+      // No offset at all: it hovers, it does not lie on the map.
+      shadow: { x: 0, y: 0, blur: 20, opacity: 0.3 },
+    },
+  }),
+
+  defaultPreset({
+    id: "tagged-object",
+    label: "DP.preset.taggedObject",
+    motion: "loop",
+    // The object was always there; only the tag arrives. So a fade, not a materialise.
+    reveal: { animation: "fade", durationMs: 320, sound: null },
+    params: {
+      tint: { color: "#8ef4d4", amount: 0.05, blend: "screen" },
+      glow: { color: "#8ef4d4", radius: 10, opacity: 0.18, pulseHz: 0 },
+      hud: {
+        color: "#8ef4d4",
+        opacity: 0.65,
+        // One bracket, a rule along the top edge and a locator dot: the vocabulary of a
+        // label rather than of a frame.
+        marks: "callout",
+        // No grid, and that is the whole argument. A grid over parchment reads as graph
+        // paper — the overlay colonising the object instead of marking it.
+        grid: "none",
+        pitch: 24,
+        weight: 2,
+        sweepSec: 6,
+      },
+      frame: { style: "none", thickness: 0, radius: 0, color: "#8ef4d4" },
+      // Kept from the paper presets, and that is what distinguishes this from the one
+      // above: the object is still a physical thing lying on the map.
+      shadow: { x: 0, y: 3, blur: 10, opacity: 0.42 },
+    },
+  }),
+
+  defaultPreset({
+    id: "signal-loss",
+    label: "DP.preset.signalLoss",
+    motion: "loop",
+    reveal: { animation: "materialise", durationMs: 380, sound: null },
+    params: {
+      tint: { color: "#6fd7ff", amount: 0.1, blend: "screen" },
+      glow: { color: "#6fd7ff", radius: 8, opacity: 0.22, pulseHz: 0 },
+      // A fringe, not a split: 1.4 against glitch's 3.5. This is a degrading signal, not
+      // a second Glitch.
+      chroma: { offset: 1.4, angle: 0 },
+      scanlines: { spacing: 3, opacity: 0.12, speedPxPerSec: 18 },
+      noise: { amount: 0.16, scale: 1.2 },
+      flicker: { amount: 0.14, hz: 2 },
+      jitter: { amount: 1.5, hz: 5 },
+      hud: {
+        color: "#6fd7ff",
+        opacity: 0.45,
+        // Every parameter says the same thing. The brackets have decayed to four
+        // unconnected squares, the grid has dropped out to its intersections, and the
+        // scan is hunting rather than idling.
+        marks: "corners",
+        grid: "dot",
+        pitch: 18,
+        weight: 1,
+        sweepSec: 3,
+      },
+      frame: { style: "none", thickness: 0, radius: 2, color: "#4b7c8c" },
+      shadow: { x: 0, y: 0, blur: 8, opacity: 0.28 },
+    },
+  }),
 ];
 
 /** Shipped presets, deep-frozen so nothing can mutate the library at runtime. */

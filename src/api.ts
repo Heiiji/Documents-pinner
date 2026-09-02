@@ -27,6 +27,7 @@ import {
   type PinPatch,
 } from "./data/pin-schema";
 import { releaseAnchor, syncAnchor } from "./data/ownership-sync";
+import { findPreset } from "./effects/preset-library";
 import { resolveCard } from "./render/ContentResolver";
 import * as settings from "./settings";
 import { centreOf, docPositionFor } from "./canvas/transform";
@@ -465,6 +466,24 @@ export async function openLocally(anchorDoc: any): Promise<void> {
   // has been deleted. Passing the stored id on would ask the sheet for a page that is
   // not there; the entry opens where it opens.
   source.sheet.render(true);
+}
+
+/**
+ * Apply a preset to a pin, including the paper stock it asks for.
+ *
+ * The one place an effect reaches outside itself and into the pin. "Projected Readout" on
+ * parchment is a tinted sheet of paper rather than a projection, and a GM who never finds
+ * the Appearance tab's paper dropdown would only ever see the wrong half of the idea — so
+ * a preset that names a stock brings it. Most name none, and change nothing.
+ *
+ * The stock is validated against the known list by `validatePreset`, so the worst a
+ * preset pasted in from a stranger can do here is print a legible card on a different
+ * paper. The GM's own choice is one dropdown away, and switching preset again restores
+ * whatever the new one asks for.
+ */
+export function setEffect(anchorDoc: any, id: string): Promise<any> | undefined {
+  const paper = findPreset(id)?.paper;
+  return patch(anchorDoc, paper ? { effect: { id }, display: { paper } } : { effect: { id } });
 }
 
 /**

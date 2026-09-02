@@ -850,7 +850,7 @@ class Manager {
           baked: true,
         });
         surface = copyCanvas(surface);
-        await bakeEffects(surface, dressed.vars);
+        await bakeEffects(surface, dressed.vars, dressed.attrs);
         if (!alive()) return;
       }
 

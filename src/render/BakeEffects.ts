@@ -96,7 +96,11 @@ const BLEND: Record<string, GlobalCompositeOperation> = {
  * cannot supply one layer still gets the others, because a prop with no stains is a much
  * better outcome than a prop that failed to draw.
  */
-export async function bakeEffects(canvas: HTMLCanvasElement, vars: CssVars): Promise<void> {
+export async function bakeEffects(
+  canvas: HTMLCanvasElement,
+  vars: CssVars,
+  attrs: Record<string, string> = {}
+): Promise<void> {
   const ctx = canvas.getContext("2d");
   if (!ctx) return;
 
@@ -110,6 +114,11 @@ export async function bakeEffects(canvas: HTMLCanvasElement, vars: CssVars): Pro
     await layer(ctx, canvas, urlOf(vars["--dp-surface-img"]), num(vars, "--dp-surface-op") * i);
     await layer(ctx, canvas, urlOf(vars["--dp-grain-img"]), num(vars, "--dp-noise") * i, true);
     scanlines(ctx, canvas, vars, i);
+    // Grid under the sweep so the band lights it, and the marks over the sweep so the
+    // geometry stays crisp. All three before the mask, which carves everything above it.
+    hudGrid(ctx, canvas, vars, attrs, i);
+    hudSweep(ctx, canvas, vars, i);
+    hudMarks(ctx, canvas, vars, attrs, i);
     frame(ctx, canvas, vars);
     await edgeMask(ctx, canvas, urlOf(vars["--dp-edge-mask"]));
   } catch (error) {
@@ -204,6 +213,134 @@ function scanlines(
   ctx.globalAlpha = Math.min(1, opacity);
   ctx.fillStyle = "#000";
   for (let y = 0; y < canvas.height; y += gap * 2) ctx.fillRect(0, y, canvas.width, gap);
+  ctx.restore();
+}
+
+/**
+ * The projected overlay, in Canvas2D.
+ *
+ * A16's rule applied in A16's direction: find out what can be honoured first. All three
+ * grids, all three mark styles and a STILL sweep are drawn primitives — no image decodes,
+ * so nothing here can hit the decode timeout or taint the canvas (A17). Only the sweep's
+ * TRAVEL is withheld, and the still band is not a fake of it: it is exactly the rendition
+ * a reduced-motion client is given, because `baked` and `reduced` route through the same
+ * `freeze()` in `EffectRegistry`.
+ */
+function hudStrength(vars: CssVars, i: number): number {
+  return num(vars, "--dp-hud-op") * i;
+}
+
+function hudGrid(
+  ctx: CanvasRenderingContext2D,
+  canvas: HTMLCanvasElement,
+  vars: CssVars,
+  attrs: Record<string, string>,
+  i: number
+): void {
+  const style = attrs["data-dp-hud-grid"] ?? "none";
+  const alpha = hudStrength(vars, i);
+  const gap = num(vars, "--dp-hud-gap");
+  const weight = num(vars, "--dp-hud-w");
+  if (style === "none" || !(alpha > 0) || !(gap > 0) || !(weight > 0)) return;
+
+  ctx.save();
+  // 0.22, matching the stylesheet's own weighting for this layer. A grid you notice only
+  // when it is gone.
+  ctx.globalAlpha = alpha * 0.22;
+  ctx.fillStyle = vars["--dp-hud"] ?? "#fff";
+
+  if (style === "square" || style === "dot") {
+    for (let x = 0; x < canvas.width; x += gap) {
+      for (let y = 0; y < canvas.height; y += gap) {
+        if (style === "dot") ctx.fillRect(x, y, weight, weight);
+      }
+      if (style === "square") ctx.fillRect(x, 0, weight, canvas.height);
+    }
+    if (style === "square") {
+      for (let y = 0; y < canvas.height; y += gap) ctx.fillRect(0, y, canvas.width, weight);
+    }
+  } else if (style === "hatch") {
+    // Rotated about the centre, over a band long enough that the corners are still
+    // covered once the axes are turned.
+    const reach = Math.hypot(canvas.width, canvas.height);
+    ctx.translate(canvas.width / 2, canvas.height / 2);
+    ctx.rotate(-Math.PI / 4);
+    for (let y = -reach; y < reach; y += gap) ctx.fillRect(-reach, y, reach * 2, weight);
+  }
+  ctx.restore();
+}
+
+function hudMarks(
+  ctx: CanvasRenderingContext2D,
+  canvas: HTMLCanvasElement,
+  vars: CssVars,
+  attrs: Record<string, string>,
+  i: number
+): void {
+  const style = attrs["data-dp-hud-marks"] ?? "none";
+  const alpha = hudStrength(vars, i);
+  const weight = num(vars, "--dp-hud-w");
+  // From the emitted variable rather than recomputed, so this and the stylesheet cannot
+  // disagree about the ratio between a hairline and the arm it draws.
+  const arm = num(vars, "--dp-hud-arm");
+  if (style === "none" || !(alpha > 0) || !(weight > 0)) return;
+
+  const w = canvas.width;
+  const h = canvas.height;
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = vars["--dp-hud"] ?? "#fff";
+
+  if (style === "brackets") {
+    for (const [x, y, sx, sy] of [
+      [0, 0, 1, 1],
+      [w, 0, -1, 1],
+      [0, h, 1, -1],
+      [w, h, -1, -1],
+    ]) {
+      ctx.fillRect(sx > 0 ? x : x - arm, sy > 0 ? y : y - weight, arm, weight);
+      ctx.fillRect(sx > 0 ? x : x - weight, sy > 0 ? y : y - arm, weight, arm);
+    }
+  } else if (style === "corners") {
+    const side = weight * 3;
+    for (const [x, y] of [
+      [0, 0],
+      [w - side, 0],
+      [0, h - side],
+      [w - side, h - side],
+    ]) {
+      ctx.fillRect(x, y, side, side);
+    }
+  } else if (style === "callout") {
+    ctx.fillRect(0, 0, arm, weight);
+    ctx.fillRect(0, 0, weight, arm);
+    ctx.fillRect(arm + 6, 0, w * 0.38, weight);
+    ctx.fillRect(w * 0.42, 0, weight * 3, weight * 3);
+  }
+  ctx.restore();
+}
+
+/** The band of light, at rest — centred, exactly where the frozen CSS leaves it. */
+function hudSweep(
+  ctx: CanvasRenderingContext2D,
+  canvas: HTMLCanvasElement,
+  vars: CssVars,
+  i: number
+): void {
+  const alpha = hudStrength(vars, i);
+  const colour = vars["--dp-hud"];
+  if (!(alpha > 0) || !colour || !vars["--dp-hud-sweep-dur"]) return;
+  if (vars["--dp-hud-sweep-dur"] === "0s" && !vars["--dp-hud-clear"]) return;
+
+  const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+  gradient.addColorStop(0, vars["--dp-hud-clear"] ?? "#0000");
+  gradient.addColorStop(0.5, colour);
+  gradient.addColorStop(1, vars["--dp-hud-clear"] ?? "#0000");
+
+  ctx.save();
+  ctx.globalAlpha = alpha * 0.45;
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
   ctx.restore();
 }
 

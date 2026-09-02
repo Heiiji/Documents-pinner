@@ -129,6 +129,9 @@ describe("presetToDataAttrs", () => {
       "data-dp-edge": "none",
       "data-dp-frame": "holo",
       "data-dp-motion": "loop",
+      "data-dp-hud": "false",
+      "data-dp-hud-marks": "none",
+      "data-dp-hud-grid": "none",
     });
   });
 });
@@ -167,8 +170,48 @@ describe("accessibility renditions", () => {
         // Static noise and static scanlines are texture, not motion: reduced keeps them.
         Number(reduced["--dp-noise"]) +
         Number(reduced["--dp-scan-op"]) +
+        // The AR family's identity is almost entirely here. Without this term the sum
+        // would still clear zero on tint and glow alone, and the test would pass with the
+        // whole overlay deleted — which is exactly what it exists to prevent.
+        Number(reduced["--dp-hud-op"]) +
         parseFloat(reduced["--dp-blur"]);
       expect(identity, preset.id).toBeGreaterThan(0);
+    }
+  });
+
+  /**
+   * The sweep is the only thing in the overlay that moves, and freezing it must leave the
+   * rest standing. Asserted on the ATTRIBUTES, because those are what the stylesheet
+   * selects the geometry with — a reduced client that lost them would get the element and
+   * paint nothing into it.
+   */
+  it("keeps every static hud layer under reduced, and stops only the sweep", () => {
+    const ar = CORE_PRESETS.find((p) => p.id === "projected-readout")!;
+    const attrs = presetToDataAttrs(ar);
+    expect(attrs["data-dp-hud"]).toBe("true");
+    expect(attrs["data-dp-hud-marks"]).toBe("brackets");
+    expect(attrs["data-dp-hud-grid"]).toBe("square");
+
+    const reduced = reduceCssVars(presetToCssVars(ar));
+    expect(Number(reduced["--dp-hud-op"])).toBeGreaterThan(0);
+    expect(reduced["--dp-hud-gap"]).toBe("26px");
+    // Silenced by the existing `-dur` loop, with no rule of its own — which is why the
+    // period is seconds rather than Hz.
+    expect(reduced["--dp-hud-sweep-dur"]).toBe("0s");
+  });
+
+  /**
+   * The security property of the closed schema, restated for the new group. Nothing in
+   * `hud` may become a string CSS parses as anything but a value: the geometry is chosen
+   * by data attribute and every gradient is a literal in the stylesheet, so `safeUrl` is
+   * still the only path from a preset string into a style.
+   */
+  it("adds no new way for a preset string to reach CSS", () => {
+    for (const preset of CORE_PRESETS) {
+      for (const [key, value] of Object.entries(presetToCssVars(preset))) {
+        if (!key.startsWith("--dp-hud")) continue;
+        expect(value, `${preset.id} ${key}`).not.toMatch(/url\(|["';{}()]/);
+      }
     }
   });
 

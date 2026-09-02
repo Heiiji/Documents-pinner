@@ -160,9 +160,31 @@ describe("dressing", () => {
         vars["--dp-surface-img"] !== "none" ||
         parseFloat(vars["--dp-frame-w"]) > 0 ||
         parseFloat(vars["--dp-glow-r"]) > 0 ||
+        // The AR family carries its identity here; without this the sum clears zero on
+        // tint and glow alone and the check passes with the overlay deleted.
+        Number(vars["--dp-hud-op"]) > 0 ||
         parseFloat(vars["--dp-blur"]) > 0;
       expect(carriesSomething, `${preset.id} collapsed to a blank card`).toBe(true);
     }
+  });
+
+  /**
+   * Twenty props sweeping in lockstep is a periodic full-screen luminance change, which
+   * is a photosensitivity concern rather than a cosmetic one. The phase comes from the
+   * pin's seed, so every client at the table agrees and no two pins agree with each other.
+   */
+  it("gives each prop a deterministic sweep phase from its seed", () => {
+    const preset = getCorePreset("projected-readout")!;
+    const delay = (seed: number) =>
+      dressing(context({ preset, seed })).vars["--dp-hud-sweep-delay"];
+
+    expect(delay(42)).toBe(delay(42));
+    expect(delay(42)).not.toBe(delay(43));
+    expect(parseFloat(delay(42))).toBeLessThanOrEqual(0);
+    // A preset with no sweep has no phase to offset.
+    expect(
+      dressing(context({ preset: getCorePreset("aged-parchment")! })).vars["--dp-hud-sweep-delay"]
+    ).toBe("0s");
   });
 
   it("never references a file for a shipped preset's surface", () => {

@@ -41,6 +41,7 @@ function fakeContext(): Record<string, unknown> {
     drawImage: () =>
       calls.push({ op: "drawImage", args: [ctx.globalCompositeOperation, ctx.globalAlpha] }),
     createPattern: () => ({ pattern: true }),
+    createLinearGradient: () => ({ addColorStop: () => {} }),
     beginPath: () => calls.push({ op: "beginPath", args: [] }),
     rect: () => calls.push({ op: "rect", args: [] }),
     roundRect: () => calls.push({ op: "roundRect", args: [] }),
@@ -179,5 +180,86 @@ describe("copyCanvas", () => {
     const copy = copyCanvas(source);
     expect(copy).not.toBe(source);
     expect([copy.width, copy.height]).toEqual([640, 890]);
+  });
+});
+
+/**
+ * The projected overlay on a PDF page.
+ *
+ * A16's line, held: everything here is a drawn primitive, so a PDF gets the grid, the
+ * corner geometry and a STILL band of light — and never the travel, because a texture
+ * cannot animate. The still band is the same rendition a reduced-motion client is given,
+ * so offering it is honouring the effect rather than faking it.
+ */
+describe("the hud layers on a baked page", () => {
+  const hud = (over: Record<string, string> = {}) => ({
+    "--dp-i": "1",
+    "--dp-hud": "#7fe8ff",
+    "--dp-hud-clear": "#7fe8ff00",
+    "--dp-hud-op": "0.5",
+    "--dp-hud-gap": "26px",
+    "--dp-hud-w": "1px",
+    "--dp-hud-arm": "9px",
+    "--dp-hud-sweep-dur": "9s",
+    ...over,
+  });
+
+  it("draws the grid, then the sweep, then the marks, all before the frame", async () => {
+    await bakeEffects(
+      canvas(),
+      { ...hud(), "--dp-frame-w": "2px", "--dp-frame": "#7fe8ff" },
+      {
+        "data-dp-hud-grid": "square",
+        "data-dp-hud-marks": "brackets",
+      }
+    );
+
+    const fills = calls.filter((c) => c.op === "fillRect").length;
+    const stroke = ops().indexOf("stroke");
+    // Grid lines, the sweep's single fill and eight bracket arms all land as fills, and
+    // every one of them precedes the frame's stroke.
+    expect(fills).toBeGreaterThan(10);
+    expect(stroke).toBeGreaterThan(0);
+    expect(ops().lastIndexOf("fillRect")).toBeLessThan(stroke);
+  });
+
+  it("draws nothing for a preset with no overlay", async () => {
+    await bakeEffects(
+      canvas(),
+      { ...hud(), "--dp-hud-op": "0" },
+      {
+        "data-dp-hud-grid": "square",
+        "data-dp-hud-marks": "brackets",
+      }
+    );
+    expect(ops()).toEqual([]);
+  });
+
+  it("draws the brackets at the arm length the stylesheet was given", async () => {
+    await bakeEffects(canvas(200, 300), hud({ "--dp-hud-op": "1" }), {
+      "data-dp-hud-marks": "brackets",
+      "data-dp-hud-grid": "none",
+    });
+    // Eight arms, each 9px by 1px or 1px by 9px, from --dp-hud-arm rather than recomputed.
+    const arms = calls.filter((c) => c.op === "fillRect" && (c.args[5] === 9 || c.args[6] === 9));
+    expect(arms).toHaveLength(8);
+  });
+
+  it("draws four squares for corners and a rule for a callout", async () => {
+    await bakeEffects(canvas(), hud(), {
+      "data-dp-hud-marks": "corners",
+      "data-dp-hud-grid": "none",
+    });
+    const corners = calls.filter((c) => c.op === "fillRect").length;
+    calls = [];
+    await bakeEffects(canvas(), hud(), {
+      "data-dp-hud-marks": "callout",
+      "data-dp-hud-grid": "none",
+    });
+    const callout = calls.filter((c) => c.op === "fillRect").length;
+
+    // Four squares against a bracket, a rule and a dot, plus the sweep's fill in both.
+    expect(corners).toBe(5);
+    expect(callout).toBe(5);
   });
 });

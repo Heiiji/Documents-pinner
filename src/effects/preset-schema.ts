@@ -17,13 +17,28 @@
 import { num, oneOf, warnUnknownKeys } from "../normalise";
 import type { DpMode, DpNotice } from "../types/dp";
 
-export const PRESET_SCHEMA_VERSION = 1;
+export const PRESET_SCHEMA_VERSION = 2;
 
 export type DpMotion = "none" | "loop" | "onReveal";
 export type DpCost = "low" | "medium" | "high";
 export type DpEdgeStyle = "none" | "torn" | "burnt" | "deckled" | "singed";
 export type DpFrameStyle = "none" | "holo" | "gilt" | "rune" | "plain";
 export type DpRevealAnimation = "none" | "fade" | "materialise";
+
+/**
+ * The overlay's corner geometry, and its projected grid.
+ *
+ * Two closed enums rather than free geometry, for the reason the whole schema is closed:
+ * a preset is meant to be pasted in from a stranger. Nothing in `hud` ever becomes a
+ * string in CSS — the shapes are selected by data attribute and every gradient is a
+ * literal in the stylesheet — so `safeUrl()` remains the only path from a preset string
+ * into a style.
+ */
+export type DpHudMarks = "none" | "brackets" | "corners" | "callout";
+export type DpHudGrid = "none" | "square" | "hatch" | "dot";
+
+export const HUD_MARKS = ["none", "brackets", "corners", "callout"] as const;
+export const HUD_GRIDS = ["none", "square", "hatch", "dot"] as const;
 
 /** CSS mix-blend-mode values we allow. Anything else is rejected. */
 export const BLEND_MODES = [
@@ -61,6 +76,27 @@ export interface DpPresetParams {
   frame: { style: DpFrameStyle; thickness: number; radius: number; color: string };
   surface: { texture: string | null; blend: DpBlend; opacity: number };
   shadow: { x: number; y: number; blur: number; opacity: number };
+  /**
+   * The projected overlay: corner geometry, a grid, and one slow band of light.
+   *
+   * `sweepSec` is SECONDS where every other rate here is a frequency, and deliberately:
+   * a nine-second pass is 0.11 Hz, which the Preset Studio's sliders cannot reach — and
+   * emitting it as a `-dur` property is what makes `reduceCssVars` silence it with no
+   * new code at all. The accessibility hook falls out of the naming convention.
+   */
+  hud: {
+    color: string;
+    /** Master strength for every hud layer, 0–1. Zero switches the whole thing off. */
+    opacity: number;
+    marks: DpHudMarks;
+    grid: DpHudGrid;
+    /** Grid pitch in CARD pixels, like every other length here. */
+    pitch: number;
+    /** Hairline weight in card pixels. A mark's arm is nine times this. */
+    weight: number;
+    /** Seconds per sweep pass. Zero is still — the sweep is the only motion here. */
+    sweepSec: number;
+  };
 }
 
 export interface DpPreset {
@@ -73,6 +109,20 @@ export interface DpPreset {
   motion: DpMotion;
   cost: DpCost;
   reveal: { animation: DpRevealAnimation; durationMs: number; sound: string | null };
+  /**
+   * The paper stock this effect is drawn on, applied to the pin when it is chosen.
+   *
+   * The one field here that reaches OUTSIDE the effect and into the pin, and it is a
+   * deliberate exception: "Projected Readout" on parchment is a tinted sheet of paper,
+   * not a projection, and a GM who never finds the Appearance tab's paper dropdown would
+   * only ever see the wrong half of the idea. Null means "leave the stock alone", which
+   * is every preset that ships without one.
+   *
+   * A shared preset can therefore change a setting the GM made. The value is validated
+   * against the known stock ids like any other enum, so the worst a hostile preset can
+   * do is print a legible card on a different paper — a nuisance, not a way in.
+   */
+  paper: string | null;
   params: DpPresetParams;
 }
 
@@ -84,6 +134,23 @@ export interface ValidationResult {
 }
 
 const HEX = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/;
+
+/**
+ * The paper stocks a preset may ask for.
+ *
+ * Duplicated from `render/CardTemplate.PAPERS` rather than imported, because this module
+ * is PURE and that one is not — and kept honest by a test that compares the two lists.
+ * `null` is always allowed and means "leave the pin's own stock alone".
+ */
+export const PAPER_STOCKS = [
+  "parchment",
+  "vellum",
+  "paper",
+  "linen",
+  "slate",
+  "bloodied",
+  "projection",
+] as const;
 
 export function defaultParams(): DpPresetParams {
   return {
@@ -100,6 +167,17 @@ export function defaultParams(): DpPresetParams {
     frame: { style: "none", thickness: 0, radius: 0, color: "#ffffff" },
     surface: { texture: null, blend: "multiply", opacity: 0 },
     shadow: { x: 0, y: 2, blur: 8, opacity: 0.35 },
+    // Entirely off, so every preset written before this group existed renders exactly as
+    // it did — which is what makes the version bump invisible to a world that has one.
+    hud: {
+      color: "#ffffff",
+      opacity: 0,
+      marks: "none",
+      grid: "none",
+      pitch: 24,
+      weight: 1,
+      sweepSec: 0,
+    },
   };
 }
 
@@ -120,9 +198,28 @@ export function defaultPreset(
     motion: "none",
     cost: "low",
     reveal: { animation: "fade", durationMs: 400, sound: null },
+    paper: null,
     ...overrides,
     params: { ...defaultParams(), ...(overrides.params ?? {}) },
   };
+}
+
+/**
+ * A known paper stock, or `null` for "leave the pin's own stock alone".
+ *
+ * Not `oneOf`: null is a real value here rather than a missing one, so it must not warn,
+ * and `oneOf`'s fallback cannot be null. An UNKNOWN stock does warn and becomes null —
+ * this is the one field that reaches out of the effect and into the pin, so a value this
+ * version does not recognise has to leave the GM's own choice standing rather than print
+ * on a stock that does not exist.
+ */
+function paperStock(value: unknown, warnings: DpNotice[]): string | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value === "string" && (PAPER_STOCKS as readonly string[]).includes(value)) {
+    return value;
+  }
+  warnings.push({ key: "DP.preset.warn.badEnum", data: { path: "paper", value: String(value) } });
+  return null;
 }
 
 function colour(value: unknown, fallback: string, warnings: DpNotice[], path: string): string {
@@ -228,6 +325,15 @@ function normaliseParams(raw: unknown, warnings: DpNotice[]): DpPresetParams {
       blur: num(grp("shadow").blur, d.shadow.blur, 0, 128),
       opacity: num(grp("shadow").opacity, d.shadow.opacity, 0, 1),
     },
+    hud: {
+      color: colour(grp("hud").color, d.hud.color, warnings, "params.hud.color"),
+      opacity: num(grp("hud").opacity, d.hud.opacity, 0, 1),
+      marks: oneOf(grp("hud").marks, HUD_MARKS, d.hud.marks, warnings, "params.hud.marks"),
+      grid: oneOf(grp("hud").grid, HUD_GRIDS, d.hud.grid, warnings, "params.hud.grid"),
+      pitch: num(grp("hud").pitch, d.hud.pitch, 2, 128),
+      weight: num(grp("hud").weight, d.hud.weight, 0, 8),
+      sweepSec: num(grp("hud").sweepSec, d.hud.sweepSec, 0, 60),
+    },
   };
 }
 
@@ -282,6 +388,7 @@ export function validatePreset(input: unknown): ValidationResult {
       durationMs: num(raw.reveal?.durationMs, 400, 0, 10_000),
       sound: typeof raw.reveal?.sound === "string" ? raw.reveal.sound : null,
     },
+    paper: paperStock(raw.paper, warnings),
     params: normaliseParams(raw.params, warnings),
   };
 
@@ -314,6 +421,15 @@ export function estimateCost(preset: DpPreset): { score: number; tier: DpCost } 
     p.jitter.amount * 1.5 +
     (p.edge.style === "none" ? 0 : 3) +
     (p.frame.style === "holo" ? 6 : p.frame.style === "none" ? 0 : 1.5) +
+    // The grid is a full-card repeating gradient; the marks are four corner gradients on
+    // one element, so the grid is priced above them. The sweep is a flat charge for its
+    // existence rather than its rate: it is a transform on a composited layer, so a
+    // shorter period costs no more, and a model that pretended otherwise would push
+    // authors towards slow sweeps for the wrong reason.
+    (p.hud.marks === "none" ? 0 : 2) +
+    (p.hud.grid === "none" ? 0 : 3) +
+    p.hud.opacity * 4 +
+    (p.hud.sweepSec > 0 ? 3 : 0) +
     animated * (6 + hz * 0.75);
 
   const tier: DpCost = score < 12 ? "low" : score < 32 ? "medium" : "high";

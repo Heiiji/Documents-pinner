@@ -16,7 +16,7 @@ import {
 } from "../src/effects/presets/core-presets";
 
 describe("the shipped library", () => {
-  it("ships the ten documented presets", () => {
+  it("ships the documented presets", () => {
     expect(CORE_PRESET_IDS).toEqual([
       "none",
       "aged-parchment",
@@ -28,6 +28,9 @@ describe("the shipped library", () => {
       "holographic-frame",
       "crt-scanlines",
       "glitch",
+      "projected-readout",
+      "tagged-object",
+      "signal-loss",
     ]);
   });
 
@@ -54,6 +57,11 @@ describe("the shipped library", () => {
       "holographic-frame": "medium",
       "crt-scanlines": "medium",
       glitch: "high",
+      // Derived, not chosen. `signal-loss` crosses 32 on its own arithmetic because it
+      // is the only preset carrying four independent animations.
+      "projected-readout": "medium",
+      "tagged-object": "medium",
+      "signal-loss": "high",
     };
     for (const preset of CORE_PRESETS) {
       expect(preset.cost, preset.id).toBe(expected[preset.id]);
@@ -61,7 +69,15 @@ describe("the shipped library", () => {
   });
 
   it("marks every static preset as motionless and every animated one as loop", () => {
-    const animated = ["arcane-glow", "holographic-frame", "crt-scanlines", "glitch"];
+    const animated = [
+      "arcane-glow",
+      "holographic-frame",
+      "crt-scanlines",
+      "glitch",
+      "projected-readout",
+      "tagged-object",
+      "signal-loss",
+    ];
     for (const p of CORE_PRESETS) {
       expect(p.motion, p.id).toBe(animated.includes(p.id) ? "loop" : "none");
     }
