@@ -1184,8 +1184,13 @@ lives in the **normaliser**, not the migration. This is A18's rule a second time
 unmigrated payload on a player's client must already behave as it will after — and the cost
 of getting it wrong is specific. In the migration, a player who loaded before the primary
 GM's sweep would read `pageId: "7"`, miss on `pages.get("7")`, fall back to the entry and
-draw page 1, while the GM saw page 7. A Foundry id is sixteen alphanumerics, so a
-one-to-five-digit guard can never eat a real one.
+draw page 1, while the GM saw page 7.
+
+The guard is a one-to-five-digit pattern, and that it cannot eat a real id was **measured
+rather than assumed**: every `Note#pageId` in the live world is sixteen alphanumerics
+(`gfZaflkG2i3TORYw`), which contains digits and is not all digits. That was the only
+writer of the field this module did not control, so it was the only place the fold could
+have taken something it should not.
 
 **The new rule: a verb that RESETS is not the same verb as one that REDIRECTS.** The
 picker's `adopt` path builds a fresh `defaultPin()`, and its name says so truthfully.
