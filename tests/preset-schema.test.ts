@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   BLEND_MODES,
+  PAPER_STOCKS,
   PRESET_SCHEMA_VERSION,
   defaultParams,
   defaultPreset,
@@ -14,6 +15,7 @@ import {
   DEFAULT_PRESET_ID,
   getCorePreset,
 } from "../src/effects/presets/core-presets";
+import { PAPERS } from "../src/render/CardTemplate";
 
 describe("the shipped library", () => {
   it("ships the documented presets", () => {
@@ -226,5 +228,19 @@ describe("estimateCost", () => {
   it("withComputedCost overwrites a wrong label", () => {
     const lying = defaultPreset({ id: "z", cost: "high" });
     expect(withComputedCost(lying).cost).toBe("low");
+  });
+});
+
+/**
+ * The one place a preset reaches out of the effect and into the pin.
+ *
+ * `preset-schema` is PURE and `CardTemplate` is not, so the stock list is duplicated
+ * rather than imported — and the comment on `PAPER_STOCKS` promises this test by name.
+ * The day a stock is added to one and not the other, a preset can name a paper that does
+ * not print, or a printable stock becomes unnameable.
+ */
+describe("the paper stocks a preset may ask for", () => {
+  it("names exactly the stocks CardTemplate can print", () => {
+    expect([...PAPER_STOCKS].sort()).toEqual(Object.keys(PAPERS).sort());
   });
 });

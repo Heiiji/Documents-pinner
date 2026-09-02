@@ -1177,10 +1177,3 @@ export function drawsAsDom(pin: DpPinFlags): boolean {
 function isPdfPin(pin: DpPinFlags): boolean {
   return pdfSourceOf(api.resolveSourceSync(pin)) !== null;
 }
-
-/** Exposed for the Pinboard's diagnostics and for the smoke test. */
-export function propStats() {
-  return manager?.stats() ?? { props: 0, textures: 0, bytes: 0, degraded: false };
-}
-
-export { releaseTexture, MODULE_ID };

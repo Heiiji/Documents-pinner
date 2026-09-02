@@ -155,6 +155,7 @@ npm install
 npm test        # unit and integration tests
 npm run build   # -> dist/documents-pinner.mjs
 npm run watch
+npm run harness # -> tests/harness/effects.html, opened in two browsers to compare
 ```
 
 Symlink the repository into `Data/modules/documents-pinner` and press `F5` in Foundry. CSS
@@ -335,6 +336,7 @@ npm install
 npm test        # tests unitaires et d'intégration
 npm run build   # -> dist/documents-pinner.mjs
 npm run watch
+npm run harness # -> tests/harness/effects.html, à ouvrir dans deux navigateurs
 ```
 
 Créez un lien symbolique du dépôt dans `Data/modules/documents-pinner` et appuyez sur `F5`

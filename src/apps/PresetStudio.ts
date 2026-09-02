@@ -26,7 +26,6 @@ import {
   HUD_GRIDS,
   HUD_MARKS,
   estimateCost,
-  validatePreset,
   type DpPreset,
 } from "../effects/preset-schema";
 import { currentLevel } from "../effects/level";
@@ -132,7 +131,7 @@ export function readParam(preset: DpPreset, path: string): number {
 }
 
 /** PURE. Read a dotted path as a string — a colour or an enum member. */
-export function readParamText(preset: DpPreset, path: string): string {
+function readParamText(preset: DpPreset, path: string): string {
   const value = path
     .split(".")
     .reduce<any>((node, key) => (node == null ? undefined : node[key]), preset.params);
@@ -484,5 +483,3 @@ export function openPresetStudio(id?: string): any {
   instance.render(true);
   return instance;
 }
-
-export { validatePreset };

@@ -123,17 +123,18 @@
  * The pseudo-element selectors are the point. `.dp-card[data-dp-tier="L2a"]` matched the
  * card and not `::before` or `::after`, where the scan roll and the glow pulse actually
  * live — so coarse props kept animating in exactly the size band where a scene has the
- * most of them. `theme.css`'s `.dp-card *` net has the same hole, because `*` does not
- * match a pseudo-element either.
+ * most of them. The `.dp-card *` net in `fx/_props.css` has the same hole, because `*`
+ * does not match a pseudo-element either.
  */
 .dp-card[data-dp-tier="L2a"],
 .dp-card[data-dp-tier="L2a"]::before,
 .dp-card[data-dp-tier="L2a"]::after,
 .dp-card[data-dp-tier="L2a"] .dp-card__hud-sweep,
-.dp-card:where([data-dp-level="reduced"], [data-dp-level="off"]),
-.dp-card:where([data-dp-level="reduced"], [data-dp-level="off"])::before,
-.dp-card:where([data-dp-level="reduced"], [data-dp-level="off"])::after,
-.dp-card:where([data-dp-level="reduced"], [data-dp-level="off"]) .dp-card__hud-sweep {
+.dp-card[data-dp-motion="loop"]:where([data-dp-level="reduced"], [data-dp-level="off"]),
+.dp-card[data-dp-motion="loop"]:where([data-dp-level="reduced"], [data-dp-level="off"])::before,
+.dp-card[data-dp-motion="loop"]:where([data-dp-level="reduced"], [data-dp-level="off"])::after,
+.dp-card[data-dp-motion="loop"]:where([data-dp-level="reduced"], [data-dp-level="off"])
+  .dp-card__hud-sweep {
   animation: none;
 }
 
@@ -427,10 +428,16 @@
  * exactly at its static identity, which is the whole point of the accessibility setting.
  */
 @media (prefers-reduced-motion: reduce) {
-  .dp-card,
-  .dp-card::before,
-  .dp-card::after,
-  .dp-card .dp-card__hud-sweep {
+  /*
+   * The attribute is carried on every selector, and it is not decoration: the rules that
+   * START these animations are `.dp-card[data-dp-motion="loop"]` at (0,2,0), and `@media`
+   * adds no specificity. Without it this block is (0,1,0), loses the cascade, and is the
+   * fourth rule in this repository to have been written and never applied.
+   */
+  .dp-card[data-dp-motion="loop"],
+  .dp-card[data-dp-motion="loop"]::before,
+  .dp-card[data-dp-motion="loop"]::after,
+  .dp-card[data-dp-motion="loop"] .dp-card__hud-sweep {
     animation: none;
   }
 }

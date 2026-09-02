@@ -581,6 +581,10 @@ export function definePinStudio(): any {
           this.aspectLocked = target.checked;
           return;
         }
+        // An emptied field is a GM part-way through typing, not a request for a
+        // one-pixel tile — which is what `Number("")` clamped to on the way through
+        // `#resize`. The same rule the payload's own number input follows in `valueOf`.
+        if (target.type === "number" && target.value === "") return;
         if (field === "width" || field === "height") {
           await this.#resize(field, Number(target.value));
           return;

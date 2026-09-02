@@ -15,12 +15,10 @@
  */
 
 import { escapeAttr, escapeHtml } from "../html";
+import { transparentForm } from "../effects/preset-css";
 
 /** The paper stocks a pin can be printed on. Ids are stored in `display.paper`. */
-export const PAPERS: Record<
-  string,
-  { base: string; ink: string; edge: string; bloom?: string }
-> = {
+export const PAPERS: Record<string, { base: string; ink: string; edge: string; bloom?: string }> = {
   parchment: { base: "#e8dcc0", ink: "#3a2410", edge: "#c9b58d" },
   vellum: { base: "#f2ead8", ink: "#2f2a21", edge: "#d8cdb2" },
   paper: { base: "#f7f5f0", ink: "#22222a", edge: "#ddd9d0" },
@@ -44,20 +42,6 @@ export const DEFAULT_PAPER = "parchment";
 
 export function paperOf(id: string) {
   return PAPERS[id] ?? PAPERS[DEFAULT_PAPER];
-}
-
-/**
- * A hex colour at zero alpha, whatever alpha it started with.
- *
- * `#rgb` and `#rrggbb` gain `00`; `#rgba` and `#rrggbbaa` have theirs replaced. Anything
- * this does not recognise falls back to the keyword, which is the pre-existing behaviour
- * and no worse than it was.
- */
-export function transparentForm(hex: string): string {
-  if (/^#[0-9a-f]{3}$/i.test(hex) || /^#[0-9a-f]{6}$/i.test(hex)) return `${hex}00`;
-  if (/^#[0-9a-f]{4}$/i.test(hex)) return `${hex.slice(0, 4)}0`;
-  if (/^#[0-9a-f]{8}$/i.test(hex)) return `${hex.slice(0, 7)}00`;
-  return "transparent";
 }
 
 export interface CardOptions {
@@ -133,7 +117,7 @@ export function cardHtml(options: CardOptions): string {
     `${options.overflow ? ' data-dp-overflow="true"' : ""} style="${escapeAttr(style)}">` +
     `<div class="dp-card__sheet">${title}${body}</div>` +
     // Emitted only when the preset asks for it, so a parchment prop's markup is byte-
-    // identical to what it was and the nine presets without an overlay pay nothing.
+    // identical to what it was and the ten presets without an overlay pay nothing.
     (options.effectAttrs?.["data-dp-hud"] === "true"
       ? `<div class="dp-card__hud" aria-hidden="true"><i class="dp-card__hud-sweep"></i></div>`
       : "") +

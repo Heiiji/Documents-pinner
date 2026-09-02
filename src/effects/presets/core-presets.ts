@@ -88,9 +88,9 @@ const presets: DpPreset[] = [
     motion: "none",
     reveal: { animation: "fade", durationMs: 400, sound: null },
     params: {
-      // On the canvas tier this is a mip-bias sample: one texture tap, the cheapest
-      // good-looking effect available. It is also what drives the focus interaction —
-      // unfocused props are soft and sharpen when you lean in to read them.
+      // A CSS `filter: blur()` on the card, and `ctx.filter` through a copy for a PDF.
+      // It is also what drives the focus interaction — unfocused props are soft and
+      // sharpen when you lean in to read them.
       blur: 3.5,
       shadow: { x: 0, y: 2, blur: 10, opacity: 0.35 },
     },
@@ -115,8 +115,10 @@ const presets: DpPreset[] = [
     motion: "loop",
     reveal: { animation: "materialise", durationMs: 700, sound: null },
     params: {
-      // The CSS rendition (conic-gradient sweep over an @property angle, blended with
-      // color-dodge) looks better than the shader one and costs a tenth of the effort.
+      // NOTE `frame.style: "holo"` still has no rendition on any tier — the sweep this
+      // preset is named for does not exist. `estimateCost` prices it and
+      // `css-baseline.test.ts` allowlists the attribute; the AR family's `hud.marks` is
+      // where that idea actually landed.
       tint: { color: "#7fdfff", amount: 0.3, blend: "screen" },
       glow: { color: "#7fdfff", radius: 14, opacity: 0.5, pulseHz: 0.4 },
       scanlines: { spacing: 3, opacity: 0.16, speedPxPerSec: 6 },
@@ -150,9 +152,9 @@ const presets: DpPreset[] = [
     motion: "loop",
     reveal: { animation: "materialise", durationMs: 450, sound: null },
     params: {
-      // GLSL clearly wins here on the canvas tier: hashed row displacement plus an RGB
-      // split. The `seed` lives on the pin, not in the preset, so every client at the
-      // table glitches identically.
+      // The RGB split is a `text-shadow` on the body; there is no row displacement. The
+      // `seed` lives on the pin, not in the preset, so every client at the table
+      // glitches identically.
       //
       // The tint and frame are STATIC identity, carried deliberately so the preset
       // still reads as a glitching screen when a player has reduced motion enabled.

@@ -181,7 +181,7 @@ function emittedAttrs(): string[] {
  * the note to be removed rather than left describing a state that has passed.
  */
 const UNCONSUMED_BY_DESIGN: Record<string, string> = {
-  "--dp-warp": "warp has a shader rendition and no CSS one; the parameter is in the schema",
+  "--dp-warp": "warp has no rendition on any tier; it is in the schema and nothing draws it",
   "--dp-warp-dur": "as --dp-warp",
   "--dp-chroma-angle": "chroma is drawn as a horizontal text-shadow; the angle is unused",
   "--dp-edge-amt": "the amount is baked into the generated mask, not read at paint time",

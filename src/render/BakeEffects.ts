@@ -116,9 +116,15 @@ export async function bakeEffects(
     scanlines(ctx, canvas, vars, i);
     // Grid under the sweep so the band lights it, and the marks over the sweep so the
     // geometry stays crisp. All three before the mask, which carves everything above it.
-    hudGrid(ctx, canvas, vars, attrs, i);
-    hudSweep(ctx, canvas, vars, i);
-    hudMarks(ctx, canvas, vars, attrs, i);
+    //
+    // Gated on the same attribute `CardTemplate` gates the element on, so the two tiers
+    // cannot disagree about whether a preset HAS an overlay: a preset with a strength and
+    // no marks, grid or sweep draws no element on a card, and must draw no band here.
+    if (attrs["data-dp-hud"] === "true") {
+      hudGrid(ctx, canvas, vars, attrs, i);
+      hudSweep(ctx, canvas, vars, i);
+      hudMarks(ctx, canvas, vars, attrs, i);
+    }
     frame(ctx, canvas, vars);
     await edgeMask(ctx, canvas, urlOf(vars["--dp-edge-mask"]));
   } catch (error) {
@@ -243,21 +249,28 @@ function hudGrid(
   const weight = num(vars, "--dp-hud-w");
   if (style === "none" || !(alpha > 0) || !(gap > 0) || !(weight > 0)) return;
 
+  /*
+   * The pitch is authored in CARD pixels and this canvas is a texture up to 2048px, so a
+   * grid at the schema's minimum of 2 is a million `fillRect` calls — 170 ms of
+   * SYNCHRONOUS work inside the concurrency-1 generation queue, which holds the ticker
+   * with it. Twenty such props is four seconds of frozen canvas. No shipped preset gets
+   * near it; a pasted-in one can, and presets are meant to be pasted in from strangers.
+   * The floor caps it at 65k rects and is a no-op for anything a person would author.
+   */
+  const step = Math.max(gap, Math.max(canvas.width, canvas.height) / 256);
+
   ctx.save();
   // 0.22, matching the stylesheet's own weighting for this layer. A grid you notice only
   // when it is gone.
   ctx.globalAlpha = alpha * 0.22;
   ctx.fillStyle = vars["--dp-hud"] ?? "#fff";
 
-  if (style === "square" || style === "dot") {
-    for (let x = 0; x < canvas.width; x += gap) {
-      for (let y = 0; y < canvas.height; y += gap) {
-        if (style === "dot") ctx.fillRect(x, y, weight, weight);
-      }
-      if (style === "square") ctx.fillRect(x, 0, weight, canvas.height);
-    }
-    if (style === "square") {
-      for (let y = 0; y < canvas.height; y += gap) ctx.fillRect(0, y, canvas.width, weight);
+  if (style === "square") {
+    for (let x = 0; x < canvas.width; x += step) ctx.fillRect(x, 0, weight, canvas.height);
+    for (let y = 0; y < canvas.height; y += step) ctx.fillRect(0, y, canvas.width, weight);
+  } else if (style === "dot") {
+    for (let x = 0; x < canvas.width; x += step) {
+      for (let y = 0; y < canvas.height; y += step) ctx.fillRect(x, y, weight, weight);
     }
   } else if (style === "hatch") {
     // Rotated about the centre, over a band long enough that the corners are still
@@ -265,7 +278,7 @@ function hudGrid(
     const reach = Math.hypot(canvas.width, canvas.height);
     ctx.translate(canvas.width / 2, canvas.height / 2);
     ctx.rotate(-Math.PI / 4);
-    for (let y = -reach; y < reach; y += gap) ctx.fillRect(-reach, y, reach * 2, weight);
+    for (let y = -reach; y < reach; y += step) ctx.fillRect(-reach, y, reach * 2, weight);
   }
   ctx.restore();
 }
@@ -329,8 +342,9 @@ function hudSweep(
 ): void {
   const alpha = hudStrength(vars, i);
   const colour = vars["--dp-hud"];
-  if (!(alpha > 0) || !colour || !vars["--dp-hud-sweep-dur"]) return;
-  if (vars["--dp-hud-sweep-dur"] === "0s" && !vars["--dp-hud-clear"]) return;
+  // No guard on the duration: `sweepSec: 0` is "still", not "absent", and the CSS paints
+  // a static band for it too. Whether there is an overlay at all is decided by the caller.
+  if (!(alpha > 0) || !colour) return;
 
   const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
   gradient.addColorStop(0, vars["--dp-hud-clear"] ?? "#0000");

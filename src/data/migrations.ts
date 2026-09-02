@@ -28,6 +28,11 @@
  * GM left it and core's frame — which was always half a box away — joins it there. See
  * `reanchor`.
  *
+ * Version 4 splits `source.pageId` from `source.pdfPage`, and NOTHING HERE DOES IT. The
+ * fold lives in `pin-schema.normaliseSource`, so a player's client behaves correctly
+ * before this sweep ever reaches it — see DESIGN A22. This file only persists the result,
+ * which it already does for any payload whose validated form differs from its stored one.
+ *
  * `planMigration` is pure and unit-tested; everything below it performs the writes.
  */
 

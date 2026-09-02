@@ -221,7 +221,10 @@ function normaliseSource(raw: unknown, warnings: DpNotice[], errors: DpNotice[])
   // loads before the primary GM's sweep must already behave as a migrated one. In the
   // migration, it would read `pageId: "7"`, miss on `doc.pages.get("7")`, fall back to
   // the entry and draw page 1 — while the GM, already swept, saw page 7.
-  const legacyPdfPage = LEGACY_PDF_PAGE.test(String(s.pageId ?? "")) ? Number(s.pageId) : null;
+  // Through `pageNumber`, not a raw `Number`: a stored "0" would otherwise be folded as
+  // page 0, clamped to 1 on the NEXT read, and the payload would differ from itself
+  // between two passes — which costs `planMigration` a second write for no change.
+  const legacyPdfPage = LEGACY_PDF_PAGE.test(String(s.pageId ?? "")) ? pageNumber(s.pageId) : null;
 
   const kind = oneOf(s.kind, SOURCE_KINDS, d.kind, warnings, "source.kind", BAD_ENUM);
   const source: DpSource = {

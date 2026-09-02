@@ -119,16 +119,38 @@ export function rasterisationFailures(): number {
 }
 
 /**
- * The card stylesheet, fetched once and inlined verbatim into every SVG.
+ * The stylesheets inlined verbatim into every SVG, fetched once.
  *
  * Fetched rather than duplicated in JS so the reader tier and the canvas tier are
  * literally the same bytes and cannot drift apart.
+ *
+ * **All three, not just `card.css`.** An SVG decoded through `Blob -> img.src` is an
+ * isolated document: the page's own stylesheet cannot reach it, so anything not inlined
+ * here does not exist inside it. `card.css` is only the paper and the type — every rule
+ * that PAINTS an effect lives in `fx/effects.css`, and the properties it reads are
+ * registered in `fx/_props.css`. With only the first, a rasterised prop carried the whole
+ * dressing as custom properties and no rule that consumed any of it: paper and text, no
+ * tint, no grain, no frame, no overlay. DESIGN A3 describes the opposite, and the two
+ * tiers disagreeing about one preset is the same fault as the scanline blend, one level
+ * up. Masked until now only because A10 keeps HTML props off this tier entirely.
+ *
+ * Order matters: `_props.css` must precede `effects.css`, as `documents-pinner.css`
+ * imports them. `@layer` is deliberately NOT reproduced — there is no Foundry stylesheet
+ * inside the SVG to be outranked by, and a layer statement without its `@import` chain
+ * would only add a way to get the cascade wrong.
  */
+const INLINED = ["fx/_props.css", "fx/effects.css", "card.css"] as const;
+
 export async function loadCardCss(): Promise<string> {
   if (cardCss !== null) return cardCss;
   try {
-    const response = await fetch(`modules/${MODULE_ID}/styles/card.css`);
-    cardCss = response.ok ? await response.text() : "";
+    const sheets = await Promise.all(
+      INLINED.map(async (name) => {
+        const response = await fetch(`modules/${MODULE_ID}/styles/${name}`);
+        return response.ok ? await response.text() : "";
+      })
+    );
+    cardCss = sheets.join("\n");
   } catch {
     cardCss = "";
   }

@@ -83,30 +83,6 @@ export function snapToTier(pixels: number): number {
   return RES_TIERS[RES_TIERS.length - 1];
 }
 
-/**
- * How much of the effect to run.
- *
- * Half intensity at the coarse tier rather than none: an effect that switched off at a
- * distance would make props visibly change identity as a GM zoomed out, which reads as
- * a bug rather than as an optimisation.
- */
-export function effectScale(tier: LodTier): number {
-  switch (tier) {
-    case "L2a":
-      return 0.5;
-    case "L2b":
-    case "L3":
-      return 1;
-    default:
-      return 0;
-  }
-}
-
-/** The most shader taps a tier may spend. Baked effects are unaffected. */
-export function tapBudget(tier: LodTier): number {
-  return tier === "L2a" ? 3 : tier === "L2b" || tier === "L3" ? 16 : 0;
-}
-
 export function demote(tier: LodTier): LodTier {
   const index = TIER_ORDER.indexOf(tier);
   return TIER_ORDER[Math.max(0, index - 1)];

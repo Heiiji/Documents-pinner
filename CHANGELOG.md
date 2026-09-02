@@ -71,6 +71,19 @@ version 2; both migrations are invisible on any map.
 - **A re-sourced pin could leave a player holding access forever.** The ledger sweep's
   only test was "the anchor no longer exists", which was the same question as "this grant
   is stale" only while a pin's source could not change.
+- **No effect ever reached a prop drawn INTO the scene.** The rasteriser inlines its own
+  stylesheet into an isolated SVG document, and it inlined only the paper — every rule
+  that paints a tint, a stain, a frame or the new overlay lives in another file that never
+  travelled with it. A prop rasterised with a full dressing and nothing that consumed any
+  of it. Masked until now because journal props never reach that tier at all.
+- **Clearing the width or height field made a one-pixel tile.** An emptied number input is
+  a GM part-way through typing, not a request.
+- **A preset whose overlay colour was three or eight hex digits broke its own PDF.** The
+  zero-alpha form was built by appending "00", which is a valid colour for exactly one of
+  the three shapes the schema accepts — and an invalid one throws out of `addColorStop`,
+  aborting the bake so the page lost its frame and its edge mask too.
+- **A grid at the schema's finest pitch could freeze the canvas for a fifth of a second
+  per prop**, synchronously, inside the queue that draws every other one.
 
 ### Changed
 
@@ -533,7 +546,9 @@ occluded. The module detects this at startup rather than failing visibly.
 
 The full list is in the README and in `docs/DESIGN.md` §10.
 
-[Unreleased]: https://github.com/Heiiji/Documents-pinner/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/Heiiji/Documents-pinner/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/Heiiji/Documents-pinner/compare/v0.2.2...v0.3.0
+[0.2.2]: https://github.com/Heiiji/Documents-pinner/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/Heiiji/Documents-pinner/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/Heiiji/Documents-pinner/compare/v0.1.8...v0.2.0
 [0.1.8]: https://github.com/Heiiji/Documents-pinner/compare/v0.1.7...v0.1.8

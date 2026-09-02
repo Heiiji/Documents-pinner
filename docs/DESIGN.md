@@ -215,7 +215,7 @@ the module's signature affordance.
 
 ## 7. Effects
 
-Ten shipped presets, each a closed declarative parameter object. There is deliberately
+Thirteen shipped presets, each a closed declarative parameter object. There is deliberately
 **no free-form CSS field**: presets are meant to be exported and pasted in from
 strangers, so a preset must have no injection surface. `safeUrl()` is the single place a
 preset string reaches CSS, and it rejects anything that could end a `url()` token.
@@ -306,8 +306,10 @@ whether a public HTML sanitiser exists (assume not — strip explicitly).
    that would be destructive and unrecoverable.
 10. Compendium pack ownership is role-based and pack-wide, so there is no per-user grant.
 11. Scene padding changes do not move props — core does not reposition placeables either.
-12. A future PIXI 8 migration requires rewriting all GLSL. Shaders are isolated under
-    `src/effects/shaders/`, and every preset has a bake or CSS rendition that survives.
+12. A future PIXI 8 migration requires rewriting no GLSL: there is none. Every effect is
+    CSS applied at rasterisation time or a Canvas2D paint — see A3, where that decision
+    was actually taken, and A21, which found three comments still describing shaders that
+    were never written.
 13. A pin on a whole journal whose FIRST page is a PDF shows a placeholder card rather
     than the page. `pdfSourceOf` asks the resolved source's type and that is the entry;
     making the null default fall through would desync four call sites that agree by
@@ -350,17 +352,20 @@ Test world: one scene at darkness 0.8, two lights, a roof tile, three tokens, fo
 ```
 src/
   main.ts            hook registration only, no logic
-  const.ts  i18n.ts  api.ts  settings.ts  motion*
-  data/       PinData  PinStore  audience*  ownership-plan*  migrations*  pin-schema*
-  canvas/     PinnedTile  PropRecord  PropManager  PropHitLayer  DomPropTier  transform*  lod*
+  const.ts  i18n.ts  api.ts  settings.ts  motion*  fvtt  html*  log  normalise*
+  data/       PinData  PinStore  audience*  ownership-plan*  ownership-sync
+              migrations*  pin-schema*
+  canvas/     PinnedTile  PropManager  PropHitLayer  DomPropTier  transform*  lod*
   render/     ContentResolver  enrich  CardTemplate*  AssetInliner  Rasterizer  TextureCache
-              measure
-  effects/    EffectRegistry  preset-schema*  preset-css*  presets/*  shaders/*
+              BakeEffects  PdfPage  measure
+  effects/    EffectRegistry  preset-schema*  preset-css*  preset-library  level
+              textures*  presets/*
   apps/       DocumentPicker  PlacementGhost  PinStudio  Pinboard  PinHUD
               PresetStudio  ReaderOverlay  PropTooltip  OverlayRoot  pinboard-model*
-  ui/         controls  keybindings  onboarding
-styles/       documents-pinner.css (entry) + base, theme, fx/*, ui/* (focus.css last)
-templates/  lang/  assets/  tests/  docs/  .github/workflows/
+              chips
+  ui/         controls  keybindings  onboarding  entry-points
+styles/       documents-pinner.css (entry) + base, card, theme, fx/*, ui/* (focus.css last)
+lang/  tests/  scripts/  docs/  .github/workflows/
 ```
 
 `*` marks a **pure** module: no Foundry globals, unit-tested under Node.

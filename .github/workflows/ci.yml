@@ -31,6 +31,15 @@ jobs:
       - name: Build
         run: npm run build
 
+      # `tests/harness/effects.html` is generated and committed, and scripts/build-harness
+      # argues that its diff is a free regression signal on the effect emitter. That is
+      # only true if regenerating is enforced — otherwise it silently goes stale and the
+      # signal quietly becomes noise.
+      - name: The committed harness is current
+        run: |
+          npm run harness
+          git diff --exit-code tests/harness/effects.html
+
       # Foundry v14 type definitions are still immature (no stable release exists for
       # any Foundry generation), so type errors must never be able to block a release.
       # Types are stripped by esbuild at build time and are never type-checked there.

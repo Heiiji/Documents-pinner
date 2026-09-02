@@ -17,7 +17,20 @@ import { cardHtml, svgDocument } from "../src/render/CardTemplate";
 import { sanitise } from "../src/render/enrich";
 import { inlineImages } from "../src/render/AssetInliner";
 
-const CARD_CSS = readFileSync(join(import.meta.dirname, "..", "styles", "card.css"), "utf8");
+/**
+ * Every sheet the rasteriser inlines, in the order `Rasterizer.INLINED` inlines them.
+ *
+ * Not just `card.css`: an SVG decoded through `Blob -> img.src` is an isolated document,
+ * so the effect rules and the `@property` registrations have to travel with it or the
+ * card carries a full dressing and nothing that consumes it. All three therefore have to
+ * survive the XML parser, and `fx/effects.css` is the one with the `@media` blocks and
+ * the `&` nesting that would break it.
+ */
+const CARD_CSS = ["fx/_props.css", "fx/effects.css", "card.css"]
+  .map((name) =>
+    readFileSync(join(import.meta.dirname, "..", "styles", ...name.split("/")), "utf8")
+  )
+  .join("\n");
 
 /** Every construct that broke the parse, in one fixture. */
 const FIXTURE_BODY =

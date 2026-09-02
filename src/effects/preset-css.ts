@@ -36,6 +36,23 @@ function round(n: number, dp = 4): number {
  * the url token or start a new declaration is rejected outright. Presets are shared
  * between strangers; this is the one place a string from a preset reaches CSS.
  */
+/**
+ * A hex colour at zero alpha, whatever alpha it started with.
+ *
+ * String concatenation is not enough: `HEX` accepts `#rgb` and `#rrggbbaa` as well as
+ * `#rrggbb`, and appending "00" to either makes a value CSS drops — the registered
+ * property then falls back to `transparent`, which is `rgb(0 0 0 / 0)` and exactly the
+ * premultiplication hazard the zero-alpha form exists to avoid. Worse on the baked tier:
+ * `addColorStop` THROWS on an invalid colour, and that throw aborts the whole bake, so a
+ * PDF would lose its frame and its edge mask too.
+ */
+export function transparentForm(hex: string): string {
+  if (/^#[0-9a-f]{3}$/i.test(hex) || /^#[0-9a-f]{6}$/i.test(hex)) return `${hex}00`;
+  if (/^#[0-9a-f]{4}$/i.test(hex)) return `${hex.slice(0, 4)}0`;
+  if (/^#[0-9a-f]{8}$/i.test(hex)) return `${hex.slice(0, 7)}00`;
+  return "transparent";
+}
+
 export function safeUrl(path: string | null): string {
   if (!path || typeof path !== "string") return "none";
   if (/["'()\\\s;{}]|url\(|javascript:|expression/i.test(path)) return "none";
@@ -109,7 +126,7 @@ export function presetToCssVars(preset: DpPreset, intensity = 1): CssVars {
     // The same colour at zero alpha. Every hud gradient fades to THIS rather than to the
     // keyword `transparent`, which is rgb(0 0 0 / 0) and leaves engines free to disagree
     // about premultiplication — a cyan hairline picking up a grey cast at its ends.
-    "--dp-hud-clear": `${p.hud.color}00`,
+    "--dp-hud-clear": transparentForm(p.hud.color),
     "--dp-hud-op": String(round(p.hud.opacity)),
     "--dp-hud-gap": `${round(p.hud.pitch)}px`,
     "--dp-hud-w": `${round(p.hud.weight)}px`,
@@ -140,7 +157,7 @@ export function presetToDataAttrs(preset: DpPreset): Record<string, string> {
 }
 
 /** Whether this preset draws an overlay at all, which decides if the element is emitted. */
-export function hudActive(preset: DpPreset): boolean {
+function hudActive(preset: DpPreset): boolean {
   const h = preset.params.hud;
   return h.opacity > 0 && (h.marks !== "none" || h.grid !== "none" || h.sweepSec > 0);
 }

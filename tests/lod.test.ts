@@ -5,14 +5,12 @@ import {
   PERF_FRAMES,
   TIER_ORDER,
   demote,
-  effectScale,
   initialPerf,
   isHeavier,
   lodFor,
   priorityOf,
   snapToTier,
   stepPerf,
-  tapBudget,
   textureLongEdge,
   type LodTier,
 } from "../src/canvas/lod";
@@ -109,20 +107,6 @@ describe("snapToTier", () => {
       expect(tier).toBeGreaterThanOrEqual(previous);
       previous = tier;
     }
-  });
-});
-
-describe("effectScale and tapBudget", () => {
-  it("halves the effect at the coarse tier rather than switching it off", () => {
-    expect(effectScale("L2a")).toBe(0.5);
-    expect(effectScale("L2b")).toBe(1);
-    expect(effectScale("L1")).toBe(0);
-  });
-
-  it("bounds shader taps where the texture is already coarse", () => {
-    expect(tapBudget("L2a")).toBe(3);
-    expect(tapBudget("L2b")).toBeGreaterThan(3);
-    expect(tapBudget("L0")).toBe(0);
   });
 });
 

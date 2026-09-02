@@ -192,6 +192,14 @@ describe("copyCanvas", () => {
  * so offering it is honouring the effect rather than faking it.
  */
 describe("the hud layers on a baked page", () => {
+  /** What `CardTemplate` emits beside these vars. The gate is part of the fixture. */
+  const attrs = (over: Record<string, string> = {}) => ({
+    "data-dp-hud": "true",
+    "data-dp-hud-grid": "none",
+    "data-dp-hud-marks": "none",
+    ...over,
+  });
+
   const hud = (over: Record<string, string> = {}) => ({
     "--dp-i": "1",
     "--dp-hud": "#7fe8ff",
@@ -208,10 +216,7 @@ describe("the hud layers on a baked page", () => {
     await bakeEffects(
       canvas(),
       { ...hud(), "--dp-frame-w": "2px", "--dp-frame": "#7fe8ff" },
-      {
-        "data-dp-hud-grid": "square",
-        "data-dp-hud-marks": "brackets",
-      }
+      attrs({ "data-dp-hud-grid": "square", "data-dp-hud-marks": "brackets" })
     );
 
     const fills = calls.filter((c) => c.op === "fillRect").length;
@@ -227,39 +232,55 @@ describe("the hud layers on a baked page", () => {
     await bakeEffects(
       canvas(),
       { ...hud(), "--dp-hud-op": "0" },
-      {
-        "data-dp-hud-grid": "square",
-        "data-dp-hud-marks": "brackets",
-      }
+      attrs({ "data-dp-hud-grid": "square", "data-dp-hud-marks": "brackets" })
     );
     expect(ops()).toEqual([]);
   });
 
   it("draws the brackets at the arm length the stylesheet was given", async () => {
-    await bakeEffects(canvas(200, 300), hud({ "--dp-hud-op": "1" }), {
-      "data-dp-hud-marks": "brackets",
-      "data-dp-hud-grid": "none",
-    });
+    await bakeEffects(
+      canvas(200, 300),
+      hud({ "--dp-hud-op": "1" }),
+      attrs({ "data-dp-hud-marks": "brackets" })
+    );
     // Eight arms, each 9px by 1px or 1px by 9px, from --dp-hud-arm rather than recomputed.
     const arms = calls.filter((c) => c.op === "fillRect" && (c.args[5] === 9 || c.args[6] === 9));
     expect(arms).toHaveLength(8);
   });
 
   it("draws four squares for corners and a rule for a callout", async () => {
-    await bakeEffects(canvas(), hud(), {
-      "data-dp-hud-marks": "corners",
-      "data-dp-hud-grid": "none",
-    });
+    await bakeEffects(canvas(), hud(), attrs({ "data-dp-hud-marks": "corners" }));
     const corners = calls.filter((c) => c.op === "fillRect").length;
     calls = [];
-    await bakeEffects(canvas(), hud(), {
-      "data-dp-hud-marks": "callout",
-      "data-dp-hud-grid": "none",
-    });
+    await bakeEffects(canvas(), hud(), attrs({ "data-dp-hud-marks": "callout" }));
     const callout = calls.filter((c) => c.op === "fillRect").length;
 
     // Four squares against a bracket, a rule and a dot, plus the sweep's fill in both.
     expect(corners).toBe(5);
     expect(callout).toBe(5);
+  });
+});
+
+/**
+ * The two tiers must agree about whether a preset HAS an overlay.
+ *
+ * The baker used to decide for itself, from the strength alone — so a preset with a
+ * strength and no marks, grid or sweep drew nothing on a card and a full-card band of
+ * light on a PDF. Reachable from the Preset Studio in two drags.
+ */
+describe("the hud gate the card and the bake share", () => {
+  it("draws nothing when the card would carry no overlay element", async () => {
+    await bakeEffects(
+      canvas(),
+      {
+        "--dp-i": "1",
+        "--dp-hud": "#7fe8ff",
+        "--dp-hud-clear": "#7fe8ff00",
+        "--dp-hud-op": "0.9",
+        "--dp-hud-sweep-dur": "0s",
+      },
+      { "data-dp-hud": "false", "data-dp-hud-marks": "none", "data-dp-hud-grid": "none" }
+    );
+    expect(ops()).toEqual([]);
   });
 });
