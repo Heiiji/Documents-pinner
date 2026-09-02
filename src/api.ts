@@ -573,6 +573,52 @@ export async function unpin(anchorDoc: any): Promise<void> {
   await store.unpin(anchorDoc);
 }
 
+/**
+ * Point an existing pin at a different document, keeping everything else about it.
+ *
+ * NOT `adoptTile`. That verb builds a fresh `defaultPin()`, which is honest for what its
+ * name says and catastrophic here: it would reset the mode, the geometry, the effect, the
+ * interaction and — the one that matters — the AUDIENCE, silently un-revealing a pin
+ * players may be reading at that moment. Only the source moves, and the ownership grant
+ * that follows it.
+ *
+ * **Never wrap this in `enqueue`.** `store.update` queues itself on the same anchor id,
+ * and `enqueue` chains a task after the tracked promise it has already registered — so an
+ * outer task awaiting an inner one on the same id awaits its own completion. Neither ever
+ * settles: no error, no timeout, the button simply does nothing forever. `fitToContent`
+ * is the shape to copy — a plain async function whose callees queue themselves.
+ *
+ * The order is the payload, then the grant on the new source, then the release of the
+ * old — the same order `setAudience` uses, and for the same reason. It also fails in the
+ * safe direction: a half-done retarget leaves a player over-granted on a document they
+ * already had access to, where release-first would revoke access to the document the pin
+ * is still showing them.
+ */
+export async function retarget(anchorDoc: any, source: DpSource): Promise<boolean> {
+  if (!isGM() || !anchorDoc) return false;
+
+  const before = readPin(anchorDoc);
+  if (!before) return false;
+
+  const oldUuid = before.source.uuid;
+  const sameDocument =
+    before.source.kind === source.kind &&
+    before.source.uuid === source.uuid &&
+    before.source.src === source.src;
+  if (sameDocument) return false;
+
+  // The WHOLE source object, never a partial patch: `mergePin` deep-merges, so omitting
+  // `pageId` would leave a page id of the OLD journal pointing into the new one.
+  await store.update(anchorDoc, { source }, { "texture.src": anchorTexture(source) });
+
+  await syncAnchor(anchorDoc);
+  // `releaseAnchor` takes an explicit uuid precisely for this: the payload no longer
+  // names the old document, so it cannot find it on its own any more.
+  if (oldUuid && oldUuid !== source.uuid) await releaseAnchor(anchorDoc, oldUuid);
+
+  return true;
+}
+
 /** Adopt an existing tile as a pin — the one-click path from the Tile config sheet. */
 export async function adoptTile(tileDoc: any, source: DpSource): Promise<void> {
   if (!isGM() || !tileDoc) return;

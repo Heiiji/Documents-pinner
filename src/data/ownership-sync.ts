@@ -221,10 +221,17 @@ export async function onSourceOwnershipEdited(
 /**
  * The `ready` sweep.
  *
- * Repairs the three states the ledger cannot reach on its own: the module was disabled
- * while pins were deleted, a scene holding anchors was removed, or a write was
- * interrupted mid-flight. Each is the same fault — a holder entry naming an anchor
- * that no longer exists — so one pass fixes all three.
+ * Repairs the states the ledger cannot reach on its own: the module was disabled while
+ * pins were deleted, a scene holding anchors was removed, a write was interrupted
+ * mid-flight — and, since a pin's source became changeable, an anchor that is alive and
+ * no longer points here.
+ *
+ * That last one is worth naming, because it is the reason this function is not what it
+ * was. Until `api.retarget` existed, a pin's source was immutable, so "this holder is
+ * stale" and "this holder's anchor is gone" were the same question and the liveness test
+ * answered both. A retargeted anchor passes the liveness test and points somewhere else,
+ * which would have left the old document granted to a player forever with no pin anywhere
+ * naming it — and nothing in the module able to notice.
  *
  * Runs on the primary GM only, and reports what it repaired rather than doing it
  * quietly: an orphaned grant is a player still holding permission they should not.
@@ -232,10 +239,13 @@ export async function onSourceOwnershipEdited(
 export async function reconcile(): Promise<number> {
   if (!isPrimaryGM()) return 0;
 
-  const liveAnchors = new Set<string>();
+  // Anchor uuid -> the source uuid it currently names. A live anchor is not enough; what
+  // matters is whether it still points at the document holding the grant.
+  const anchorSources = new Map<string, string | null>();
   for (const scene of g()?.scenes?.contents ?? []) {
     for (const tile of scene.tiles?.contents ?? []) {
-      if (tile?.flags?.[MODULE_ID]?.[FLAGS.PIN]) liveAnchors.add(tile.uuid);
+      const pin = readPin(tile);
+      if (pin) anchorSources.set(tile.uuid, pin.source.uuid);
     }
   }
 
@@ -247,7 +257,9 @@ export async function reconcile(): Promise<number> {
     const orphans = new Set<string>();
     for (const holders of Object.values(stored.holders ?? {})) {
       for (const anchorUuid of Object.keys(holders)) {
-        if (!liveAnchors.has(anchorUuid)) orphans.add(anchorUuid);
+        // Exact comparison against what `syncAnchor` resolves, which keeps the
+        // entry-source / page-source asymmetry correct with no special case.
+        if (anchorSources.get(anchorUuid) !== source.uuid) orphans.add(anchorUuid);
       }
     }
     if (!orphans.size) continue;

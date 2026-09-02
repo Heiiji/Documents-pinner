@@ -178,8 +178,20 @@ export async function place(
  * Writes the whole normalised payload rather than a sub-path diff: the queue already
  * guarantees no concurrent writer, and a whole-object write is the only form that
  * cannot leave a partially-migrated payload behind when the schema changes.
+ *
+ * `fields` carries the tile fields a payload change IMPLIES, in the same document
+ * update. Today that is only `texture.src`, when re-sourcing changes the kind — and it
+ * has to be the same update, because the two must never disagree: core gives a tile with
+ * no valid texture no mesh at all (see `PLACEHOLDER_TEXTURE`), and a payload saying
+ * "image" beside a texture still saying `book.svg` draws a placeholder over a source
+ * that has one. Two separate `doc.update` calls would leave a frame in between where
+ * they do.
  */
-export function update(doc: any, patch: PinPatch): Promise<any> {
+export function update(
+  doc: any,
+  patch: PinPatch,
+  fields: Record<string, unknown> = {}
+): Promise<any> {
   return enqueue(doc?.id ?? "", async () => {
     const current = readPin(doc);
     if (!current) return null;
@@ -187,6 +199,7 @@ export function update(doc: any, patch: PinPatch): Promise<any> {
     const { pin } = mergePin(current, patch);
     return doc.update(
       {
+        ...fields,
         hidden: anchorHidden(pin.audience),
         [`flags.${MODULE_ID}.${FLAGS.PIN}`]: pin,
       },

@@ -255,3 +255,44 @@ describe("deleting a pin by a core gesture", () => {
     expect(() => onPreDeleteTile(plain({ id: "z" }), {})).not.toThrow();
   });
 });
+
+/**
+ * The `ready` sweep, and the fault a changeable source created.
+ *
+ * Until `api.retarget` existed, "this holder is stale" and "this holder's anchor is gone"
+ * were the same question, so the liveness test answered both. A retargeted anchor is
+ * alive and points somewhere else — it passes the liveness test, and the old document
+ * would have stayed granted to a player forever with no pin anywhere naming it.
+ */
+describe("reconcile", () => {
+  beforeEach(async () => {
+    const sync = await import("../src/data/ownership-sync");
+    await sync.syncAnchor(anchorA);
+    (globalThis as any).game.journal.contents = [journal];
+  });
+
+  it("leaves a holder whose anchor still points at this document", async () => {
+    const sync = await import("../src/data/ownership-sync");
+    expect(await sync.reconcile()).toBe(0);
+    expect(ledger().holders.ali).toHaveProperty("Scene.s1.Tile.a");
+    expect(journal.ownership.ali).toBe(2);
+  });
+
+  it("releases a holder whose anchor is alive but now names another document", async () => {
+    const sync = await import("../src/data/ownership-sync");
+    anchorA.flags["documents-pinner"].pin.source.uuid = "JournalEntry.other";
+
+    expect(await sync.reconcile()).toBe(1);
+    expect(journal.flags["documents-pinner"]?.grants ?? null).toBeNull();
+    expect(journal.ownership.ali).toBeUndefined();
+  });
+
+  it("still releases a holder whose anchor is gone entirely", async () => {
+    const sync = await import("../src/data/ownership-sync");
+    (globalThis as any).canvas.scene.tiles.contents = [];
+    (globalThis as any).game.scenes.contents[0].tiles.contents = [];
+
+    expect(await sync.reconcile()).toBe(1);
+    expect(journal.flags["documents-pinner"]?.grants ?? null).toBeNull();
+  });
+});
