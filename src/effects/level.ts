@@ -83,7 +83,7 @@ export function currentLevel(): EffectsLevel {
   });
 }
 
-/** Whether motion is allowed at all. The stylesheet keys off this via `--dp-motion`. */
+/** Whether motion is allowed at all. The stylesheet gates on `data-dp-level`. */
 export function motionAllowed(): boolean {
   return currentLevel() === "full";
 }

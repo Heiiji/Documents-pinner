@@ -27,12 +27,6 @@
   inherits: true;
   initial-value: 1;
 }
-@property --dp-motion {
-  syntax: "<number>";
-  inherits: true;
-  initial-value: 1;
-}
-
 @property --dp-tint {
   syntax: "<color>";
   inherits: true;
@@ -96,11 +90,6 @@
   syntax: "<number>";
   inherits: true;
   initial-value: 0;
-}
-@property --dp-noise-scale {
-  syntax: "<number>";
-  inherits: true;
-  initial-value: 1;
 }
 @property --dp-flicker {
   syntax: "<number>";
@@ -193,14 +182,9 @@
   initial-value: 9px;
 }
 
-/* The pure-CSS half of the accessibility contract: correct before any JS runs, and
-   still correct if the client setting is corrupt. `reduced` keeps static identity —
-   tint, frame, texture, edge shape — and stops only motion. */
-@media (prefers-reduced-motion: reduce) {
-  :root {
-    --dp-motion: 0;
-  }
-}
+/* The pure-CSS half of the accessibility contract lives in `fx/effects.css`, as a media
+   query that stops the card's own animations. It used to be a `--dp-motion` property set
+   here and read by no rule anywhere, which is to say it did not exist. */
 
 /*
  * These used to read `[data-dp-fx="reduced"] .dp-pin`, which can never match: `data-dp-fx`

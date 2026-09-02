@@ -98,9 +98,17 @@
 }
 
 /*
- * Motion. Every animation below is gated on --dp-motion, which the registry sets to 0
- * for a baked texture, for `reduced`, and for photosensitive mode — so the same
- * stylesheet serves all four states with no separate rendition to keep in sync.
+ * Motion.
+ *
+ * Two gates, and they answer different questions. `data-dp-motion` is the PRESET's own
+ * choice, and the `-dur: 0s` rewrite in `EffectRegistry.freeze()` is what silences a
+ * baked texture, a `reduced` client and a photosensitive one — all three take the same
+ * static rendition, which is why there is no separate one to keep in sync.
+ *
+ * The stated preference has its own media query at the foot of this file. It used to be
+ * a `--dp-motion` custom property that no rule anywhere read, so the pure-CSS half of
+ * the contract this comment described did not exist: until the JS wrote `data-dp-level`,
+ * a reduced-motion client got a fully animated card.
  */
 .dp-card[data-dp-motion="loop"] {
   animation:
@@ -392,4 +400,25 @@
  */
 .dp-card[data-dp-tier="L2a"] .dp-card__hud::after {
   display: none;
+}
+
+/*
+ * A stated preference, before any JavaScript runs.
+ *
+ * The `data-dp-level` gates above are written by `PropManager` once per LOD pass, so
+ * between a card mounting and that pass — and on any client where the level is misread —
+ * a reduced-motion user was getting the full animation. This is the guard the header of
+ * `fx/_props.css` claimed `--dp-motion` provided; that property was read by no rule in
+ * the module, so the claim was describing a mechanism that did not exist.
+ *
+ * Everything here is a fade, a translate or a paint: stopping it leaves each preset
+ * exactly at its static identity, which is the whole point of the accessibility setting.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .dp-card,
+  .dp-card::before,
+  .dp-card::after,
+  .dp-card .dp-card__hud-sweep {
+    animation: none;
+  }
 }

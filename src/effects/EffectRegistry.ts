@@ -159,7 +159,7 @@ function applyPinMotion(vars: CssVars, speed: number, motion: DpMotion): CssVars
  * silencing in all three cases, so it is written once.
  */
 function freeze(vars: CssVars): CssVars {
-  return { ...reduceCssVars(vars), "--dp-motion": "0" };
+  return reduceCssVars(vars);
 }
 
 export function dressing(context: EffectContext): EffectDressing {
@@ -170,7 +170,7 @@ export function dressing(context: EffectContext): EffectDressing {
   };
 
   if (context.level === "off" || context.tier === "L0" || context.tier === "L1") {
-    return { vars: { "--dp-i": "0", "--dp-motion": "0" }, attrs, style: "--dp-i:0;--dp-motion:0" };
+    return { vars: { "--dp-i": "0" }, attrs, style: "--dp-i:0" };
   }
 
   let vars: CssVars = {

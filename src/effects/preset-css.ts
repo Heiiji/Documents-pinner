@@ -51,11 +51,9 @@ export function safeUrl(path: string | null): string {
 export function presetToCssVars(preset: DpPreset, intensity = 1): CssVars {
   const p = preset.params;
   const i = Math.min(1, Math.max(0, Number.isFinite(intensity) ? intensity : 1));
-  const animated = preset.motion === "loop" ? 1 : 0;
 
   return {
     "--dp-i": String(round(i)),
-    "--dp-motion": String(animated),
 
     "--dp-tint": p.tint.color,
     "--dp-tint-amt": String(round(p.tint.amount)),
@@ -82,8 +80,9 @@ export function presetToCssVars(preset: DpPreset, intensity = 1): CssVars {
     "--dp-jitter": `${round(p.jitter.amount)}px`,
     "--dp-jitter-dur": secondsFromHz(p.jitter.hz),
 
+    // The grain's SCALE is not emitted: `EffectRegistry` reads `p.noise.scale` from the
+    // preset object to generate the texture, so a CSS copy of it could only ever go stale.
     "--dp-noise": String(round(p.noise.amount)),
-    "--dp-noise-scale": String(round(p.noise.scale)),
 
     "--dp-flicker": String(round(p.flicker.amount)),
     "--dp-flicker-dur": secondsFromHz(p.flicker.hz),
@@ -155,7 +154,6 @@ export function hudActive(preset: DpPreset): boolean {
  */
 export function reduceCssVars(vars: CssVars): CssVars {
   const out: CssVars = { ...vars };
-  out["--dp-motion"] = "0";
   for (const key of Object.keys(out)) {
     if (key.endsWith("-dur")) out[key] = "0s";
   }
@@ -168,7 +166,7 @@ export function reduceCssVars(vars: CssVars): CssVars {
 
 /** The `off` rendition: no effect layer at all, just the card. */
 export function disabledCssVars(): CssVars {
-  return { "--dp-i": "0", "--dp-motion": "0" };
+  return { "--dp-i": "0" };
 }
 
 /**

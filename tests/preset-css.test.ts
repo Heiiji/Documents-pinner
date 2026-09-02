@@ -76,11 +76,17 @@ describe("presetToCssVars", () => {
     expect(presetToCssVars(p)["--dp-scan-dur"]).toBe("0.5s");
   });
 
-  it("flags motion only for looping presets", () => {
-    expect(presetToCssVars(defaultPreset({ id: "z", motion: "loop" }))["--dp-motion"]).toBe("1");
-    expect(presetToCssVars(defaultPreset({ id: "z", motion: "none" }))["--dp-motion"]).toBe("0");
-    expect(presetToCssVars(defaultPreset({ id: "z", motion: "onReveal" }))["--dp-motion"]).toBe(
-      "0"
+  /**
+   * The preset's own motion choice reaches CSS as `data-dp-motion`, and nothing else.
+   * There used to be a `--dp-motion` number beside it that no rule anywhere read, while
+   * two comments described it as the gate every animation runs through.
+   */
+  it("carries the preset's motion as an attribute and not as a number", () => {
+    expect(presetToDataAttrs(defaultPreset({ id: "z", motion: "loop" }))["data-dp-motion"]).toBe(
+      "loop"
+    );
+    expect(presetToCssVars(defaultPreset({ id: "z", motion: "loop" }))).not.toHaveProperty(
+      "--dp-motion"
     );
   });
 });
@@ -149,7 +155,6 @@ describe("accessibility renditions", () => {
     expect(reduced["--dp-glow-r"]).toBe(full["--dp-glow-r"]);
 
     // Motion does not.
-    expect(reduced["--dp-motion"]).toBe("0");
     for (const [k, v] of Object.entries(reduced)) {
       if (k.endsWith("-dur")) expect(v, k).toBe("0s");
     }
@@ -216,7 +221,7 @@ describe("accessibility renditions", () => {
   });
 
   it("off collapses to nothing at all", () => {
-    expect(disabledCssVars()).toEqual({ "--dp-i": "0", "--dp-motion": "0" });
+    expect(disabledCssVars()).toEqual({ "--dp-i": "0" });
   });
 
   it("does not mutate the vars it reduces", () => {

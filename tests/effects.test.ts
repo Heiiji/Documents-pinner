@@ -107,7 +107,6 @@ describe("dressing", () => {
 
   it("stops all motion for a baked texture, because a texture cannot animate", () => {
     const baked = dressing(context({ preset: getCorePreset("glitch")!, baked: true }));
-    expect(baked.vars["--dp-motion"]).toBe("0");
     for (const [key, value] of Object.entries(baked.vars)) {
       if (key.endsWith("-dur")) expect(value, key).toBe("0s");
     }
@@ -119,7 +118,6 @@ describe("dressing", () => {
       context({ preset: getCorePreset("crt-scanlines")!, level: "reduced" })
     );
 
-    expect(reduced.vars["--dp-motion"]).toBe("0");
     // Tint, grain, edge shape and static scanlines all survive.
     expect(reduced.vars["--dp-tint"]).toBe(full.vars["--dp-tint"]);
     expect(reduced.vars["--dp-scan-img"]).toBe(full.vars["--dp-scan-img"]);
@@ -129,7 +127,7 @@ describe("dressing", () => {
 
   it("strips everything when effects are off", () => {
     const off = dressing(context({ level: "off" }));
-    expect(off.vars).toEqual({ "--dp-i": "0", "--dp-motion": "0" });
+    expect(off.vars).toEqual({ "--dp-i": "0" });
   });
 
   it("carries the tier and level as attributes the stylesheet can select on", () => {
@@ -275,11 +273,16 @@ describe("the pin's own motion settings", () => {
 
   it("stops motion entirely when the pin asks for none", () => {
     const still = dressing({ ...base, motion: "none" }).vars;
-    expect(still["--dp-motion"]).toBe("0");
+    // Every duration zeroed is what "still" IS, now that no separate flag says so.
+    for (const [key, value] of Object.entries(still)) {
+      if (key.endsWith("-dur")) expect(value, key).toBe("0s");
+    }
+    // …and the static identity is untouched, which is the whole distinction.
+    expect(Number(still["--dp-tint-amt"])).toBeGreaterThan(0);
   });
 
   it("treats a speed of zero as still, rather than as an infinite duration", () => {
-    expect(dressing({ ...base, speed: 0 }).vars["--dp-motion"]).toBe("0");
+    expect(dressing({ ...base, speed: 0 }).vars["--dp-flicker-dur"]).toBe("0s");
   });
 
   it("leaves the preset alone at speed 1, so nothing drifts by default", () => {
