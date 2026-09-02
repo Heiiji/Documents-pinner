@@ -49,7 +49,14 @@ import { write } from "../src/apps/OverlayRoot";
 const pin = (over: Partial<DpPinFlags> = {}): DpPinFlags => ({
   ...defaultPin(),
   mode: "prop",
-  source: { kind: "document", uuid: "JournalEntry.a", src: null, pageId: null, followName: true },
+  source: {
+    kind: "document",
+    uuid: "JournalEntry.a",
+    src: null,
+    pageId: null,
+    pdfPage: null,
+    followName: true,
+  },
   audience: makeAudience({ kind: "everyone" }),
   ...over,
 });
@@ -202,6 +209,22 @@ describe("syncDomTier", () => {
     expect(resolveCard).toHaveBeenCalledTimes(1);
     const box = overlay()!.querySelector<HTMLElement>(".dp-prop")!;
     expect(box.style.height).toBe("900px");
+  });
+
+  it("re-resolves when the chosen page changes, or the setting does nothing at all", async () => {
+    syncDomTier([entry()]);
+    await settle();
+    syncDomTier([entry({ pin: pin({ source: { ...pin().source, pageId: "aBcD1234eFgH5678" } }) })]);
+    await settle();
+    expect(resolveCard).toHaveBeenCalledTimes(2);
+  });
+
+  it("re-resolves when the PDF page changes", async () => {
+    syncDomTier([entry()]);
+    await settle();
+    syncDomTier([entry({ pin: pin({ source: { ...pin().source, pdfPage: 3 } }) })]);
+    await settle();
+    expect(resolveCard).toHaveBeenCalledTimes(2);
   });
 
   it("re-resolves when the type size changes, because that is drawn into the card", async () => {

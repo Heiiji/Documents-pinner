@@ -14,8 +14,23 @@ export interface DpSource {
   uuid: string | null;
   /** File path when `kind === "image"`. */
   src: string | null;
-  /** Optional page within a JournalEntry. */
+  /**
+   * Which page of a pinned `JournalEntry` is shown and opened, by its `_id`.
+   *
+   * Null means the entry's first page, which is what the module has always drawn.
+   * Never a number: until schema 4 this field was ALSO read as a one-based PDF page,
+   * and one field cannot answer "page 4 of the journal, whose page 4 is a PDF, at its
+   * page 7". `pdfPage` answers the second half.
+   */
   pageId: string | null;
+  /**
+   * Which page of a PDF is drawn, one-based, as pdf.js counts.
+   *
+   * Null means the first page. Independent of `pageId` because the two describe
+   * different documents: `pageId` picks a page OF a journal, `pdfPage` picks a page
+   * INSIDE the PDF that page turned out to be.
+   */
+  pdfPage: number | null;
   /** Keep the label in step with the source document's name. */
   followName: boolean;
 }

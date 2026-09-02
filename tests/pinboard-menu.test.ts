@@ -73,7 +73,9 @@ describe("the row menu", () => {
     const menu = root().querySelector<HTMLElement>(".dp-menu")!;
     expect(menu).not.toBeNull();
     expect(menu.dataset.dpId).toBe("t2");
-    const acts = [...menu.querySelectorAll<HTMLElement>("[data-dp-act]")].map((b) => b.dataset.dpAct);
+    const acts = [...menu.querySelectorAll<HTMLElement>("[data-dp-act]")].map(
+      (b) => b.dataset.dpAct
+    );
     expect(acts).toEqual(["visibility", "show", "shape", "fit", "locate", "studio", "delete"]);
   });
 
@@ -109,8 +111,9 @@ describe("the bulk bar", () => {
 
 describe("reordering", () => {
   const written = () =>
-    (world.canvas.scene as any).updates?.flatMap((call: any[]) => call.map((u) => [u._id, u.sort])) ??
-    [];
+    (world.canvas.scene as any).updates?.flatMap((call: any[]) =>
+      call.map((u) => [u._id, u.sort])
+    ) ?? [];
 
   it("moves the focused row one step with Alt and an arrow", async () => {
     board.focusedId = "t1";

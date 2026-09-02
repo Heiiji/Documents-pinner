@@ -253,6 +253,7 @@ export function definePicker(): any {
         uuid,
         src: null,
         pageId: null,
+        pdfPage: null,
         followName: true,
       };
       this.close();
@@ -283,6 +284,7 @@ async function onBrowse(this: any) {
         uuid: null,
         src: path,
         pageId: null,
+        pdfPage: null,
         followName: false,
       };
       if (this.adopt) {

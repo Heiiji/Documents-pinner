@@ -51,7 +51,14 @@ export function sourceFromDropData(data: any): DpSource | null {
   if (!data) return null;
 
   if (data.type === "JournalEntryPage" && data.uuid) {
-    return { kind: "document", uuid: data.uuid, src: null, pageId: null, followName: true };
+    return {
+      kind: "document",
+      uuid: data.uuid,
+      src: null,
+      pageId: null,
+      pdfPage: null,
+      followName: true,
+    };
   }
   if (data.type === "JournalEntry" && data.uuid) {
     return {
@@ -59,20 +66,28 @@ export function sourceFromDropData(data: any): DpSource | null {
       uuid: data.uuid,
       src: null,
       pageId: typeof data.pageId === "string" ? data.pageId : null,
+      pdfPage: null,
       followName: true,
     };
   }
   // The file browser and an OS file drag both arrive as a bare path.
   const path = data.src ?? data.path ?? (typeof data === "string" ? data : null);
   if (typeof path === "string" && path) {
-    return { kind: "image", uuid: null, src: path, pageId: null, followName: false };
+    return { kind: "image", uuid: null, src: path, pageId: null, pdfPage: null, followName: false };
   }
   return null;
 }
 
 export function sourceFromDocument(doc: any): DpSource | null {
   if (!doc?.uuid || !DOCUMENT_SOURCES.includes(doc.documentName)) return null;
-  return { kind: "document", uuid: doc.uuid, src: null, pageId: null, followName: true };
+  return {
+    kind: "document",
+    uuid: doc.uuid,
+    src: null,
+    pageId: null,
+    pdfPage: null,
+    followName: true,
+  };
 }
 
 /** The document a pin points at, or `null` for an image source or a deleted target. */
@@ -417,12 +432,17 @@ export async function openLocally(anchorDoc: any): Promise<void> {
     return;
   }
 
-  // A page opens inside its parent's sheet, which is where its navigation lives.
+  // A page opens inside its parent's sheet, which is where its navigation lives. This
+  // branch takes BOTH page cases: a pin whose uuid names a page, and a pin on an entry
+  // with a page chosen — `resolveSource` has already resolved the second to the page.
   if (source.documentName === "JournalEntryPage" && source.parent?.sheet) {
     source.parent.sheet.render(true, { pageId: source.id });
     return;
   }
-  source.sheet.render(true, pin.source.pageId ? { pageId: pin.source.pageId } : undefined);
+  // So anything reaching here is an entry with no page chosen, or one whose chosen page
+  // has been deleted. Passing the stored id on would ask the sheet for a page that is
+  // not there; the entry opens where it opens.
+  source.sheet.render(true);
 }
 
 /**
@@ -628,7 +648,14 @@ export async function adoptNote(noteDoc: any, source?: DpSource | null): Promise
 export function sourceFromNote(noteDoc: any): DpSource | null {
   const pageUuid = noteDoc?.page?.uuid;
   if (pageUuid) {
-    return { kind: "document", uuid: pageUuid, src: null, pageId: null, followName: true };
+    return {
+      kind: "document",
+      uuid: pageUuid,
+      src: null,
+      pageId: null,
+      pdfPage: null,
+      followName: true,
+    };
   }
   const entryUuid = noteDoc?.entry?.uuid;
   if (entryUuid) {
@@ -637,6 +664,7 @@ export function sourceFromNote(noteDoc: any): DpSource | null {
       uuid: entryUuid,
       src: null,
       pageId: typeof noteDoc.pageId === "string" ? noteDoc.pageId : null,
+      pdfPage: null,
       followName: true,
     };
   }

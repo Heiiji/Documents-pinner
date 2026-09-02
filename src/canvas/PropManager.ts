@@ -728,7 +728,14 @@ class Manager {
       userId: g()?.user?.id ?? "",
       resTier: longEdge,
       presetBake: `${pin.effect.id}:${pin.effect.intensity}:${pin.effect.seed}:${pin.display.paper}:${this.#level}`,
-      docHash: `${doc.width}x${doc.height}:${fontPx}:${padPx}:${contentHash}`,
+      // The chosen page goes in the docHash and NEVER in `uuid`: `TextureCache.keysFor`
+      // prefix-matches `${uuid}|`, so folding it into the uuid would break `invalidate`
+      // for every prop on the scene. It has to be here, though — the provisional key
+      // above is built from the PREVIOUS draw's hash, so without the page a re-page hits
+      // the cache, binds the old texture and returns before ever resolving.
+      docHash:
+        `${doc.width}x${doc.height}:${fontPx}:${padPx}` +
+        `:${pin.source.pageId ?? ""}:${pin.source.pdfPage ?? ""}:${contentHash}`,
     });
   }
 
@@ -1108,9 +1115,16 @@ function playRevealSound(src: string | null): void {
  */
 let bakedTaints = false;
 
-/** Which page of a multi-page PDF a pin shows. One-based, as pdf.js counts. */
+/**
+ * Which page of a multi-page PDF a pin shows. One-based, as pdf.js counts.
+ *
+ * `source.pdfPage` and not `source.pageId`: until schema 4 this read the field that also
+ * held a JournalEntryPage id, so a pin could name a page of a journal or a page of a PDF
+ * but never both. The schema clamps and floors, so the fallback here is only for a
+ * payload that has not been through the normaliser.
+ */
 function pdfPageOf(pin: any): number {
-  const raw = Number(pin?.source?.pageId);
+  const raw = Number(pin?.source?.pdfPage);
   return Number.isFinite(raw) && raw >= 1 ? Math.floor(raw) : 1;
 }
 

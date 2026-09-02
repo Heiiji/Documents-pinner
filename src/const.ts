@@ -17,8 +17,14 @@ export const MODULE_ID = "documents-pinner";
  * 3: nothing in the payload changes. The bump marks the anchors whose stored point has
  *    been re-read as the centre core always took it for — see `migrations.ts` — so the
  *    move happens once and never to a pin written after it.
+ * 4: `source.pageId` is strictly a JournalEntryPage id and `source.pdfPage` is the page
+ *    of a PDF. One field could not hold both, and a GM choosing page 4 of a journal
+ *    whose page 4 is a PDF needs to say which page of it. A number found in `pageId` is
+ *    folded into `pdfPage` by the NORMALISER rather than by the migration, so a player's
+ *    unmigrated client already behaves as a migrated one — the same call `clickThrough`
+ *    made at schema 2.
  */
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 
 /** Version of the `flags[MODULE_ID].grants` ownership ledger. */
 export const LEDGER_VERSION = 1;

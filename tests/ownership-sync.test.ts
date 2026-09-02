@@ -34,6 +34,7 @@ function pinned(id: string, kind: string, users: string[]) {
           uuid: "JournalEntry.j",
           src: null,
           pageId: null,
+          pdfPage: null,
           followName: true,
         },
         audience: {

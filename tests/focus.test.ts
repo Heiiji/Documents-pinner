@@ -6,7 +6,10 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const UI = join(import.meta.dirname, "..", "styles", "ui");
-const ENTRY = readFileSync(join(import.meta.dirname, "..", "styles", "documents-pinner.css"), "utf8");
+const ENTRY = readFileSync(
+  join(import.meta.dirname, "..", "styles", "documents-pinner.css"),
+  "utf8"
+);
 
 describe("focus rings", () => {
   it("are never removed by a surface's own stylesheet", () => {

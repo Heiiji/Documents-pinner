@@ -13,7 +13,14 @@ import { fakeTile, installWorld, uninstallWorld } from "./helpers/fake-foundry";
 const frame = () => new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
 
 function pinned(id: string, tooltip: string) {
-  const tile = fakeTile({ id, uuid: `Scene.s1.Tile.${id}`, x: 100, y: 200, width: 400, height: 560 });
+  const tile = fakeTile({
+    id,
+    uuid: `Scene.s1.Tile.${id}`,
+    x: 100,
+    y: 200,
+    width: 400,
+    height: 560,
+  });
   tile.flags = {
     "documents-pinner": {
       pin: { ...defaultPin(), interaction: { ...defaultPin().interaction, tooltip } },

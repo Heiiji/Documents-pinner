@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { FLAGS, MODULE_ID } from "../src/const";
+import { FLAGS, MODULE_ID, SCHEMA_VERSION } from "../src/const";
 import { planMigration } from "../src/data/migrations";
 import { cardMetrics, defaultPin, freezeMetrics, validatePin } from "../src/data/pin-schema";
 
@@ -46,6 +46,7 @@ const cleanPin = () =>
         uuid: "JournalEntry.abc",
         src: null,
         pageId: null,
+        pdfPage: null,
         followName: true,
       },
     }).pin,
@@ -91,7 +92,7 @@ describe("planMigration", () => {
   it("rewrites every version 1 payload, because the type size becomes stored", () => {
     const updates = planMigration([tile("a", v1Pin())]);
     expect(updates.length).toBe(1);
-    expect((updates[0][FLAG_PATH] as any).v).toBe(3);
+    expect((updates[0][FLAG_PATH] as any).v).toBe(SCHEMA_VERSION);
   });
 
   it("freezes the type size a prop is currently drawn at, so migrating changes nothing on the map", () => {
@@ -125,7 +126,11 @@ describe("planMigration", () => {
   });
 
   it("uses the remembered prop size when a pin-mode anchor has one", () => {
-    const pin = { ...v1Pin(), mode: "pin", geometry: { pin: null, prop: { width: 800, height: 1132 } } };
+    const pin = {
+      ...v1Pin(),
+      mode: "pin",
+      geometry: { pin: null, prop: { width: 800, height: 1132 } },
+    };
     const migrated: any = planMigration([tile("a", pin, { width: 100, height: 100 })])[0][
       FLAG_PATH
     ];
@@ -172,7 +177,7 @@ describe("re-anchoring a prop that was drawn as a card", () => {
     const [update] = planMigration([tile("a", v2Prop(), at(100, 240))], { drawnAsCard: card });
     expect(update.x).toBe(300);
     expect(update.y).toBe(520);
-    expect((update[FLAG_PATH] as any).v).toBe(3);
+    expect((update[FLAG_PATH] as any).v).toBe(SCHEMA_VERSION);
   });
 
   it("moves it the same at any rotation, because the card turned about that centre", () => {

@@ -95,6 +95,11 @@ function contentKeyOf(entry: DomPropEntry): string {
   const { fontPx, padPx } = cardMetrics(pin.display, size);
   return [
     pin.source.uuid ?? pin.source.src ?? entry.id,
+    // Separate entries, never concatenated: joined by `|`, ("ab", null) and (null, "ab")
+    // would otherwise be the same key. Without these the GM picks another page and the
+    // card never re-resolves.
+    pin.source.pageId ?? "",
+    pin.source.pdfPage ?? "",
     pin.mode,
     pin.effect.id,
     pin.effect.intensity,

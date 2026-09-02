@@ -33,8 +33,12 @@ export const WHATS_NEW: Record<string, string[]> = {
 
 /** PURE. Compare two dotted versions numerically: negative, zero or positive. */
 export function compareVersions(a: string, b: string): number {
-  const pa = String(a).split(".").map((n) => parseInt(n, 10) || 0);
-  const pb = String(b).split(".").map((n) => parseInt(n, 10) || 0);
+  const pa = String(a)
+    .split(".")
+    .map((n) => parseInt(n, 10) || 0);
+  const pb = String(b)
+    .split(".")
+    .map((n) => parseInt(n, 10) || 0);
   for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
     const d = (pa[i] ?? 0) - (pb[i] ?? 0);
     if (d) return d;
@@ -94,9 +98,11 @@ export async function onboardingReady(): Promise<void> {
   const content = `<ul>${bullets}</ul>`;
   const title = t("DP.onboarding.whatsNewTitle", { version });
   if (DialogV2.prompt) {
-    await DialogV2.prompt({ window: { title }, content, ok: { label: t("DP.onboarding.ok") } }).catch(
-      () => null
-    );
+    await DialogV2.prompt({
+      window: { title },
+      content,
+      ok: { label: t("DP.onboarding.ok") },
+    }).catch(() => null);
   } else {
     await DialogV2.confirm({
       window: { title },

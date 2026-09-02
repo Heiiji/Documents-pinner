@@ -23,6 +23,7 @@ function fakeDoc(overrides: Record<string, any> = {}) {
       uuid: "JournalEntry.abc",
       src: null,
       pageId: null,
+      pdfPage: null,
       followName: true,
     },
     ...(overrides.pin ?? {}),

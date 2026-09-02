@@ -176,7 +176,9 @@ describe("the focus reader", () => {
     expect(reader()).not.toBeNull();
 
     // Just beside it — inside the old reading of the point as a corner, and not the prop.
-    board.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, clientX: 150, clientY: 150 }));
+    board.dispatchEvent(
+      new MouseEvent("pointerdown", { bubbles: true, clientX: 150, clientY: 150 })
+    );
     expect(reader()).toBeNull();
   });
 

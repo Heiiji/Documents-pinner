@@ -26,7 +26,14 @@ import { t } from "../i18n";
 import { escapeAttr } from "../html";
 import { readPin } from "../data/PinData";
 import { cardMetrics, naturalSize } from "../data/pin-schema";
-import { centreOf, containsPoint, scaleOf, screenToScene, stageMatrix, tileRect } from "../canvas/transform";
+import {
+  centreOf,
+  containsPoint,
+  scaleOf,
+  screenToScene,
+  stageMatrix,
+  tileRect,
+} from "../canvas/transform";
 import { resolveCard } from "../render/ContentResolver";
 import { propManager } from "../canvas/PropManager";
 import { leave, mount, write } from "./OverlayRoot";
@@ -92,7 +99,11 @@ function gridSize(): number {
  * reader gate the view is brought in first, to a comfortable size rather than the bare
  * minimum, and never past the canvas's own maximum.
  */
-export function readableScale(fontPx: number, currentScale: number, maxZoom: number): number | null {
+export function readableScale(
+  fontPx: number,
+  currentScale: number,
+  maxZoom: number
+): number | null {
   if (fontPx * currentScale >= LOD.READER_TYPE) return null;
   return Math.min(maxZoom, (LOD.READER_TYPE * 1.5) / fontPx);
 }

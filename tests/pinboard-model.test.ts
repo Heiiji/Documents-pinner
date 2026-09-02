@@ -227,7 +227,11 @@ describe("dropIndex", () => {
     (() => {
       const index = dropIndex(rows, movedId, targetId, after);
       const next = rows.filter((r) => r.id !== movedId);
-      next.splice(index, 0, rows.find((r) => r.id === movedId)!);
+      next.splice(
+        index,
+        0,
+        rows.find((r) => r.id === movedId)!
+      );
       return next.map((r) => r.id);
     })();
 

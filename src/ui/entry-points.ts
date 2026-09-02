@@ -126,7 +126,7 @@ export function addContextOption(options: any[]): void {
       const uuid = uuidFromContextTarget(target);
       if (!uuid) return;
       armAt(
-        { kind: "document", uuid, src: null, pageId: null, followName: true },
+        { kind: "document", uuid, src: null, pageId: null, pdfPage: null, followName: true },
         viewportCentre()
       );
     },
@@ -184,7 +184,14 @@ export function onChatMessage(_log: any, message: string): boolean | void {
     return false;
   }
   armAt(
-    { kind: "document", uuid: found.uuid, src: null, pageId: null, followName: true },
+    {
+      kind: "document",
+      uuid: found.uuid,
+      src: null,
+      pageId: null,
+      pdfPage: null,
+      followName: true,
+    },
     viewportCentre()
   );
   return false;
@@ -314,7 +321,16 @@ export function onSourceRenamed(doc: any, changed: any, options: any): void {
   for (const scene of g()?.scenes?.contents ?? []) {
     for (const tile of scene.tiles?.contents ?? []) {
       const pin = readPin(tile);
-      if (!pin?.source.followName || pin.source.uuid !== doc.uuid) continue;
+      if (!pin?.source.followName) continue;
+      // Two ways this pin can be about the renamed document: it points straight at it,
+      // or it points at the entry and has chosen this page. The second only became
+      // possible at schema 4, and without it renaming the chosen page redrew nothing.
+      const named =
+        pin.source.uuid === doc.uuid ||
+        (!!pin.source.pageId &&
+          pin.source.pageId === doc.id &&
+          doc.parent?.uuid === pin.source.uuid);
+      if (!named) continue;
       // The label is derived at render time from the source, so nothing needs writing;
       // the canvas just has to be told to redraw it.
       tile.object?.renderFlags?.set?.({ redraw: true });

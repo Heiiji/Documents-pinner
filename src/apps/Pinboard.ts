@@ -411,7 +411,9 @@ export function definePinboard(): any {
         const id = this.menuReturnTo;
         this.menuReturnTo = null;
         content
-          .querySelector<HTMLElement>(`.dp-row[data-dp-id="${CSS.escape(id)}"] [data-action="rowMenu"]`)
+          .querySelector<HTMLElement>(
+            `.dp-row[data-dp-id="${CSS.escape(id)}"] [data-action="rowMenu"]`
+          )
           ?.focus({ preventScroll: true });
         return;
       }
@@ -522,7 +524,9 @@ export function definePinboard(): any {
         }
         if (event.key === "ArrowDown" || event.key === "ArrowUp") {
           const items = [
-            ...(event.currentTarget as HTMLElement).querySelectorAll<HTMLElement>(".dp-menu button"),
+            ...(event.currentTarget as HTMLElement).querySelectorAll<HTMLElement>(
+              ".dp-menu button"
+            ),
           ];
           const at = items.indexOf(document.activeElement as HTMLElement);
           const next = focusIndex(items.length, at, event.key === "ArrowDown" ? 1 : -1);

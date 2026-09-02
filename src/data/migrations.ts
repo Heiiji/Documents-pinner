@@ -126,7 +126,12 @@ function reanchor(
   if (Number.isFinite(version) && version >= CENTRE_VERSION) return null;
   if (pin.mode !== "prop" || !options.drawnAsCard?.(pin)) return null;
 
-  const box = { x: Number(tile?.x), y: Number(tile?.y), width: Number(tile?.width), height: Number(tile?.height) };
+  const box = {
+    x: Number(tile?.x),
+    y: Number(tile?.y),
+    width: Number(tile?.width),
+    height: Number(tile?.height),
+  };
   if (!Object.values(box).every(Number.isFinite)) return null;
   const centre = docPositionFor(box);
   return { x: Math.round(centre.x), y: Math.round(centre.y) };

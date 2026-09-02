@@ -158,7 +158,7 @@ export async function resolveCard(
   const pdfSrc = pdfSourceOf(source);
   if (pdfSrc) {
     const longEdge = Math.max(size.width, size.height) * (options.tier === "L2a" ? 1 : 2);
-    const rendered = await renderPdfPage(pdfSrc, pageOf(pin), Math.round(longEdge));
+    const rendered = await renderPdfPage(pdfSrc, pin.source.pdfPage ?? 1, Math.round(longEdge));
     if (rendered) {
       const title = pin.display.label || source.name || "";
       return {
@@ -171,7 +171,7 @@ export async function resolveCard(
         title,
         readable: source.testUserPermission?.(g()?.user, "OBSERVER") === true,
         contentHash: hashContent(
-          `pdf|${pdfSrc}|${pageOf(pin)}|${rendered.width}x${rendered.height}`
+          `pdf|${pdfSrc}|${pin.source.pdfPage ?? 1}|${rendered.width}x${rendered.height}`
         ),
         missing: false,
         // The page's own aspect is the answer; it is contained, so it never overflows.
@@ -203,12 +203,6 @@ export async function resolveCard(
     missing: false,
     naturalHeight,
   };
-}
-
-/** Which page of a multi-page PDF this pin shows. One-based, as pdf.js counts. */
-function pageOf(pin: DpPinFlags): number {
-  const raw = Number(pin.source.pageId);
-  return Number.isFinite(raw) && raw >= 1 ? Math.floor(raw) : 1;
 }
 
 function placeholder(common: any): ResolvedCard {

@@ -61,6 +61,7 @@ function propTile(id: string) {
           uuid: "JournalEntry.j",
           src: null,
           pageId: null,
+          pdfPage: null,
           followName: true,
         },
         audience: { ...defaultPin().audience, kind: "everyone" },
@@ -165,6 +166,53 @@ describe("the texture cache key and the type size", () => {
     tiles[0].width = 800;
     tiles[0].height = 1132;
     manager.refresh();
+    await settle();
+
+    expect(vi.mocked(resolveCard).mock.calls.length).toBeGreaterThan(before);
+  });
+});
+
+/**
+ * The chosen page is in the key, and in the right half of it.
+ *
+ * The provisional key is built from the PREVIOUS draw's content hash, so a page change
+ * that is not in the key hits the cache, binds the old texture and returns before ever
+ * resolving — the GM picks another page and nothing happens, forever. And it has to sit
+ * in the docHash rather than the uuid, because `TextureCache.keysFor` prefix-matches
+ * `${uuid}|`: folding it into the uuid would break `invalidate` for every prop at once.
+ */
+describe("the texture cache key and the chosen page", () => {
+  it("is a cache miss when the journal page changes", async () => {
+    const { resolveCard } = await import("../src/render/ContentResolver");
+    const before = vi.mocked(resolveCard).mock.calls.length;
+
+    tiles[0].flags["documents-pinner"].pin.source.pageId = "aBcD1234eFgH5678";
+    manager.refresh();
+    await settle();
+
+    expect(vi.mocked(resolveCard).mock.calls.length).toBeGreaterThan(before);
+  });
+
+  it("is a cache miss when the PDF page changes", async () => {
+    const { resolveCard } = await import("../src/render/ContentResolver");
+    const before = vi.mocked(resolveCard).mock.calls.length;
+
+    tiles[0].flags["documents-pinner"].pin.source.pdfPage = 4;
+    manager.refresh();
+    await settle();
+
+    expect(vi.mocked(resolveCard).mock.calls.length).toBeGreaterThan(before);
+  });
+
+  it("still invalidates by source uuid once a page is chosen", async () => {
+    const { resolveCard } = await import("../src/render/ContentResolver");
+    tiles[0].flags["documents-pinner"].pin.source.pageId = "aBcD1234eFgH5678";
+    manager.refresh();
+    await settle();
+    const before = vi.mocked(resolveCard).mock.calls.length;
+
+    resolved.hash = "h4";
+    manager.invalidate("JournalEntry.j");
     await settle();
 
     expect(vi.mocked(resolveCard).mock.calls.length).toBeGreaterThan(before);

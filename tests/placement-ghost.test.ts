@@ -40,6 +40,7 @@ const source = {
   uuid: "JournalEntry.abc",
   src: null,
   pageId: null,
+  pdfPage: null,
   followName: true,
 };
 
@@ -158,8 +159,12 @@ describe("the shown rotation", () => {
   });
 
   it("resets to square by the nearest full turn", () => {
-    expect((stepKey(ghost({ rotation: 30, rotationShown: 390 }), "r") as GhostState).rotationShown).toBe(360);
-    expect((stepKey(ghost({ rotation: 330, rotationShown: -30 }), "r") as GhostState).rotationShown).toBe(0);
+    expect(
+      (stepKey(ghost({ rotation: 30, rotationShown: 390 }), "r") as GhostState).rotationShown
+    ).toBe(360);
+    expect(
+      (stepKey(ghost({ rotation: 330, rotationShown: -30 }), "r") as GhostState).rotationShown
+    ).toBe(0);
   });
 });
 
@@ -261,6 +266,7 @@ describe("placement elevation", () => {
       uuid: "JournalEntry.a",
       src: null,
       pageId: null,
+      pdfPage: null,
       followName: true,
     });
     expect(armed).toBe(true);
@@ -321,7 +327,9 @@ describe("placement elevation", () => {
     arm(source);
     document
       .getElementById("board")!
-      .dispatchEvent(new WheelEvent("wheel", { bubbles: true, deltaY: -1, altKey: true, shiftKey: true }));
+      .dispatchEvent(
+        new WheelEvent("wheel", { bubbles: true, deltaY: -1, altKey: true, shiftKey: true })
+      );
     document
       .getElementById("board")!
       .dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0 }));
@@ -362,8 +370,12 @@ describe("the preview", () => {
   it("previews the real content at the chosen size, and a slow resolve cannot overwrite a newer one", async () => {
     arm(source);
     const board = document.getElementById("board")!;
-    board.dispatchEvent(new WheelEvent("wheel", { bubbles: true, deltaY: -1, altKey: true, shiftKey: true }));
-    board.dispatchEvent(new WheelEvent("wheel", { bubbles: true, deltaY: -1, altKey: true, shiftKey: true }));
+    board.dispatchEvent(
+      new WheelEvent("wheel", { bubbles: true, deltaY: -1, altKey: true, shiftKey: true })
+    );
+    board.dispatchEvent(
+      new WheelEvent("wheel", { bubbles: true, deltaY: -1, altKey: true, shiftKey: true })
+    );
     expect(pending).toHaveLength(3);
 
     // The newest lands first, then the stale ones straggle in.

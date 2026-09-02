@@ -22,6 +22,7 @@ const source = {
   uuid: "JournalEntry.j",
   src: null,
   pageId: null,
+  pdfPage: null,
   followName: true,
 };
 

@@ -31,13 +31,27 @@ import { followDomProp, setDomPropControlled } from "../src/canvas/DomPropTier";
 import { repositionReader } from "../src/apps/ReaderOverlay";
 
 function propDoc(id: string, mode: "prop" | "pin" = "prop") {
-  const doc = fakeTile({ id, uuid: `Scene.s1.Tile.${id}`, x: 300, y: 400, width: 400, height: 560 });
+  const doc = fakeTile({
+    id,
+    uuid: `Scene.s1.Tile.${id}`,
+    x: 300,
+    y: 400,
+    width: 400,
+    height: 560,
+  });
   doc.flags = {
     [MODULE_ID]: {
       pin: {
         ...defaultPin(),
         mode,
-        source: { kind: "document", uuid: "JournalEntry.a", src: null, pageId: null, followName: true },
+        source: {
+          kind: "document",
+          uuid: "JournalEntry.a",
+          src: null,
+          pageId: null,
+          pdfPage: null,
+          followName: true,
+        },
         audience: { ...defaultPin().audience, kind: "everyone" },
       },
     },

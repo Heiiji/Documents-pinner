@@ -112,10 +112,18 @@ describe("PropHitLayer.sync", () => {
     uninstallWorld();
   });
 
-  function layerFor(tiles: any[], isGM: boolean, activeLayer: "notes" | "tiles" | "tokens" = "tiles") {
+  function layerFor(
+    tiles: any[],
+    isGM: boolean,
+    activeLayer: "notes" | "tiles" | "tokens" = "tiles"
+  ) {
     const world = installWorld({ isGM, tiles });
     world.canvas.activeLayer =
-      activeLayer === "notes" ? world.canvas.notes : activeLayer === "tiles" ? world.canvas.tiles : {};
+      activeLayer === "notes"
+        ? world.canvas.notes
+        : activeLayer === "tiles"
+          ? world.canvas.tiles
+          : {};
     world.canvas.tiles.activate = vi.fn();
     const layer = new LayerClass();
     layer.hits = new Map();
@@ -208,7 +216,9 @@ describe("PropHitLayer.sync", () => {
       hooks.callAll = (name: string, ...args: any[]) => calls.push([name, ...args]);
       [...layer.hits.values()][0].emit("pointerover");
       hooks.callAll = original;
-      expect(calls.some(([name, , hovering]) => name.endsWith(".propHover") && hovering)).toBe(true);
+      expect(calls.some(([name, , hovering]) => name.endsWith(".propHover") && hovering)).toBe(
+        true
+      );
       void world;
     });
   });

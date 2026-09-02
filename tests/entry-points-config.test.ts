@@ -109,6 +109,7 @@ describe("the Tile config section", () => {
         uuid: "JournalEntry.a",
         src: null,
         pageId: null,
+        pdfPage: null,
         followName: true,
       });
     }
@@ -171,6 +172,7 @@ describe("the Note config section", () => {
       y: 300,
       entry: { uuid: "JournalEntry.a" },
       pageId: null,
+      pdfPage: null,
       parent: (globalThis as any).canvas.scene,
     });
 

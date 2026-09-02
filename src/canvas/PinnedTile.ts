@@ -109,7 +109,10 @@ export function definePinnedTile(): boolean {
       if (!visibility?.testVisibility) return false;
 
       try {
-        return visibility.testVisibility(centreOf(this.document), { tolerance: 0, object: this }) === true;
+        return (
+          visibility.testVisibility(centreOf(this.document), { tolerance: 0, object: this }) ===
+          true
+        );
       } catch {
         return false;
       }
@@ -304,7 +307,9 @@ export function definePinnedTile(): boolean {
         // clone goes without it, whatever core's teardown does to a mesh's texture.
         if (this.#borrowedPage && this.mesh) {
           this.mesh.texture =
-            this._original?.texture ?? (globalThis as any).PIXI?.Texture?.EMPTY ?? this.mesh.texture;
+            this._original?.texture ??
+            (globalThis as any).PIXI?.Texture?.EMPTY ??
+            this.mesh.texture;
           this.#borrowedPage = false;
         }
       } else if (this.pin) {
@@ -392,7 +397,13 @@ export function checkTileGeometry(): "agree" | "disagree" | "untested" {
       {
         core: { x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height, centre },
         assumed: expected,
-        document: { x: doc.x, y: doc.y, width: doc.width, height: doc.height, rotation: doc.rotation },
+        document: {
+          x: doc.x,
+          y: doc.y,
+          width: doc.width,
+          height: doc.height,
+          rotation: doc.rotation,
+        },
       }
     );
     return "disagree";

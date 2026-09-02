@@ -683,5 +683,5 @@ function announce(anchor: any, current: GhostState): void {
 export function armLastUsed(): boolean {
   const uuid = settings.get("lastSourceUuid");
   if (!uuid) return false;
-  return arm({ kind: "document", uuid, src: null, pageId: null, followName: true });
+  return arm({ kind: "document", uuid, src: null, pageId: null, pdfPage: null, followName: true });
 }

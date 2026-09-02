@@ -24,7 +24,14 @@ function pinned(mode: "pin" | "prop", audience: Record<string, unknown> = {}) {
       [FLAGS.PIN]: {
         ...defaultPin(),
         mode,
-        source: { kind: "document", uuid: "JournalEntry.j", src: null, pageId: null, followName: true },
+        source: {
+          kind: "document",
+          uuid: "JournalEntry.j",
+          src: null,
+          pageId: null,
+          pdfPage: null,
+          followName: true,
+        },
         audience: { ...defaultPin().audience, kind: "everyone", ...audience },
       },
     },

@@ -48,7 +48,6 @@ export function onGetSceneControlButtons(controls: any): void {
     visible: true,
     onChange: () => openPinboard(),
   };
-
 }
 
 /**

@@ -107,8 +107,24 @@ export const MARGIN_MAX_EM = 6;
 /** ~23 px at the default type on a 100 px grid, against the legacy 24 px. */
 export const DEFAULT_MARGIN_EM = 1.5;
 
+/**
+ * The largest PDF page number a pin may name.
+ *
+ * A ceiling rather than a real limit: no PDF anyone pins to a map has a hundred thousand
+ * pages, so a value past this is not a page number at all. It is also what makes the
+ * legacy fold below safe — see `LEGACY_PDF_PAGE`.
+ */
+export const PDF_PAGE_MAX = 99_999;
+
 export function defaultSource(): DpSource {
-  return { kind: "document", uuid: null, src: null, pageId: null, followName: true };
+  return {
+    kind: "document",
+    uuid: null,
+    src: null,
+    pageId: null,
+    pdfPage: null,
+    followName: true,
+  };
 }
 
 export function defaultDisplay(): DpDisplay {
@@ -174,17 +190,49 @@ function assetPath(value: unknown, warnings: DpNotice[], path: string): string |
   return clean;
 }
 
+/**
+ * A `pageId` that is really a PDF page number.
+ *
+ * Until schema 4 one field carried both meanings: `resolveSource` read it as a
+ * JournalEntryPage id, `ContentResolver.pageOf` read it as a one-based PDF page. A
+ * Foundry id is exactly sixteen alphanumeric characters, so a string of one to five
+ * digits can never be one — which is what makes the fold safe rather than a guess.
+ */
+const LEGACY_PDF_PAGE = /^\d{1,5}$/;
+
+/**
+ * A one-based page number, floored, or `null`.
+ *
+ * Not `nullableNum`: that returns a float, and half a page is not a page. Flooring
+ * rather than rounding, so 3.9 is page 3 — the page the number is inside.
+ */
+function pageNumber(value: unknown): number | null {
+  const n = nullableNum(value, 1, PDF_PAGE_MAX);
+  return n === null ? null : Math.floor(n);
+}
+
 function normaliseSource(raw: unknown, warnings: DpNotice[], errors: DpNotice[]): DpSource {
   const d = defaultSource();
   const s = obj(raw);
   warnUnknownKeys(s, Object.keys(d), warnings, "source", UNKNOWN_KEY);
+
+  // Schema 3 and earlier stored a PDF page number in `pageId`. Folded HERE and not in
+  // `migrations.ts` for the reason `clickThrough` is folded here: a player's client that
+  // loads before the primary GM's sweep must already behave as a migrated one. In the
+  // migration, it would read `pageId: "7"`, miss on `doc.pages.get("7")`, fall back to
+  // the entry and draw page 1 — while the GM, already swept, saw page 7.
+  const legacyPdfPage = LEGACY_PDF_PAGE.test(String(s.pageId ?? "")) ? Number(s.pageId) : null;
 
   const kind = oneOf(s.kind, SOURCE_KINDS, d.kind, warnings, "source.kind", BAD_ENUM);
   const source: DpSource = {
     kind,
     uuid: typeof s.uuid === "string" ? str(s.uuid, "", 256) || null : null,
     src: assetPath(s.src, warnings, "source.src"),
-    pageId: typeof s.pageId === "string" ? str(s.pageId, "", 64) || null : null,
+    pageId:
+      legacyPdfPage !== null || typeof s.pageId !== "string" ? null : str(s.pageId, "", 64) || null,
+    // An explicit `pdfPage` wins over a folded one, so re-reading an already-folded
+    // payload is stable — which is what keeps `planMigration` idempotent.
+    pdfPage: pageNumber(s.pdfPage) ?? legacyPdfPage,
     followName: bool(s.followName, d.followName),
   };
 
