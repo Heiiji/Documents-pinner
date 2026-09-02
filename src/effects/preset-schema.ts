@@ -23,6 +23,9 @@ export type DpMotion = "none" | "loop" | "onReveal";
 export type DpCost = "low" | "medium" | "high";
 export type DpEdgeStyle = "none" | "torn" | "burnt" | "deckled" | "singed";
 export type DpFrameStyle = "none" | "holo" | "gilt" | "rune" | "plain";
+
+export const EDGE_STYLES = ["none", "torn", "burnt", "deckled", "singed"] as const;
+export const FRAME_STYLES = ["none", "holo", "gilt", "rune", "plain"] as const;
 export type DpRevealAnimation = "none" | "fade" | "materialise";
 
 /**
@@ -286,23 +289,11 @@ function normaliseParams(raw: unknown, warnings: DpNotice[]): DpPresetParams {
       hz: num(grp("warp").hz, d.warp.hz, 0, 30),
     },
     edge: {
-      style: oneOf(
-        grp("edge").style,
-        ["none", "torn", "burnt", "deckled", "singed"] as const,
-        d.edge.style,
-        warnings,
-        "params.edge.style"
-      ),
+      style: oneOf(grp("edge").style, EDGE_STYLES, d.edge.style, warnings, "params.edge.style"),
       amount: num(grp("edge").amount, d.edge.amount, 0, 1),
     },
     frame: {
-      style: oneOf(
-        grp("frame").style,
-        ["none", "holo", "gilt", "rune", "plain"] as const,
-        d.frame.style,
-        warnings,
-        "params.frame.style"
-      ),
+      style: oneOf(grp("frame").style, FRAME_STYLES, d.frame.style, warnings, "params.frame.style"),
       thickness: num(grp("frame").thickness, d.frame.thickness, 0, 32),
       radius: num(grp("frame").radius, d.frame.radius, 0, 64),
       color: colour(grp("frame").color, d.frame.color, warnings, "params.frame.color"),

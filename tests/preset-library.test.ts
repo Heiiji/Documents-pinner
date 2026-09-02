@@ -116,3 +116,51 @@ describe("naming a preset", () => {
     );
   });
 });
+
+/**
+ * The Preset Studio could edit numbers and nothing else.
+ *
+ * `SLIDERS` is numeric, so until now no colour and no enum in the schema had a control
+ * anywhere — `edge.style` and `frame.style` were as unreachable as the new overlay's
+ * geometry, and a GM who duplicated a preset could not recolour it. Every value goes back
+ * through `validatePreset`, so a bad one degrades rather than throws.
+ */
+describe("the colours and the shapes", () => {
+  const editable = () => validatePreset({ ...parchment(), id: "mine", author: "user" }).preset!;
+
+  it("offers a control for every colour and every style enum", () => {
+    const markup = presetStudioMarkup(CORE_PRESETS, editable(), "dark", false);
+    for (const name of ["tint.color", "glow.color", "frame.color", "hud.color"]) {
+      expect(markup, name).toContain(`type="color" name="${name}"`);
+    }
+    for (const name of ["edge.style", "frame.style", "hud.marks", "hud.grid"]) {
+      expect(markup, name).toContain(`<select name="${name}"`);
+    }
+  });
+
+  it("selects the value the preset actually holds", () => {
+    const markup = presetStudioMarkup(CORE_PRESETS, editable(), "dark", false);
+    // Aged Parchment is deckled, and its tint is the colour the schema lower-cased.
+    expect(markup).toContain('<option value="deckled" selected>');
+    expect(markup).toContain('value="#c8a86a"');
+  });
+
+  it("disables every one of them for a shipped preset", () => {
+    const markup = presetStudioMarkup(CORE_PRESETS, parchment(), "dark", false);
+    expect(markup).toContain('type="color" name="tint.color" value="#c8a86a" disabled');
+    expect(markup).toContain('<select name="edge.style" disabled>');
+  });
+
+  it("writes a string parameter as well as a number", () => {
+    expect(writeParam(parchment(), "edge.style", "torn").params.edge.style).toBe("torn");
+    expect(writeParam(parchment(), "hud.grid", "dot").params.hud.grid).toBe("dot");
+    expect(writeParam(parchment(), "tint.amount", 0.5).params.tint.amount).toBe(0.5);
+  });
+
+  it("degrades a value this version does not understand rather than storing it", () => {
+    const broken = writeParam(editable(), "hud.grid", "spiral");
+    const { preset, warnings } = validatePreset(broken);
+    expect(preset!.params.hud.grid).toBe("none");
+    expect(warnings.map((w) => w.key)).toContain("DP.preset.warn.badEnum");
+  });
+});

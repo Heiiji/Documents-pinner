@@ -20,7 +20,15 @@ import { t } from "../i18n";
 import { escapeAttr, escapeHtml } from "../html";
 import * as library from "../effects/preset-library";
 import { dressing } from "../effects/EffectRegistry";
-import { estimateCost, validatePreset, type DpPreset } from "../effects/preset-schema";
+import {
+  EDGE_STYLES,
+  FRAME_STYLES,
+  HUD_GRIDS,
+  HUD_MARKS,
+  estimateCost,
+  validatePreset,
+  type DpPreset,
+} from "../effects/preset-schema";
 import { currentLevel } from "../effects/level";
 
 let StudioClass: any = null;
@@ -53,6 +61,66 @@ const SLIDERS: { path: string; key: string; min: number; max: number; step: numb
   { path: "frame.thickness", key: "DP.presets.frameWidth", min: 0, max: 32, step: 1 },
   { path: "surface.opacity", key: "DP.presets.surface", min: 0, max: 1, step: 0.05 },
   { path: "shadow.opacity", key: "DP.presets.shadow", min: 0, max: 1, step: 0.05 },
+  { path: "hud.opacity", key: "DP.presets.hudOpacity", min: 0, max: 1, step: 0.05 },
+  { path: "hud.pitch", key: "DP.presets.hudPitch", min: 2, max: 128, step: 1 },
+  { path: "hud.weight", key: "DP.presets.hudWeight", min: 0, max: 8, step: 0.5 },
+  // Seconds, not Hz — see the note on `sweepSec` in the schema. A slider in Hz could not
+  // reach a nine-second pass at all.
+  { path: "hud.sweepSec", key: "DP.presets.hudSweep", min: 0, max: 60, step: 0.5 },
+];
+
+/**
+ * The colours and the shapes, which had no control at all.
+ *
+ * `SLIDERS` covers only numbers, so until now nothing in this window could change a
+ * colour or any enum: `edge.style` and `frame.style` were as unreachable as the new
+ * overlay's geometry, and a GM who duplicated a preset could not make it amber. Every
+ * value below is validated by `validatePreset` on the way back in — colours against `HEX`
+ * and the enums against their own lists — so a bad one degrades rather than throws.
+ */
+const COLOURS: { path: string; key: string }[] = [
+  { path: "tint.color", key: "DP.presets.tintColour" },
+  { path: "glow.color", key: "DP.presets.glowColour" },
+  { path: "frame.color", key: "DP.presets.frameColour" },
+  { path: "hud.color", key: "DP.presets.hudColour" },
+];
+
+const CHOICES: {
+  path: string;
+  key: string;
+  options: readonly string[];
+  /**
+   * Composed rather than stored as a prefix string. A bare quoted prefix looks exactly
+   * like a key to the scan in `i18n.test.ts`, which would then demand a table entry for
+   * a key that is only ever half of one. (This comment is why it is a function and not
+   * two lines shorter — and why it may not quote the prefix either.)
+   */
+  label: (option: string) => string;
+}[] = [
+  {
+    path: "edge.style",
+    key: "DP.presets.edgeStyle",
+    options: EDGE_STYLES,
+    label: (o) => t(`DP.edge.${o}`),
+  },
+  {
+    path: "frame.style",
+    key: "DP.presets.frameStyle",
+    options: FRAME_STYLES,
+    label: (o) => t(`DP.frame.${o}`),
+  },
+  {
+    path: "hud.marks",
+    key: "DP.presets.hudMarks",
+    options: HUD_MARKS,
+    label: (o) => t(`DP.hudMarks.${o}`),
+  },
+  {
+    path: "hud.grid",
+    key: "DP.presets.hudGrid",
+    options: HUD_GRIDS,
+    label: (o) => t(`DP.hudGrid.${o}`),
+  },
 ];
 
 /** PURE. Read a dotted path out of a preset's parameters. */
@@ -63,8 +131,16 @@ export function readParam(preset: DpPreset, path: string): number {
   return typeof value === "number" ? value : 0;
 }
 
+/** PURE. Read a dotted path as a string — a colour or an enum member. */
+export function readParamText(preset: DpPreset, path: string): string {
+  const value = path
+    .split(".")
+    .reduce<any>((node, key) => (node == null ? undefined : node[key]), preset.params);
+  return typeof value === "string" ? value : "";
+}
+
 /** PURE. Write a dotted path, returning a new preset. */
-export function writeParam(preset: DpPreset, path: string, value: number): DpPreset {
+export function writeParam(preset: DpPreset, path: string, value: number | string): DpPreset {
   const keys = path.split(".");
   const params: any = structuredClone(preset.params);
 
@@ -142,6 +218,37 @@ function paramsMarkup(preset: DpPreset, editable: boolean): string {
     );
   }).join("");
 
+  const colours = COLOURS.map((entry) => {
+    const value = readParamText(preset, entry.path) || "#ffffff";
+    return (
+      `<label class="dp-presets__param">` +
+      `<span>${escapeHtml(t(entry.key))}</span>` +
+      // A colour input rather than a text field: it accepts only `#rrggbb`, which is
+      // exactly the subset `HEX` allows, so the control cannot produce a bad value.
+      `<input type="color" name="${escapeAttr(entry.path)}" value="${escapeAttr(value.slice(0, 7))}"` +
+      `${editable ? "" : " disabled"}>` +
+      `<output>${escapeHtml(value)}</output>` +
+      `</label>`
+    );
+  }).join("");
+
+  const choices = CHOICES.map((entry) => {
+    const value = readParamText(preset, entry.path);
+    const options = entry.options
+      .map(
+        (option) =>
+          `<option value="${escapeAttr(option)}"${option === value ? " selected" : ""}>` +
+          `${escapeHtml(entry.label(option))}</option>`
+      )
+      .join("");
+    return (
+      `<label class="dp-presets__param">` +
+      `<span>${escapeHtml(t(entry.key))}</span>` +
+      `<select name="${escapeAttr(entry.path)}"${editable ? "" : " disabled"}>${options}</select>` +
+      `</label>`
+    );
+  }).join("");
+
   // A user preset can be named. A duplicate used to be "(copy)" forever, because there
   // was no name field anywhere in the window.
   const name = editable
@@ -157,6 +264,8 @@ function paramsMarkup(preset: DpPreset, editable: boolean): string {
       ? ""
       : `<p class="dp-presets__locked">${escapeHtml(t("DP.presets.readOnlyHint"))}</p>`) +
     name +
+    choices +
+    colours +
     sliders +
     `<p class="dp-presets__cost" data-dp-cost="${escapeAttr(cost.tier)}">` +
     escapeHtml(t("DP.presets.cost", { tier: t(`DP.cost.${cost.tier}`), score: cost.score })) +
@@ -259,8 +368,16 @@ export function definePresetStudio(): any {
           void this.#rename(input.value);
           return;
         }
-        if (input?.type !== "range" || input.disabled) return;
-        void this.#setParam(input.name, Number(input.value));
+        if (input.disabled || !input.name) return;
+        if (input.type === "range") {
+          void this.#setParam(input.name, Number(input.value));
+          return;
+        }
+        // A colour and an enum both arrive as strings; `validatePreset` decides whether
+        // either is one this version understands.
+        if (input.type === "color" || input.tagName === "SELECT") {
+          void this.#setParam(input.name, input.value);
+        }
       });
     }
 
@@ -272,7 +389,7 @@ export function definePresetStudio(): any {
       this.render();
     }
 
-    async #setParam(path: string, value: number) {
+    async #setParam(path: string, value: number | string) {
       const preset = this.selected;
       if (preset.author === "core") return;
       await library.savePreset(writeParam(preset, path, value));

@@ -165,7 +165,30 @@
     grid-area: slider;
     inline-size: 100%;
   }
-  &:has(input:disabled) {
+  /* A colour and a select are one control on one line, beside their label, rather than a
+     full-width row under it: they have nothing to sweep and a 100% swatch reads as a
+     banner. The colour's readout keeps the `value` area, which is what the hex sits in. */
+  & > input[type="color"] {
+    grid-area: value;
+    inline-size: 2.4rem;
+    block-size: 1.3rem;
+    padding: 0;
+    justify-self: end;
+  }
+  & > select {
+    grid-area: value;
+    inline-size: auto;
+    max-inline-size: 11rem;
+    justify-self: end;
+  }
+  &:has(input[type="color"]) > output {
+    grid-area: slider;
+    justify-self: start;
+    font-family: monospace;
+    font-size: 0.9em;
+  }
+  &:has(input:disabled),
+  &:has(select:disabled) {
     opacity: 0.55;
   }
 }

@@ -82,6 +82,10 @@ describe("localisation files", () => {
       ["DP.chip.", ["visible", "hidden", "seesButCannotOpen", "opensButCannotSee"]],
       ["DP.board.mode.", ["pin", "prop"]],
       ["DP.cost.", ["low", "medium", "high"]],
+      ["DP.edge.", ["none", "torn", "burnt", "deckled", "singed"]],
+      ["DP.frame.", ["none", "holo", "gilt", "rune", "plain"]],
+      ["DP.hudMarks.", ["none", "brackets", "corners", "callout"]],
+      ["DP.hudGrid.", ["none", "square", "hatch", "dot"]],
       ["DP.paper.", ["parchment", "vellum", "paper", "linen", "slate", "bloodied", "projection"]],
       [
         "DP.settings.",
