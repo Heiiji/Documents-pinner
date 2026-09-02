@@ -1192,6 +1192,16 @@ rather than assumed**: every `Note#pageId` in the live world is sixteen alphanum
 writer of the field this module did not control, so it was the only place the fold could
 have taken something it should not.
 
+**The grant stays on the entry, and that is now measured too.** `syncAnchor` raises
+ownership on `source.uuid` — the journal — never on the chosen page, because granting on
+the page alone would not put the document in the player's sidebar, which is what the
+Studio's own hint promises. That only works if a page with `default: -1` inherits from its
+entry, and `canUserOpen` tests the PAGE. In the live world: a page with
+`ownership: {default: -1}` and no entry for the user, under an entry with `default: 2`,
+answers `testUserPermission(user, "OBSERVER") === true`. It inherits. Had it not, the HUD
+would have raised a false "can see it but cannot open it" glyph on every page-chosen pin —
+the exact state that glyph exists to prevent.
+
 **The new rule: a verb that RESETS is not the same verb as one that REDIRECTS.** The
 picker's `adopt` path builds a fresh `defaultPin()`, and its name says so truthfully.
 Wiring "change this pin's document" to it would have wiped the per-player audience — the
