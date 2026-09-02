@@ -29,10 +29,11 @@ import { cardMetrics, freezeMetrics } from "../data/pin-schema";
 import { PAPERS } from "../render/CardTemplate";
 import { allPresets } from "../effects/preset-library";
 import { swatchStyle } from "../effects/preset-css";
-import { pdfSourceOf } from "../render/PdfPage";
+import { pdfPageCount, pdfSourceOf } from "../render/PdfPage";
 import { chipsMarkup, describeChips } from "./chips";
+import { openPicker } from "./DocumentPicker";
 import { chipUsersFor } from "./PinHUD";
-import type { DpPinFlags } from "../types/dp";
+import type { DpPinFlags, DpSource } from "../types/dp";
 
 let StudioClass: any = null;
 const open = new Map<string, any>();
@@ -93,14 +94,73 @@ function text(name: string, value: string, placeholderKey?: string): string {
 // Tabs
 // ---------------------------------------------------------------------------
 
-function contentTab(pin: DpPinFlags): string {
+/**
+ * Everything the Content tab needs that a Foundry global would otherwise be asked for.
+ *
+ * Resolved by `_renderHTML`, which is already async, and passed in — so `studioMarkup`
+ * stays a pure function of its arguments and the tests can call it with no world at all.
+ * A page list looked up inside the markup would end that, and the PDF page count is a
+ * promise besides.
+ */
+export interface StudioOptions {
+  aspectLocked?: boolean;
+  /** Pages the GM may choose between, from the entry this pin's uuid names. */
+  pages?: { id: string; name: string; type: string }[];
+  /** How many pages the PDF behind this pin has, or 0 while that is not known. */
+  pdfPages?: number;
+}
+
+function contentTab(pin: DpPinFlags, options: StudioOptions): string {
   const source = api.resolveSourceSync(pin);
+  const isPage = source?.documentName === "JournalEntryPage";
+  const pages = options.pages ?? [];
+
+  // Removed rather than disabled, unlike the PDF-inert controls on the Appearance tab.
+  // A15 disabled a whole tab because a blank tab reads as broken; one absent field among
+  // six reads as "not applicable", which is what it is.
+  const pageField = pages.length
+    ? field(
+        "DP.studio.page",
+        select("source.pageId", pin.source.pageId ?? "", [
+          { value: "", label: t("DP.studio.pageFirst") },
+          ...pages.map((page) => ({
+            value: page.id,
+            // The raw page type beside the name, only where it disambiguates: two pages
+            // called "Map" can be a text page and an image, and the list cannot say which.
+            label: page.type === "text" ? page.name : `${page.name} (${page.type})`,
+          })),
+        ]),
+        "DP.studio.pageHint"
+      )
+    : isPage
+      ? `<p class="dp-studio__note">${escapeHtml(t("DP.studio.pageIsOne"))}</p>`
+      : "";
+
+  const pdfField = isPdfPin(pin)
+    ? field(
+        "DP.studio.pdfPage",
+        `<input type="number" name="source.pdfPage" min="1"` +
+          (options.pdfPages ? ` max="${options.pdfPages}"` : "") +
+          ` step="1" value="${pin.source.pdfPage ?? 1}">`,
+        "DP.studio.pdfPageHint"
+      )
+    : "";
+
   return (
     `<section class="dp-studio__tab" data-dp-tab="content">` +
+    // The source, which page of it, and the way to change it — one block about the
+    // document, before the block about the pin.
+    `<div class="dp-studio__sourcebox">` +
     `<p class="dp-studio__source">` +
     `<i class="fa-solid fa-link" aria-hidden="true"></i> ` +
     escapeHtml(source?.name ?? pin.source.src ?? t("DP.studio.sourceMissing")) +
     `</p>` +
+    `<button type="button" class="dp-studio__link" data-action="retargetSource">` +
+    `${escapeHtml(t("DP.studio.retarget"))}</button>` +
+    `<span class="dp-studio__hint">${escapeHtml(t("DP.studio.retargetHint"))}</span>` +
+    `</div>` +
+    pageField +
+    pdfField +
     field(
       "DP.studio.label",
       text("display.label", pin.display.label, "DP.studio.labelPlaceholder"),
@@ -136,6 +196,17 @@ function contentTab(pin: DpPinFlags): string {
  */
 function isPdfPin(pin: DpPinFlags): boolean {
   return pdfSourceOf(api.resolveSourceSync(pin)) !== null;
+}
+
+/** How many pages the PDF behind this pin has, or 0 when there is no answer. */
+async function pdfPageCountFor(pin: DpPinFlags): Promise<number> {
+  const src = pdfSourceOf(api.resolveSourceSync(pin));
+  if (!src) return 0;
+  try {
+    return await pdfPageCount(src);
+  } catch {
+    return 0;
+  }
 }
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -283,7 +354,7 @@ export function studioMarkup(
   doc: any,
   pin: DpPinFlags,
   active: TabId,
-  options: { aspectLocked?: boolean } = {}
+  options: StudioOptions = {}
 ): string {
   const grid = gridOf(doc);
   const nav = TABS.map(
@@ -295,7 +366,7 @@ export function studioMarkup(
 
   const body =
     active === "content"
-      ? contentTab(pin)
+      ? contentTab(pin, options)
       : active === "appearance"
         ? appearanceTab(doc, pin)
         : audienceTab(doc, pin);
@@ -365,7 +436,11 @@ export function formToPatch(entries: [string, unknown][]): Record<string, any> {
 export function valueOf(element: HTMLInputElement | HTMLSelectElement): unknown {
   if (element instanceof HTMLInputElement) {
     if (element.type === "checkbox") return element.checked;
-    if (element.type === "range" || element.type === "number") return Number(element.value);
+    // An emptied number input is "no value", not zero. `source.pdfPage` is nullable and
+    // the schema clamps to one, so `Number("")` would store page 1 — a page the GM never
+    // chose — the moment they cleared the field to type another number.
+    if (element.type === "number") return element.value === "" ? null : Number(element.value);
+    if (element.type === "range") return Number(element.value);
   }
   // `ownershipSync.level` is the one select carrying a number rather than an enum.
   if (element.name.endsWith(".level")) return Number(element.value);
@@ -394,6 +469,7 @@ export function definePinStudio(): any {
         fitHeight: onFitHeight,
         resetSize: onResetSize,
         editPresets: onEditPresets,
+        retargetSource: onRetargetSource,
         deletePin: onDeletePin,
       },
     };
@@ -407,7 +483,14 @@ export function definePinStudio(): any {
       const pin = readPin(this.doc);
       const wrapper = document.createElement("div");
       wrapper.innerHTML = pin
-        ? studioMarkup(this.doc, pin, this.tab, { aspectLocked: this.aspectLocked })
+        ? studioMarkup(this.doc, pin, this.tab, {
+            aspectLocked: this.aspectLocked,
+            pages: api.pageChoices(pin),
+            // Awaited here and not in the markup: parsing a PDF is not free and the
+            // markup builder must stay synchronous and world-free. A count that fails to
+            // arrive leaves the field with no ceiling, which is still a usable control.
+            pdfPages: await pdfPageCountFor(pin),
+          })
         : `<p class="dp-studio__gone">${escapeHtml(t("DP.studio.gone"))}</p>`;
       return wrapper.firstElementChild ?? wrapper;
     }
@@ -501,6 +584,12 @@ export function definePinStudio(): any {
       // replace a whole group, and `{ ownershipSync: { level } }` would then wipe the
       // `enabled` flag beside it.
       await api.patchAndSync(this.doc, patch);
+
+      // Which controls exist depends on the chosen page: pick a PDF page and the PDF
+      // field has to appear, the Appearance tab flips to its inert variant, and the pin
+      // changes rendering tier. `refreshStudios` gets there on `updateTile` anyway; this
+      // is the difference between instant and a hook away.
+      if (target.name === "source.pageId") this.render();
     }
 
     /** One dimension from the strip, in squares; the other follows if the ratio is locked. */
@@ -571,6 +660,40 @@ async function onDeletePin(this: any) {
 
   await api.deletePin(this.doc);
   this.close();
+}
+
+/**
+ * Point this pin at a different document.
+ *
+ * Asks AFTER the picker, not before, so the dialog can name the document — which is what
+ * makes the confirmation informative rather than ritual — and because a GM asked before
+ * choosing is being asked to confirm a decision they have not made yet. It asks at all
+ * for the reason delete does: this is not one change to undo. It rewrites the source,
+ * moves an ownership grant between two documents, and changes what players looking at the
+ * map are seeing right now. Two of those three are invisible from this window.
+ *
+ * Closes over `doc`, never `this`: the picker is a separate application and outlives the
+ * Studio if the GM closes it while the picker is open.
+ */
+function onRetargetSource(this: any) {
+  const doc = this.doc;
+  openPicker({
+    onChoose: (source) => {
+      void confirmRetarget(source).then((ok) => {
+        if (ok) void api.retarget(doc, source);
+      });
+    },
+  });
+}
+
+async function confirmRetarget(source: DpSource): Promise<boolean> {
+  const DialogV2 = ns("applications.api.DialogV2");
+  if (!DialogV2?.confirm) return false;
+  const name = api.labelForSource(source);
+  return DialogV2.confirm({
+    window: { title: t("DP.studio.retargetTitle") },
+    content: `<p>${escapeHtml(t("DP.studio.retargetBody", { name }))}</p>`,
+  }).catch(() => false);
 }
 
 /** Open the Studio for a pin, reusing the window already showing it. */

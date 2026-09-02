@@ -64,6 +64,22 @@ describe("valueOf", () => {
   });
 });
 
+/**
+ * An emptied number input is "no value", not zero. `source.pdfPage` is nullable and the
+ * schema clamps to one, so the old `Number("")` stored page 1 the instant a GM cleared
+ * the field to type another number.
+ */
+describe("valueOf and an emptied number", () => {
+  it("returns null for an empty number input and a number for a filled one", () => {
+    const input = document.createElement("input");
+    input.type = "number";
+    input.name = "source.pdfPage";
+    expect(valueOf(input)).toBeNull();
+    input.value = "7";
+    expect(valueOf(input)).toBe(7);
+  });
+});
+
 describe("studioMarkup", () => {
   it("marks exactly one tab selected", () => {
     const markup = studioMarkup(doc, pin(), "appearance");
@@ -191,5 +207,92 @@ describe("the appearance tab and what it can actually do", () => {
     // Without the class the name span was auto-placed on top of `grid-area: cost`, and
     // every swatch read as the two strings overlapping.
     expect(studioMarkup(doc, pin(), "appearance")).toContain("dp-studio__swatch-name");
+  });
+});
+
+/**
+ * The Content tab's document block.
+ *
+ * The page list and the PDF page count arrive as options rather than being looked up in
+ * the markup — which is exactly what lets these run with no Foundry at all. Every branch
+ * below is a REMOVED field rather than a disabled one: A15 disabled a whole tab because
+ * a blank tab reads as broken, but one absent field among six reads as "not applicable".
+ */
+describe("the content tab and the document it shows", () => {
+  const html = (over: Record<string, any> = {}, options: Record<string, any> = {}) =>
+    studioMarkup(doc, pin(over), "content", options);
+
+  it("offers no page control when there is no choice to make", () => {
+    const markup = html();
+    expect(markup).not.toContain('name="source.pageId"');
+    expect(markup).not.toContain('name="source.pdfPage"');
+  });
+
+  it("lists the pages with the chosen one selected and an empty first option", () => {
+    const markup = html(
+      { source: { ...pin().source, uuid: "JournalEntry.j", pageId: "p2" } },
+      {
+        pages: [
+          { id: "p1", name: "Rumours", type: "text" },
+          { id: "p2", name: "The Map", type: "image" },
+        ],
+      }
+    );
+
+    expect(markup).toContain('name="source.pageId"');
+    expect(markup).toContain('<option value=""');
+    expect(markup).toContain('<option value="p2" selected>');
+    // The raw type disambiguates two pages that share a name; a text page needs no tag.
+    expect(markup).toContain("The Map (image)");
+    expect(markup).toContain(">Rumours<");
+  });
+
+  it("says why there is no choice when the pin was placed on one page", () => {
+    // `resolveSourceSync` returns null with no world, so the note needs a real document.
+    (globalThis as any).fromUuidSync = () => ({ documentName: "JournalEntryPage", name: "A page" });
+    const markup = html({ source: { ...pin().source, uuid: "JournalEntry.j.JournalEntryPage.p" } });
+    delete (globalThis as any).fromUuidSync;
+
+    expect(markup).toContain("dp-studio__note");
+    expect(markup).not.toContain('name="source.pageId"');
+  });
+
+  it("bounds the PDF page by the count, and offers it with no ceiling when unknown", () => {
+    (globalThis as any).fromUuidSync = () => ({
+      documentName: "JournalEntryPage",
+      type: "pdf",
+      src: "worlds/handout.pdf",
+    });
+    const pdfPin = {
+      source: { ...pin().source, uuid: "JournalEntry.j.JournalEntryPage.p", pdfPage: 7 },
+    };
+    const withCount = html(pdfPin, { pdfPages: 32 });
+    const unknown = html(pdfPin, { pdfPages: 0 });
+    delete (globalThis as any).fromUuidSync;
+
+    expect(withCount).toContain('name="source.pdfPage"');
+    expect(withCount).toContain('max="32"');
+    expect(withCount).toContain('value="7"');
+    expect(unknown).toContain('name="source.pdfPage"');
+    expect(unknown).not.toContain("max=");
+  });
+
+  it("puts the document block first, so the tab reads as one thing", () => {
+    const markup = html(
+      { source: { ...pin().source, uuid: "JournalEntry.j" } },
+      {
+        pages: [
+          { id: "p1", name: "One", type: "text" },
+          { id: "p2", name: "Two", type: "text" },
+        ],
+      }
+    );
+    const retarget = markup.indexOf('data-action="retargetSource"');
+    const page = markup.indexOf('name="source.pageId"');
+    const label = markup.indexOf('name="display.label"');
+
+    expect(retarget).toBeGreaterThan(-1);
+    expect(retarget).toBeLessThan(page);
+    expect(page).toBeLessThan(label);
   });
 });

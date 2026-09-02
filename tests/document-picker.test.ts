@@ -78,3 +78,58 @@ describe("the picker as a combobox", () => {
     expect(root().querySelectorAll(".dp-picker__item")).toHaveLength(1);
   });
 });
+
+/**
+ * The intent the picker was opened with.
+ *
+ * `adopt` is nulled the moment it fires because the picker is one reused instance and an
+ * intent left behind runs on the NEXT open. `onChoose` carries the same hazard and gets
+ * the same treatment — which is why it is a callback rather than a second placeable field
+ * beside `adopt`, where the two could disagree about what this open is for.
+ */
+describe("what the picker does with the chosen source", () => {
+  // Earlier suites in this file arm the ghost, and the module mock's history outlives
+  // `resetModules`.
+  beforeEach(() => vi.mocked(arm).mockClear());
+
+  it("hands the source to onChoose instead of arming the ghost", () => {
+    const taken: any[] = [];
+    picker.onChoose = (source: any) => taken.push(source);
+
+    picker.take({
+      kind: "document",
+      uuid: "JournalEntry.Beta",
+      src: null,
+      pageId: null,
+      pdfPage: null,
+      followName: true,
+    });
+
+    expect(taken).toHaveLength(1);
+    expect(taken[0].uuid).toBe("JournalEntry.Beta");
+    expect(arm).not.toHaveBeenCalled();
+  });
+
+  it("prefers onChoose over adopt, and clears it so the next open arms again", () => {
+    const taken: any[] = [];
+    picker.onChoose = (source: any) => taken.push(source);
+    picker.adopt = { documentName: "Tile" };
+    const source = {
+      kind: "document",
+      uuid: "JournalEntry.Beta",
+      src: null,
+      pageId: null,
+      pdfPage: null,
+      followName: true,
+    };
+
+    picker.take(source);
+    expect(taken).toHaveLength(1);
+    expect(picker.onChoose).toBeNull();
+
+    picker.adopt = null;
+    picker.take(source);
+    expect(taken).toHaveLength(1);
+    expect(arm).toHaveBeenCalledTimes(1);
+  });
+});

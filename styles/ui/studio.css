@@ -48,8 +48,25 @@
   padding-inline-end: 0.25rem;
 }
 
+/*
+ * What this pin shows, and the way to change it.
+ *
+ * One block, before the fields about the pin itself, so the Content tab reads as "what
+ * this pin shows -> which page of it -> what it is called -> how it opens" rather than as
+ * a list of unrelated rows. The name can be long, so it takes the whole first line and
+ * the verb sits under it; the hint says what survives a change, which is the question a
+ * GM actually has at that button.
+ */
+.dp-studio__sourcebox {
+  display: grid;
+  gap: 0.2rem;
+  justify-items: start;
+}
+
 .dp-studio__source {
   margin: 0;
+  inline-size: 100%;
+  box-sizing: border-box;
   padding: 0.3rem 0.5rem;
   border-radius: 0.3rem;
   background: color-mix(in oklab, var(--color-bg-option, #1b1b23) 70%, transparent);
@@ -144,7 +161,6 @@
     border-color: var(--color-warm-1, #c9ad6a);
     background: color-mix(in oklab, var(--color-warm-1, #c9ad6a) 16%, transparent);
   }
-
 }
 
 .dp-studio__swatch-name {

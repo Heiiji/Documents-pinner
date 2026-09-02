@@ -189,7 +189,6 @@
     border-color: var(--color-warm-1, #c9ad6a);
     background: color-mix(in oklab, var(--color-warm-1, #c9ad6a) 18%, transparent);
   }
-
 }
 
 .dp-hud__swatch-preview {

@@ -148,6 +148,7 @@ export function definePicker(): any {
      * correct verb, already written and tested, and had no caller anywhere.
      */
     adopt: any = null;
+    onChoose: ((source: DpSource) => void) | null = null;
 
     async _renderHTML() {
       const wrapper = document.createElement("div");
@@ -257,7 +258,23 @@ export function definePicker(): any {
         followName: true,
       };
       this.close();
+      this.take(source);
+    }
 
+    /**
+     * What happens to the chosen source.
+     *
+     * `onChoose` wins over `adopt`, and both are cleared the moment they fire. The
+     * picker is a single reused instance, so an intent left behind is an intent that
+     * runs on the NEXT open — which is the bug `adopt` was already nulled to prevent.
+     */
+    take(source: DpSource) {
+      if (this.onChoose) {
+        const take = this.onChoose;
+        this.onChoose = null;
+        take(source);
+        return;
+      }
       if (this.adopt) {
         void adoptWith(this.adopt, source);
         this.adopt = null;
@@ -279,20 +296,14 @@ async function onBrowse(this: any) {
     type: "imagevideo",
     callback: (path: string) => {
       this.close();
-      const source: DpSource = {
+      this.take({
         kind: "image",
         uuid: null,
         src: path,
         pageId: null,
         pdfPage: null,
         followName: false,
-      };
-      if (this.adopt) {
-        void adoptWith(this.adopt, source);
-        this.adopt = null;
-        return;
-      }
-      arm(source);
+      });
     },
   });
   picker.render(true);
@@ -307,6 +318,15 @@ async function adoptWith(target: any, source: DpSource): Promise<void> {
 export interface PickerOptions {
   /** Adopt this placeable instead of placing a new pin. */
   adopt?: any;
+  /**
+   * Take the chosen source instead of adopting or arming the ghost.
+   *
+   * The picker's job is "let the GM name a document"; what happens next belongs to the
+   * caller. A second `{ retarget: doc }` field beside `adopt` would give one reused
+   * instance two mutually exclusive intents to keep straight, which is the bug `adopt`
+   * is already nulled after firing to avoid.
+   */
+  onChoose?: ((source: DpSource) => void) | null;
 }
 
 export function openPicker(options: PickerOptions = {}): any {
@@ -314,6 +334,7 @@ export function openPicker(options: PickerOptions = {}): any {
   if (!Picker) return null;
   instance ??= new Picker();
   instance.adopt = options.adopt ?? null;
+  instance.onChoose = options.onChoose ?? null;
   instance.render(true);
   return instance;
 }

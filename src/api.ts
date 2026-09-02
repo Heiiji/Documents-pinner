@@ -109,6 +109,28 @@ export function resolveSourceSync(pin: DpPinFlags): any {
 }
 
 /**
+ * The pages a GM may choose between for this pin.
+ *
+ * Empty when there is no choice to make: an image source, a pin whose uuid already names
+ * one page (`doc.pages` is undefined on a JournalEntryPage, so that falls out with no
+ * type check), a source that no longer resolves, or a single-page journal — which is one
+ * thing to a GM, the same rule `pickerEntries` applies in the picker.
+ *
+ * Resolves `pin.source.uuid` DIRECTLY rather than through `resolveSourceSync`: that one
+ * already returns the chosen page, which is the wrong document to enumerate siblings of.
+ */
+export function pageChoices(pin: DpPinFlags): { id: string; name: string; type: string }[] {
+  if (pin.source.kind !== "document") return [];
+  const pages = resolveUuidSync(pin.source.uuid)?.pages?.contents ?? [];
+  if (pages.length < 2) return [];
+  return pages.map((page: any) => ({
+    id: page.id,
+    name: page.name ?? "",
+    type: page.type ?? "text",
+  }));
+}
+
+/**
  * What to write on the pin.
  *
  * An explicit label always wins. Otherwise the source's own name is used and kept in
