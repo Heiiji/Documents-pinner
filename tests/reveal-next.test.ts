@@ -125,6 +125,25 @@ describe("api.revealNext", () => {
     expect(world.notifications.map((n) => n.message)).toEqual(["DP.notice.revealNextNoneInView"]);
   });
 
+  it("shares one reveal between two presses faster than a write: one row, one ping", async () => {
+    await setup([pinnedTile("t1", 0, HIDDEN), pinnedTile("t2", 10, HIDDEN)]);
+    const first = api.revealNext(world.canvas.scene);
+    const second = api.revealNext(world.canvas.scene);
+    expect(second).toBe(first);
+    expect(await second).toEqual({ doc: tiles[0], left: 1 });
+    expect(tiles[0].updates).toHaveLength(1);
+    expect(recordedPings().filter((ping) => ping.kind === "broadcast")).toHaveLength(1);
+
+    // Once it has landed, the next press moves on.
+    expect((await api.revealNext(world.canvas.scene)).doc).toBe(tiles[1]);
+  });
+
+  it("says 'nothing left' once for two presses at the end of the script", async () => {
+    await setup([pinnedTile("t1", 0, { kind: "everyone" })]);
+    await Promise.all([api.revealNext(world.canvas.scene), api.revealNext(world.canvas.scene)]);
+    expect(world.notifications.map((n) => n.message)).toEqual(["DP.notice.revealNextNone"]);
+  });
+
   it("does nothing for a player", async () => {
     await setup([pinnedTile("t1", 0, HIDDEN)], false);
     expect(await api.revealNext(world.canvas.scene)).toEqual({ doc: null, left: 0 });
@@ -318,6 +337,45 @@ describe("the revealNext keybinding", () => {
     expect(world.notifications.map((n) => n.message)).toEqual([
       "DP.notice.revealNext name=Pin t1 count=1",
     ]);
+  });
+
+  it("plays an open Pinboard's own script: its view, its status line, its focus", async () => {
+    await setup([
+      pinnedTile("t1", 0, ALI),
+      pinnedTile("t2", 10, HIDDEN),
+      pinnedTile("t3", 20, HIDDEN),
+    ]);
+    const { openPinboard } = await import("../src/apps/Pinboard");
+    const board = openPinboard();
+    document.body.appendChild(contentOf(board));
+    board.query = { filter: "all", search: "t2", level: null };
+    await board.render();
+
+    const found = await binding();
+    expect(found.options.onDown()).toBe(true);
+    await vi.waitFor(() =>
+      expect(contentOf(board).querySelector('[role="status"]')!.textContent).toBe(
+        "DP.board.statusRevealed name=Pin t2 count=0"
+      )
+    );
+    expect(stored(tiles[1]).kind).toBe("everyone");
+    expect(stored(tiles[0]).kind).toBe("hidden");
+    // The board said it; a toast as well would say it twice.
+    expect(world.notifications).toEqual([]);
+  });
+
+  it("says a reveal once when pressed twice while it is still writing", async () => {
+    await setup([pinnedTile("t1", 0, HIDDEN), pinnedTile("t2", 10, HIDDEN)]);
+    const found = await binding();
+    found.options.onDown();
+    found.options.onDown();
+    await vi.waitFor(() => expect(world.notifications).not.toEqual([]));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(world.notifications.map((n) => n.message)).toEqual([
+      "DP.notice.revealNext name=Pin t1 count=1",
+    ]);
+    expect(stored(tiles[1]).kind).toBe("hidden");
   });
 
   it("stands down with no scene to reveal on", async () => {

@@ -14,8 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   it goes out — shows the first hidden row to the players it remembers, points at it, and
   moves the list on; the footer says what went out and how many are left. It follows the
   board's filter, search and level, and never hides anything. *Reveal the next hidden pin*
-  does the same with the board closed: it ships without a key, for you to give it one in
-  Configure Controls.
+  does the same from anywhere — through the board when it is open, with a notice when it
+  is not — and ships without a key, for you to give it one in Configure Controls.
 - **Reveal & spotlight.** One gesture reveals a pin to the players it remembers and brings
   the table to it: when the pin is for everyone, every player's view glides there. For a
   narrower audience nobody's view moves — a Foundry ping reaches every player, and would

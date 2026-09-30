@@ -16,7 +16,7 @@ const board = { focused: null as any };
 vi.mock("../src/apps/Pinboard", () => ({
   openPinboard: vi.fn(),
   pinboardFocusedDoc: () => board.focused,
-  pinboardQuery: () => null,
+  revealNextOnBoard: () => false,
 }));
 vi.mock("../src/apps/DocumentPicker", () => ({ openPicker: vi.fn() }));
 

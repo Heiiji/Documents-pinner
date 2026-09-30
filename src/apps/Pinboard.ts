@@ -72,14 +72,17 @@ export function pinboardFocusedDoc(): any {
 }
 
 /**
- * The open Pinboard's view — filter, search and level — or null when it is closed.
+ * Reveal next through the open Pinboard, if one is open: true when it took the press.
  *
- * Reveal next's global binding reads it, so the key does on the map what N does on the
- * board: a GM who has filtered the board to one level is running that level's script.
+ * The global binding asks it first, so a key pressed with the board open does what N on
+ * the board does. The board's own view chooses the row — a GM who filtered it to one
+ * level is running that level's script — its status line says what went out, and the
+ * focus moves on to what is next.
  */
-export function pinboardQuery(): PinboardQuery | null {
-  if (!instance?.rendered) return null;
-  return { ...instance.query };
+export function revealNextOnBoard(): boolean {
+  if (!instance?.rendered) return false;
+  instance.runRevealNext();
+  return true;
 }
 
 const FILTERS: { id: PinboardFilter; key: string; icon?: string }[] = [

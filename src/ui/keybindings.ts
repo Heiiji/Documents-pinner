@@ -20,11 +20,14 @@ import { logger } from "../log";
 import * as api from "../api";
 import * as settings from "../settings";
 import { openPicker } from "../apps/DocumentPicker";
-import { openPinboard, pinboardFocusedDoc, pinboardQuery } from "../apps/Pinboard";
+import { openPinboard, pinboardFocusedDoc, revealNextOnBoard } from "../apps/Pinboard";
 import { armLastUsed, disarm, isArmed } from "../apps/PlacementGhost";
 import { readPin } from "../data/PinData";
 
 const log = logger("keys");
+
+/** The reveal the binding is announcing, so a second press sharing it is not said twice. */
+let announcing: Promise<unknown> | null = null;
 
 /** The class the peek state is carried by, so the CSS and the canvas agree. */
 export const PEEK_CLASS = "dp-peeking";
@@ -163,13 +166,18 @@ export function registerKeybindings(): void {
     restricted: true,
     onDown: () => {
       try {
+        // An open board plays its own script, and says so on its own status line.
+        if (revealNextOnBoard()) return true;
         const scene = cv()?.scene;
         if (!scene) return false;
-        void api
-          .revealNext(scene, pinboardQuery() ?? undefined)
+        const pending = api.revealNext(scene);
+        // A press while the last is still writing shares its reveal: said once.
+        if (pending === announcing) return true;
+        announcing = pending;
+        void pending
           .then(({ doc, left }) => {
             const pin = doc ? readPin(doc) : null;
-            // Said out loud: the board that would show it may well be closed.
+            // Said out loud: with the board closed there is nowhere else to say it.
             if (pin) {
               notify(
                 { key: "DP.notice.revealNext", data: { name: api.labelFor(pin), count: left } },
@@ -180,6 +188,9 @@ export function registerKeybindings(): void {
           .catch((error) => {
             log.warn("reveal next failed", error);
             notify({ key: "DP.notice.revealNextFailed" }, "error");
+          })
+          .finally(() => {
+            if (announcing === pending) announcing = null;
           });
         return true;
       } catch (error) {

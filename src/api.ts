@@ -825,6 +825,9 @@ export function rowFacts(
 
 const EVERY_ROW: PinboardQuery = { filter: "all", search: "", level: null };
 
+/** The Reveal next in flight, and the scene it is revealing on. */
+let revealing: { scene: any; promise: Promise<{ doc: any; left: number }> } | null = null;
+
 /**
  * Reveal the next pin of the scene's script: the first hidden row in the Pinboard's
  * order, under the view the GM is looking at, to the audience it remembers.
@@ -842,10 +845,26 @@ const EVERY_ROW: PinboardQuery = { filter: "all", search: "", level: null };
  *
  * Nothing to reveal is said, and said apart from "nothing in this view": the second one
  * means the filter is hiding the rest of the script, which is the GM's to know.
+ *
+ * One at a time per scene. Two presses faster than a write read the same payloads and
+ * chose the same row: the second revealed nothing new, and pinged and said so again. A
+ * press while one is in flight now shares its answer.
  */
-export async function revealNext(
+export function revealNext(
   scene: any,
   query: PinboardQuery = EVERY_ROW
+): Promise<{ doc: any; left: number }> {
+  if (revealing && revealing.scene === scene) return revealing.promise;
+  const promise = revealNextNow(scene, query).finally(() => {
+    if (revealing?.promise === promise) revealing = null;
+  });
+  revealing = { scene, promise };
+  return promise;
+}
+
+async function revealNextNow(
+  scene: any,
+  query: PinboardQuery
 ): Promise<{ doc: any; left: number }> {
   const nothing = { doc: null, left: 0 };
   if (!isGM() || !scene) return nothing;
