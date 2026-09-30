@@ -427,6 +427,14 @@ export function canUserSee(anchorDoc: any, userId: string): boolean {
  * Pinboard. The mismatch it detects — visible but unopenable — is the bug a GM ships to
  * their table and only hears about when a player says "I can see it but nothing
  * happens".
+ *
+ * A pin that reads in place opens in the module's own reader for anyone who can see it,
+ * whatever the ownership says — `openReader` is not gated on it, deliberately. Asking
+ * only for OBSERVER put a key on every chip of a prop revealed with access sync off, and
+ * listed it under "Won't open", for players reading it perfectly well; the GM's natural
+ * fix, switching sync on, then granted a journal nobody needed. The inverse — a player
+ * who holds the journal while the pin is hidden from them — still shows, because that
+ * one is true.
  */
 export function canUserOpen(anchorDoc: any, userId: string): boolean {
   const pin = readPin(anchorDoc);
@@ -438,7 +446,19 @@ export function canUserOpen(anchorDoc: any, userId: string): boolean {
   const user = g()?.users?.get(userId);
   if (!source || !user) return false;
   // OBSERVER is the level at which a text page actually opens; LIMITED is the tease.
-  return source.testUserPermission?.(user, "OBSERVER") === true;
+  if (source.testUserPermission?.(user, "OBSERVER") === true) return true;
+  return readsInPlace(pin) && canUserSee(anchorDoc, userId);
+}
+
+/**
+ * Whether opening this pin shows the module's reader rather than the document's sheet.
+ *
+ * A prop always does — that is what makes it a prop rather than a pin with a picture —
+ * and so does a pin set to read in place. One definition, because the opening itself and
+ * the badge that predicts it must never disagree.
+ */
+export function readsInPlace(pin: DpPinFlags): boolean {
+  return pin.mode === "prop" || pin.interaction.open === "readInPlace";
 }
 
 // ---------------------------------------------------------------------------
@@ -508,7 +528,7 @@ export async function openLocally(anchorDoc: any): Promise<void> {
   const pin = readPin(anchorDoc);
   if (!pin) return;
 
-  if (pin.mode === "prop" || pin.interaction.open === "readInPlace") {
+  if (readsInPlace(pin)) {
     Hooks.call(`${MODULE_ID}.openReader`, anchorDoc);
     return;
   }

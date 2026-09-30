@@ -18,6 +18,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   loads, and the GM is told how many.
 - **Choosing another page in Pin Studio left the access on the old one.** The grant moves
   with the page now.
+- **A prop revealed without granting access showed a key on every chip.** The key means
+  "can see it but cannot open it", and a prop opens in the module's reader for anyone who
+  can see it, whatever the permissions say. The Pinboard listed those props under "Won't
+  open" too, and the natural fix — turning access on — granted a journal nobody needed.
+  Props, and pins set to read in place, now show a key only when it is true. A player who
+  holds the journal while the pin is hidden from them is still flagged.
 - **The README said a new pin stays hidden until you reveal it.** It is visible by default
   — that is the *Default visibility* setting — and the README now says so, and how to
   change it.
