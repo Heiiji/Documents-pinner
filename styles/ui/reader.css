@@ -21,20 +21,26 @@
     0 12px 40px rgb(0 0 0 / 55%);
 
   /* The signature move: the prop was soft, the reader is sharp. The transition runs
-     on the compositor — opacity and filter only, no layout, no backdrop-filter. */
+     on the compositor — opacity, filter and the individual transforms, no layout, no
+     backdrop-filter. */
   /* The one settle in the module, because the reader is UI at that moment. */
   opacity: 0;
   filter: blur(6px);
   scale: 0.98;
+  /* The reader is placed upright; it starts at the angle the prop lies at and turns
+     square as it sharpens, so it reads as the same sheet being picked up. */
+  rotate: var(--dp-reader-turn, 0deg);
   transition:
     opacity var(--dp-dur-reveal, 400ms) var(--dp-ease-resolve, ease-out),
     filter var(--dp-dur-reveal, 400ms) var(--dp-ease-resolve, ease-out),
-    scale var(--dp-dur-reveal, 400ms) var(--dp-ease-resolve, ease-out);
+    scale var(--dp-dur-reveal, 400ms) var(--dp-ease-resolve, ease-out),
+    rotate var(--dp-dur-reveal, 400ms) var(--dp-ease-resolve, ease-out);
 
   &.dp-reader--in {
     opacity: 1;
     filter: none;
     scale: 1;
+    rotate: 0deg;
 
     /*
      * The settle, declared rather than arranged.
@@ -49,6 +55,7 @@
       opacity: 0;
       filter: blur(6px);
       scale: 0.98;
+      rotate: var(--dp-reader-turn, 0deg);
     }
   }
 
@@ -58,6 +65,7 @@
     opacity: 0;
     filter: blur(6px);
     scale: 0.98;
+    rotate: var(--dp-reader-turn, 0deg);
     transition-duration: var(--dp-dur-exit, 140ms);
     transition-timing-function: var(--dp-ease-in, ease-in);
   }
@@ -130,5 +138,6 @@
     opacity: 1;
     filter: none;
     scale: 1;
+    rotate: 0deg;
   }
 }

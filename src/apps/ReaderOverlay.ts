@@ -62,19 +62,25 @@ interface Placed {
 let placedAt: Placed | null = null;
 /** The box the open reader occupies, so a press on it can be told from a press beside it. */
 let openGeometry: Placed | null = null;
+/** The prop's own rectangle, rotated as it lies: a press on the paper is not "elsewhere". */
+let propGeometry: Placed | null = null;
 
 /**
  * Where the reader goes, and how big.
  *
- * A prop's reader sits in exact registration with the prop. A PIN is one grid square,
- * and a reader one grid square wide is a box nobody can read — so a pin set to read in
- * place gets a natural-size sheet centred on it instead.
+ * A prop's reader sits over the prop, the same size and centred on the same point — but
+ * UPRIGHT. The reader is declared a UI surface at the moment it is open, and a letter
+ * dropped at twenty degrees used to be read at twenty degrees, text selection and all.
+ * It turns square as it opens and back as it closes, so it still reads as the same
+ * sheet being picked up. A PIN is one grid square, and a reader one grid square wide is
+ * a box nobody can read — so a pin set to read in place gets a natural-size sheet
+ * centred on it instead.
  */
 export function readerGeometry(doc: any, pin: DpPinFlags, gridSize: number): Placed {
   // Core's own rectangle for the tile, never the document's point as a corner: the
   // point is the centre, and a reader placed from it as a corner opened half a card
   // down and right of the prop it was reading.
-  if (pin.mode === "prop") return tileRect(doc);
+  if (pin.mode === "prop") return { ...tileRect(doc), rotation: 0 };
   const natural = naturalSize("prop", gridSize);
   const centre = centreOf(doc);
   return {
@@ -246,8 +252,13 @@ export async function openReader(tileDoc: any): Promise<void> {
     `<button type="button" class="dp-reader__close" aria-label="${escapeAttr(t("DP.reader.close"))}">` +
     `<i class="fa-solid fa-xmark" aria-hidden="true"></i></button>`;
 
+  // The angle it turns from as it opens, and back to as it closes.
+  const lying = pin.mode === "prop" ? (tileDoc.rotation ?? 0) : 0;
+  element.style.setProperty("--dp-reader-turn", `${lying}deg`);
+
   mount(element);
   openGeometry = geometry;
+  propGeometry = pin.mode === "prop" ? tileRect(tileDoc) : null;
   place(element, geometry);
   openId = tileDoc.id;
 
@@ -267,6 +278,7 @@ export function closeReader(): void {
   openToken++;
   placedAt = null;
   openGeometry = null;
+  propGeometry = null;
 
   for (const off of listeners) off();
   listeners = [];
@@ -313,6 +325,7 @@ export function repositionReader(): void {
     return;
   }
   openGeometry = readerGeometry(doc, pin, gridSize());
+  propGeometry = pin.mode === "prop" ? tileRect(doc) : null;
   place(element, openGeometry);
 }
 
@@ -431,16 +444,38 @@ function attach(): void {
   // the prop being read is left alone, so the hit layer's tap can reach `openReader`
   // and toggle it: closing here first meant the tap arrived at a closed reader and
   // reopened it, and "click it again to close" was unreachable in practice.
+  //
+  // A CLICK, decided on release: closing on the press closed the reader at the start of
+  // every right-drag pan and every drag of a token, so a player could not move the view
+  // to read the bottom of a long letter, and the GM could not move a token past it.
+  let press: { x: number; y: number } | null = null;
   on(
     document.getElementById("board") ?? document.body,
     "pointerdown",
     (event: PointerEvent) => {
-      if (openGeometry && containsPoint(openGeometry, pointerScenePoint(event))) return;
-      closeReader();
+      const at = pointerScenePoint(event);
+      const onIt =
+        (openGeometry && containsPoint(openGeometry, at)) ||
+        (propGeometry && containsPoint(propGeometry, at));
+      press = onIt ? null : { x: event.clientX, y: event.clientY };
+    },
+    { capture: true }
+  );
+  on(
+    window,
+    "pointerup",
+    (event: PointerEvent) => {
+      if (!press) return;
+      const moved = Math.hypot(event.clientX - press.x, event.clientY - press.y);
+      press = null;
+      if (moved < CLICK_SLOP) closeReader();
     },
     { capture: true }
   );
 }
+
+/** How far a press may travel and still be a click rather than a drag or a pan. */
+const CLICK_SLOP = 6;
 
 /** The body's line height in pixels; the card's own 1.45 when the style says "normal". */
 function lineHeightOf(node: HTMLElement): number {

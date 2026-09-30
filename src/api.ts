@@ -353,6 +353,31 @@ export function setOwnershipSync(anchorDoc: any, enabled: boolean): Promise<void
   });
 }
 
+/**
+ * Whether this pin is revealed to anyone — the one answer the eye, the Pinboard's
+ * "Visible" filter and its totals all give. See `audience.reachesAnyone` for why this is
+ * not `kind !== "hidden"`.
+ */
+export function isRevealed(anchorDoc: any, pin: DpPinFlags | null = readPin(anchorDoc)): boolean {
+  if (!pin || anchorDoc?.hidden === true) return false;
+  return audience.reachesAnyone(pin.audience, playerIds());
+}
+
+/**
+ * "Some players", from any surface that offers it.
+ *
+ * Resolves to false, writing nothing, when there is nobody to choose yet: an empty
+ * selection reaches nobody and would be hidden in disguise, so the caller asks the GM to
+ * pick a player instead. The HUD always did; the Studio's dropdown wrote it.
+ */
+export async function chooseSome(anchorDoc: any): Promise<boolean> {
+  const pin = readPin(anchorDoc);
+  const next = pin ? audience.someAudience(pin.audience) : null;
+  if (!next) return false;
+  await setAudience(anchorDoc, next);
+  return true;
+}
+
 /** Whether a user can see this pin right now, by the same rule the canvas uses. */
 export function canUserSee(anchorDoc: any, userId: string): boolean {
   const pin = readPin(anchorDoc);
@@ -416,16 +441,29 @@ export async function showToAudience(anchorDoc: any): Promise<void> {
   if (!pin || !isGM()) return;
 
   const source = await resolveSource(pin);
-  if (!source) return;
+  if (!source) {
+    notify({ key: "DP.notice.sourceMissing" }, "warn");
+    return;
+  }
 
+  // Said, not swallowed. The action shows nothing on the GM's own screen, so a hidden
+  // pin — or one whose audience has nobody in it — used to be a keystroke that did
+  // nothing at all, indistinguishable from one that worked.
   const recipients = playerIds().filter((id) => canUserSee(anchorDoc, id));
-  if (!recipients.length) return;
+  if (!recipients.length) {
+    notify({ key: "DP.notice.showNobody" }, "warn");
+    return;
+  }
 
   // The namespaced class first: reading the bare global logs a compatibility warning.
   const Journal =
     (globalThis as any).foundry?.documents?.collections?.Journal ?? (globalThis as any).Journal;
-  if (Journal?.show) await Journal.show(source, { force: true, users: recipients });
-  else notify({ key: "DP.notice.showUnavailable" }, "warn");
+  if (!Journal?.show) {
+    notify({ key: "DP.notice.showUnavailable" }, "warn");
+    return;
+  }
+  await Journal.show(source, { force: true, users: recipients });
+  notify({ key: "DP.notice.shown", data: { count: recipients.length } }, "info");
 }
 
 /**
@@ -556,6 +594,24 @@ export async function resetSize(anchorDoc: any): Promise<boolean> {
 }
 
 /**
+ * The icon a document pin shows on the map, or the shared default with `null`.
+ *
+ * The tile's own texture, which is what a pin draws and what a prop shows for the moment
+ * before its card is ready: every document pin used to be the same book, so a map with
+ * five of them was five identical markers. An image pin shows its image and has no icon
+ * to choose.
+ */
+export async function setPinIcon(anchorDoc: any, src: string | null): Promise<boolean> {
+  if (!isGM() || !anchorDoc) return false;
+  const pin = readPin(anchorDoc);
+  if (!pin || pin.source.kind !== "document") return false;
+  const next = src?.trim() || PLACEHOLDER_TEXTURE;
+  if (anchorDoc.texture?.src === next) return false;
+  await anchorDoc.update({ "texture.src": next });
+  return true;
+}
+
+/**
  * Draw attention to a pin.
  *
  * `canvas.ping` displays locally AND remotely, so the flash costs no socket of our own.
@@ -568,6 +624,10 @@ export function flash(anchorDoc: any): void {
   const canvas = cv();
   if (!canvas || !anchorDoc) return;
   const origin = centreOf(anchorDoc);
+
+  // A ping is drawn inside the canvas and a text prop's card is drawn over it, so the
+  // ping at its centre lands under the paper. The card pulses itself on this client.
+  Hooks.callAll(`${MODULE_ID}.flash`, anchorDoc);
 
   if (anchorDoc.hidden) {
     const controls = canvas.controls;
@@ -587,10 +647,21 @@ export function flash(anchorDoc: any): void {
  * A GM is told to activate the Tiles layer and the pin is selected for them, because
  * "here it is" that leaves them unable to drag what was just found is half an answer:
  * core refuses to control a Tile while another layer is active, silently.
+ *
+ * A pin on a scene the GM is not viewing is viewed first. A Studio stays open across a
+ * scene change, and its "Find on the map" used to pan the CURRENT scene to the other
+ * scene's coordinates and ping players there, at a spot with nothing on it.
  */
 export async function locate(anchorDoc: any): Promise<void> {
+  if (!anchorDoc) return;
+  const scene = anchorDoc.parent;
+  if (scene?.id && cv()?.scene?.id && scene.id !== cv()?.scene?.id) {
+    if (!isGM() || typeof scene.view !== "function") return;
+    await scene.view();
+  }
+
   const canvas = cv();
-  if (!canvas?.animatePan || !anchorDoc) return;
+  if (!canvas?.animatePan) return;
   await canvas.animatePan({
     ...centreOf(anchorDoc),
     scale: Math.min(1, canvas.stage?.scale?.x ?? 1) < 0.6 ? 0.8 : undefined,
@@ -656,8 +727,15 @@ export async function retarget(anchorDoc: any, source: DpSource): Promise<boolea
   if (sameDocument) return false;
 
   // The WHOLE source object, never a partial patch: `mergePin` deep-merges, so omitting
-  // `pageId` would leave a page id of the OLD journal pointing into the new one.
-  await store.update(anchorDoc, { source }, { "texture.src": anchorTexture(source) });
+  // `pageId` would leave a page id of the OLD journal pointing into the new one. The
+  // texture follows only when the KIND changes: from one document to another, the icon
+  // the GM chose for this pin is part of the pin, like its size and its effect.
+  const keepIcon = before.source.kind === "document" && source.kind === "document";
+  await store.update(
+    anchorDoc,
+    { source },
+    keepIcon ? {} : { "texture.src": anchorTexture(source) }
+  );
 
   await syncAnchor(anchorDoc);
   // `releaseAnchor` takes an explicit uuid precisely for this: the payload no longer

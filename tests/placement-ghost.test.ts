@@ -138,6 +138,16 @@ describe("the legend", () => {
     expect(modifierGlyphs("other").ctrl).toBe("Ctrl+");
   });
 
+  it("names Control ⌘ on a Mac, as Foundry does, where ⌃-click is a right-click", () => {
+    expect(modifierGlyphs("mac").ctrl).toBe("⌘");
+  });
+
+  it("teaches the zoom and the pan it now leaves to core", () => {
+    const markup = legendLines();
+    expect(markup).toContain("DP.ghost.zoom");
+    expect(markup).toContain("DP.ghost.pan");
+  });
+
   it("emits one span per key, so a held modifier can light its own entries", () => {
     const markup = legendLines();
     const keys = [...markup.matchAll(/data-dp-key="([^"]+)"/g)].map((m) => m[1]);
@@ -406,5 +416,90 @@ describe("the preview", () => {
 
     expect(body().textContent).toBe(newest);
     expect(newest).toContain(String(Math.round((400 / 26 + 1) * 100) / 100).slice(0, 4));
+  });
+});
+
+/**
+ * A target off the edge of the screen used to be unreachable while a pin was armed: the
+ * wheel rotated, every right press cancelled — and a right-drag is how Foundry pans.
+ */
+describe("moving around while placing", () => {
+  const created: Record<string, unknown>[] = [];
+  let world: ReturnType<typeof installWorld>;
+
+  beforeEach(() => {
+    created.length = 0;
+    world = installWorld({ isGM: true });
+    world.canvas.scene.createEmbeddedDocuments = async (
+      _type: string,
+      docs: Record<string, unknown>[]
+    ) => {
+      created.push(...docs);
+      return [];
+    };
+    world.canvas.pan = vi.fn();
+    world.canvas.stage.pivot = { x: 500, y: 400 };
+    document.body.innerHTML = '<div id="board"></div>';
+  });
+
+  afterEach(() => {
+    disarm();
+    uninstallWorld();
+  });
+
+  const board = () => document.getElementById("board")!;
+  const live = () => document.querySelector(".dp-ghost:not(.dp-ghost--out)");
+  const press = (button: number, x: number, init: MouseEventInit = {}) =>
+    board().dispatchEvent(
+      new MouseEvent("pointerdown", { bubbles: true, button, clientX: x, clientY: 0, ...init })
+    );
+  const release = (button: number, x: number) =>
+    window.dispatchEvent(
+      new MouseEvent("pointerup", { bubbles: true, button, clientX: x, clientY: 0 })
+    );
+
+  it("leaves a right-drag to core, which pans, and cancels on a right click", () => {
+    arm(source);
+    press(2, 100);
+    release(2, 180);
+    expect(live()).not.toBeNull();
+
+    press(2, 100);
+    release(2, 102);
+    expect(live()).toBeNull();
+  });
+
+  it("zooms toward the pointer with Ctrl or ⌘ and the wheel, and does not rotate", async () => {
+    arm(source);
+    board().dispatchEvent(
+      new WheelEvent("wheel", {
+        bubbles: true,
+        deltaY: -1,
+        ctrlKey: true,
+        clientX: 100,
+        clientY: 0,
+      })
+    );
+    expect(world.canvas.pan).toHaveBeenCalledTimes(1);
+    const target = (world.canvas.pan as any).mock.calls[0][0];
+    expect(target.scale).toBeCloseTo(1.1, 6);
+    // The point under the pointer stays under it: the centre moves toward it.
+    expect(target.x).toBeLessThan(500);
+
+    press(0, 0);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(created[0].rotation).toBe(0);
+  });
+
+  it("places once after a Shift spent on a fine rotation, instead of stamping on", async () => {
+    arm(source);
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Shift" }));
+    board().dispatchEvent(new WheelEvent("wheel", { bubbles: true, deltaY: 1, shiftKey: true }));
+    press(0, 0, { shiftKey: true });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(created).toHaveLength(1);
+    expect(created[0].rotation).toBe(1);
+    expect(live()).toBeNull();
   });
 });

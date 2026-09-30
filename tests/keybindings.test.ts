@@ -120,3 +120,51 @@ describe("a pin binding with nothing selected", () => {
     expect(openPicker).toHaveBeenCalled();
   });
 });
+
+/**
+ * Hold-to-peek is the one binding players have, and nothing in the game ever named it.
+ */
+describe("teaching the peek key", () => {
+  const prop = (mode = "prop") => ({
+    id: "t1",
+    flags: { "documents-pinner": { pin: { mode } } },
+  });
+
+  async function setup(isGM: boolean) {
+    vi.resetModules();
+    const world = installWorld({ isGM });
+    world.game.keybindings.get = () => [{ key: "AltLeft", modifiers: [] }];
+    const keys = await import("../src/ui/keybindings");
+    return { world, keys };
+  }
+
+  it("tells a player once, the first time they hover a prop, naming the key as bound", async () => {
+    const { world, keys } = await setup(false);
+    keys.teachPeekOnce(prop());
+    keys.teachPeekOnce(prop());
+    expect(world.notifications).toHaveLength(1);
+    expect(world.notifications[0].message).toBe("DP.notice.peekTip");
+    expect(world.game.settings.get("documents-pinner", "peekTaught")).toBe(true);
+  });
+
+  it("says nothing to the GM, or over a pin icon, or to a player already told", async () => {
+    let { world, keys } = await setup(true);
+    keys.teachPeekOnce(prop());
+    expect(world.notifications).toHaveLength(0);
+
+    ({ world, keys } = await setup(false));
+    keys.teachPeekOnce(prop("pin"));
+    expect(world.notifications).toHaveLength(0);
+
+    ({ world, keys } = await setup(false));
+    await world.game.settings.set("documents-pinner", "peekTaught", true);
+    keys.teachPeekOnce(prop());
+    expect(world.notifications).toHaveLength(0);
+  });
+
+  it("names a binding the way the keyboard does", async () => {
+    const { keys } = await setup(false);
+    expect(keys.bindingName({ key: "AltLeft" })).toBe("Alt");
+    expect(keys.bindingName({ key: "KeyP", modifiers: ["Shift"] })).toBe("Shift+P");
+  });
+});

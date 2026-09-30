@@ -521,3 +521,32 @@ describe("a card that fails to resolve", () => {
     expect(resolveCard).toHaveBeenCalledTimes(2);
   });
 });
+
+/**
+ * A ping is drawn inside the canvas and a card is drawn over it, so Flash and Locate
+ * pinged underneath the one thing they pointed at.
+ */
+describe("flashDomProp", () => {
+  it("lays a ring over the card in the card's own rectangle, which then removes itself", async () => {
+    const { flashDomProp } = await import("../src/canvas/DomPropTier");
+    syncDomTier([entry()]);
+    await settle();
+
+    expect(flashDomProp(doc())).toBe(true);
+    const ring = overlay()!.querySelector<HTMLElement>(".dp-flash")!;
+    expect(ring).not.toBeNull();
+    expect(ring.style.left).toBe("-100px");
+    expect(ring.style.width).toBe("400px");
+    expect(ring.style.transform).toBe("rotate(15deg)");
+    // After the card, so it paints over it.
+    expect(overlay()!.lastElementChild).toBe(ring);
+
+    ring.dispatchEvent(new Event("animationend"));
+    expect(overlay()!.querySelector(".dp-flash")).toBeNull();
+  });
+
+  it("does nothing for a prop this tier is not drawing, which the canvas ping can reach", async () => {
+    const { flashDomProp } = await import("../src/canvas/DomPropTier");
+    expect(flashDomProp(doc({ id: "elsewhere" }))).toBe(false);
+  });
+});

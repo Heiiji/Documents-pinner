@@ -35,7 +35,7 @@
 
   &[aria-selected="true"] {
     border-block-end-color: var(--color-warm-1, #c9ad6a);
-    color: var(--color-warm-1, #c9ad6a);
+    color: var(--dp-accent-text, #c9ad6a);
   }
 }
 
@@ -106,7 +106,9 @@
 
 .dp-studio__field > output {
   grid-column: 3;
-  min-inline-size: 3ch;
+  /* Wide enough for "100%" and "12.5 px", so the slider does not shift as it moves. */
+  min-inline-size: 7ch;
+  white-space: nowrap;
   font-variant-numeric: tabular-nums;
   opacity: 0.75;
   text-align: end;
@@ -120,6 +122,17 @@
 
 .dp-studio__field > input[type="checkbox"] {
   justify-self: start;
+}
+
+/* The icon: a choice and a browse button, where every other select takes both columns. */
+.dp-studio__field > select.dp-studio__icon-select {
+  grid-column: 2;
+}
+
+.dp-studio__icon-browse {
+  grid-column: 3;
+  inline-size: 2rem;
+  padding: 0;
 }
 
 .dp-studio__swatches {
@@ -191,10 +204,10 @@
   opacity: 0.7;
 
   &[data-dp-cost="medium"] {
-    color: var(--color-warm-1, #c9ad6a);
+    color: var(--dp-accent-text, #c9ad6a);
   }
   &[data-dp-cost="high"] {
-    color: #e08a72;
+    color: var(--dp-danger-text, #e08a72);
   }
 }
 
@@ -294,7 +307,7 @@
   padding: 0;
   border: none;
   background: transparent;
-  color: var(--color-warm-1, #c9ad6a);
+  color: var(--dp-accent-text, #c9ad6a);
   font-size: 0.85em;
   cursor: pointer;
   text-decoration: underline;

@@ -103,6 +103,8 @@ describe("the HUD audience palette", () => {
     await openAudiencePalette();
     const some = contentOf(hud).querySelector<HTMLElement>('[data-dp-kind="selected"]')!;
     hud.dispatch("setAudienceKind", some);
+    // The HUD first asks whether the pin remembers a selection to take back.
+    await new Promise((resolve) => setTimeout(resolve, 0));
 
     const status = contentOf(hud).querySelector<HTMLElement>(".dp-hud__status")!;
     expect(status.textContent).toContain("chooseWho");

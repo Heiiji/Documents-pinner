@@ -64,9 +64,23 @@ describe("hudMarkup", () => {
 
   it("offers reveal while hidden and hide while visible", () => {
     expect(hudMarkup(doc, pin())).toContain("fa-eye-slash");
-    expect(hudMarkup(doc, pin({ audience: { ...pin().audience, kind: "everyone" } }))).toContain(
+    // The store keeps core's `hidden` in step with the audience; a revealed pin is not hidden.
+    const shown = { ...doc, hidden: false };
+    expect(hudMarkup(shown, pin({ audience: { ...pin().audience, kind: "everyone" } }))).toContain(
       'class="fa-solid fa-eye"'
     );
+  });
+
+  it("keeps the eye shut on a selection that names nobody, which reaches no one", () => {
+    const shown = { ...doc, hidden: false };
+    const nobody = pin({ audience: { ...pin().audience, kind: "selected", users: [] } });
+    expect(hudMarkup(shown, nobody)).toContain("fa-eye-slash");
+    expect(hudMarkup(shown, nobody)).toContain('data-tooltip-text="DP.hud.reveal"');
+  });
+
+  it("states the eye in its label alone, not also as pressed", () => {
+    const markup = hudMarkup(doc, pin());
+    expect(markup).not.toMatch(/data-action="toggleVisibility"[^>]*aria-pressed/);
   });
 
   it("keeps both palettes closed and collapsed until asked", () => {

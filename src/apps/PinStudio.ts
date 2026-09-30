@@ -18,10 +18,10 @@
  *   should never have to learn a second vocabulary for the module's central idea.
  */
 
-import { MODULE_ID } from "../const";
-import { cv, ns } from "../fvtt";
+import { MODULE_ID, PLACEHOLDER_TEXTURE } from "../const";
+import { cfg, cv, g, ns } from "../fvtt";
 import { previewIntensity } from "../canvas/DomPropTier";
-import { t, tn } from "../i18n";
+import { t, tn, tOr } from "../i18n";
 import { escapeAttr, escapeHtml } from "../html";
 import * as api from "../api";
 import { readPin } from "../data/PinData";
@@ -33,6 +33,7 @@ import { pdfPageCount, pdfSourceOf } from "../render/PdfPage";
 import { chipsMarkup, describeChips } from "./chips";
 import { openPicker } from "./DocumentPicker";
 import { chipUsersFor } from "./PinHUD";
+import { restoreFocus, snapshotFocus } from "./focus-restore";
 import type { DpPinFlags, DpSource } from "../types/dp";
 
 let StudioClass: any = null;
@@ -98,12 +99,41 @@ function checkbox(name: string, checked: boolean): string {
   return `<input type="checkbox" name="${escapeAttr(name)}"${checked ? " checked" : ""}>`;
 }
 
-function range(name: string, value: number, min = 0, max = 1, step = 0.05, pdf = false): string {
+/**
+ * How a slider is shown: a multiplier from the stored value to the shown one, and a unit.
+ *
+ * The readouts used to be bare numbers — "0.55", "12.5", "1.5" — with the intensity on a
+ * 0–1 scale here and 0–100 in the HUD, so the same setting read as two different ones.
+ * A fraction is shown as a percentage everywhere now, and every readout says its unit.
+ */
+interface RangeDisplay {
+  scale?: number;
+  unit?: string;
+}
+
+function range(
+  name: string,
+  value: number,
+  min = 0,
+  max = 1,
+  step = 0.05,
+  pdf = false,
+  display: RangeDisplay = {}
+): string {
+  const scale = display.scale ?? 1;
+  const unit = display.unit ?? "";
+  const shown = Math.round(value * scale * 100) / 100;
+  const extra =
+    (scale !== 1 ? ` data-dp-scale="${scale}"` : "") +
+    (unit ? ` data-dp-unit="${escapeAttr(unit)}"` : "");
   return (
     `<input type="range" name="${escapeAttr(name)}" min="${min}" max="${max}" step="${step}"` +
-    ` value="${value}"${inert(name, pdf)}><output>${Math.round(value * 100) / 100}</output>`
+    ` value="${shown}"${extra}${inert(name, pdf)}><output>${shown}${escapeHtml(unit)}</output>`
   );
 }
+
+/** A percentage slider over a stored 0–1 fraction. */
+const PERCENT = { scale: 100, unit: "%" } as const;
 
 function text(name: string, value: string, placeholderKey?: string): string {
   return (
@@ -131,9 +161,11 @@ export interface StudioOptions {
   pages?: { id: string; name: string; type: string }[];
   /** How many pages the PDF behind this pin has, or 0 while that is not known. */
   pdfPages?: number;
+  /** The icons a pin may wear: core's map-note icons, labelled. */
+  icons?: { label: string; src: string }[];
 }
 
-function contentTab(pin: DpPinFlags, options: StudioOptions): string {
+function contentTab(pin: DpPinFlags, options: StudioOptions, attrs = ""): string {
   const source = api.resolveSourceSync(pin);
   const isPage = source?.documentName === "JournalEntryPage";
   const pages = options.pages ?? [];
@@ -150,7 +182,10 @@ function contentTab(pin: DpPinFlags, options: StudioOptions): string {
             value: page.id,
             // The raw page type beside the name, only where it disambiguates: two pages
             // called "Map" can be a text page and an image, and the list cannot say which.
-            label: page.type === "text" ? page.name : `${page.name} (${page.type})`,
+            label:
+              page.type === "text"
+                ? page.name
+                : `${page.name} (${tOr(`DP.pageType.${page.type}`, page.type)})`,
           })),
         ]),
         "DP.studio.pageHint"
@@ -170,7 +205,7 @@ function contentTab(pin: DpPinFlags, options: StudioOptions): string {
     : "";
 
   return (
-    `<section class="dp-studio__tab" data-dp-tab="content">` +
+    `<section class="dp-studio__tab" data-dp-tab="content"${attrs}>` +
     // The source, which page of it, and the way to change it — one block about the
     // document, before the block about the pin.
     `<div class="dp-studio__sourcebox">` +
@@ -234,7 +269,44 @@ async function pdfPageCountFor(pin: DpPinFlags): Promise<number> {
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
-function appearanceTab(doc: any, pin: DpPinFlags): string {
+/**
+ * The icon a document pin wears on the map — core's map-note icons, the shared book, or
+ * any image from the file browser.
+ *
+ * Every document pin used to be the same book, so five pins on a map were five
+ * identical markers. Offered on a prop too: it is the icon the prop becomes when it is
+ * shrunk to a pin, and the sheet it shows until its card is drawn.
+ */
+function iconField(doc: any, pin: DpPinFlags, options: StudioOptions): string {
+  if (pin.source.kind !== "document") return "";
+  const current = doc?.texture?.src ?? PLACEHOLDER_TEXTURE;
+  const choices = [
+    { label: t("DP.studio.iconDefault"), src: PLACEHOLDER_TEXTURE },
+    ...(options.icons ?? []).filter((icon) => icon.src !== PLACEHOLDER_TEXTURE),
+  ];
+  if (!choices.some((icon) => icon.src === current)) {
+    const file = decodeURIComponent(String(current).split("/").pop() ?? current);
+    choices.push({ label: t("DP.studio.iconCustom", { file }), src: current });
+  }
+  const items = choices
+    .map(
+      (icon) =>
+        `<option value="${escapeAttr(icon.src)}"${icon.src === current ? " selected" : ""}>` +
+        `${escapeHtml(icon.label)}</option>`
+    )
+    .join("");
+  return field(
+    "DP.studio.icon",
+    `<select name="_icon" class="dp-studio__icon-select">${items}</select>` +
+      `<button type="button" class="dp-studio__icon-browse" data-action="browseIcon"` +
+      ` data-tooltip-text="${escapeAttr(t("DP.studio.iconBrowse"))}"` +
+      ` aria-label="${escapeAttr(t("DP.studio.iconBrowse"))}">` +
+      `<i class="fa-solid fa-folder-open" aria-hidden="true"></i></button>`,
+    "DP.studio.iconHint"
+  );
+}
+
+function appearanceTab(doc: any, pin: DpPinFlags, options: StudioOptions = {}, attrs = ""): string {
   // The EFFECTIVE metrics, so a pin that predates stored type sizes shows the size it
   // is actually drawn at rather than an empty slider; the first edit freezes both.
   const size = { width: Number(doc?.width) || 1, height: Number(doc?.height) || 1 };
@@ -269,7 +341,7 @@ function appearanceTab(doc: any, pin: DpPinFlags): string {
     : "";
 
   return (
-    `<section class="dp-studio__tab" data-dp-tab="appearance"${pdf ? ' data-dp-pdf="true"' : ""}>` +
+    `<section class="dp-studio__tab" data-dp-tab="appearance"${pdf ? ' data-dp-pdf="true"' : ""}${attrs}>` +
     inert +
     field(
       "DP.studio.mode",
@@ -278,6 +350,7 @@ function appearanceTab(doc: any, pin: DpPinFlags): string {
         { value: "pin", label: t("DP.settings.defaultMode.pin") },
       ])
     ) +
+    iconField(doc, pin, options) +
     field(
       "DP.studio.paper",
       select(
@@ -289,12 +362,12 @@ function appearanceTab(doc: any, pin: DpPinFlags): string {
     ) +
     field(
       "DP.studio.typeSize",
-      range("display.typeSize", round2(metrics.fontPx), 6, 72, 0.5, pdf),
+      range("display.typeSize", round2(metrics.fontPx), 6, 72, 0.5, pdf, { unit: " px" }),
       "DP.studio.typeSizeHint"
     ) +
     field(
       "DP.studio.margin",
-      range("display.margin", round2(marginEm), 0, 6, 0.1, pdf),
+      range("display.margin", round2(marginEm), 0, 6, 0.1, pdf, { unit: " em" }),
       "DP.studio.marginHint"
     ) +
     `<div class="dp-studio__swatches" role="group" aria-label="${escapeAttr(t("DP.studio.effect"))}">` +
@@ -302,8 +375,14 @@ function appearanceTab(doc: any, pin: DpPinFlags): string {
     `</div>` +
     `<button type="button" class="dp-studio__link" data-action="editPresets">` +
     `${escapeHtml(t("DP.presets.edit"))}</button>` +
-    field("DP.studio.intensity", range("effect.intensity", pin.effect.intensity)) +
-    field("DP.studio.speed", range("effect.speed", pin.effect.speed, 0, 4, 0.1, pdf)) +
+    field(
+      "DP.studio.intensity",
+      range("effect.intensity", pin.effect.intensity, 0, 100, 5, false, PERCENT)
+    ) +
+    field(
+      "DP.studio.speed",
+      range("effect.speed", pin.effect.speed, 0, 4, 0.1, pdf, { unit: "×" })
+    ) +
     field(
       "DP.studio.motion",
       // `onReveal` is not offered: nothing implements a play-once animation, and the
@@ -326,16 +405,24 @@ function appearanceTab(doc: any, pin: DpPinFlags): string {
     ) +
     field(
       "DP.studio.fadeAlpha",
-      range("display.fadeUnderTokensAlpha", pin.display.fadeUnderTokensAlpha)
+      range(
+        "display.fadeUnderTokensAlpha",
+        pin.display.fadeUnderTokensAlpha,
+        0,
+        100,
+        5,
+        false,
+        PERCENT
+      )
     ) +
     `</section>`
   );
 }
 
-function audienceTab(doc: any, pin: DpPinFlags): string {
+function audienceTab(doc: any, pin: DpPinFlags, attrs = ""): string {
   const users = chipUsersFor(doc);
   return (
-    `<section class="dp-studio__tab" data-dp-tab="audience">` +
+    `<section class="dp-studio__tab" data-dp-tab="audience"${attrs}>` +
     field(
       "DP.studio.audience",
       // `discovered` is deliberately NOT offered. Its visibility half works — each client
@@ -386,19 +473,30 @@ export function studioMarkup(
   options: StudioOptions = {}
 ): string {
   const grid = gridOf(doc);
-  const nav = TABS.map(
-    (tab) =>
+  // Ids unique per window: two Studios can be open at once, one per pin.
+  const base = `dp-studio-${String(doc?.id ?? "pin").replace(/[^\w-]/g, "")}`;
+  const tabId = (id: TabId) => `${base}-tab-${id}`;
+  const panelId = `${base}-panel`;
+  // A real tab pattern: one tab stop for the row, the arrows move along it, and the
+  // panel says which tab labels it. The buttons used to be three tab stops with a role
+  // and nothing behind it.
+  const nav = TABS.map((tab) => {
+    const selected = tab.id === active;
+    return (
       `<button type="button" class="dp-studio__tabbtn" data-action="setTab"` +
-      ` data-dp-tab="${tab.id}" role="tab" aria-selected="${tab.id === active}">` +
-      `<i class="fa-solid ${tab.icon}" aria-hidden="true"></i> ${escapeHtml(t(tab.key))}</button>`
-  ).join("");
+      ` data-dp-tab="${tab.id}" role="tab" aria-selected="${selected}" id="${tabId(tab.id)}"` +
+      (selected ? ` aria-controls="${panelId}" tabindex="0"` : ` tabindex="-1"`) +
+      `><i class="fa-solid ${tab.icon}" aria-hidden="true"></i> ${escapeHtml(t(tab.key))}</button>`
+    );
+  }).join("");
+  const attrs = ` role="tabpanel" id="${panelId}" aria-labelledby="${tabId(active)}"`;
 
   const body =
     active === "content"
-      ? contentTab(pin, options)
+      ? contentTab(pin, options, attrs)
       : active === "appearance"
-        ? appearanceTab(doc, pin)
-        : audienceTab(doc, pin);
+        ? appearanceTab(doc, pin, options, attrs)
+        : audienceTab(doc, pin, attrs);
 
   return (
     `<div class="dp-studio">` +
@@ -469,7 +567,11 @@ export function valueOf(element: HTMLInputElement | HTMLSelectElement): unknown 
     // the schema clamps to one, so `Number("")` would store page 1 — a page the GM never
     // chose — the moment they cleared the field to type another number.
     if (element.type === "number") return element.value === "" ? null : Number(element.value);
-    if (element.type === "range") return Number(element.value);
+    if (element.type === "range") {
+      // A slider shown in percent stores a fraction.
+      const scale = Number(element.dataset?.dpScale) || 1;
+      return Number(element.value) / scale;
+    }
   }
   // `ownershipSync.level` is the one select carrying a number rather than an enum.
   if (element.name.endsWith(".level")) return Number(element.value);
@@ -493,6 +595,7 @@ export function definePinStudio(): any {
       form: { submitOnChange: true, closeOnSubmit: false },
       actions: {
         setTab: onSetTab,
+        browseIcon: onBrowseIcon,
         setEffect: onSetEffect,
         locate: onLocate,
         fitHeight: onFitHeight,
@@ -507,6 +610,17 @@ export function definePinStudio(): any {
     tab: TabId = "content";
     /** Whether editing one dimension in the strip carries the other with it. */
     aspectLocked = false;
+    /** Where the focus goes after the next render, when it is not where it was. */
+    focusAfterRender: string | null = null;
+
+    /**
+     * The pin's name in the title bar. Every Studio said "Pin Studio", and a GM with
+     * three of them open could tell them apart only by reading their fields.
+     */
+    get title(): string {
+      const pin = readPin(this.doc);
+      return pin ? t("DP.studio.titleFor", { name: api.labelFor(pin) }) : t("DP.studio.title");
+    }
 
     async _renderHTML() {
       const pin = readPin(this.doc);
@@ -519,6 +633,7 @@ export function definePinStudio(): any {
             // markup builder must stay synchronous and world-free. A count that fails to
             // arrive leaves the field with no ceiling, which is still a usable control.
             pdfPages: await pdfPageCountFor(pin),
+            icons: noteIcons(),
           })
         : `<p class="dp-studio__gone">${escapeHtml(t("DP.studio.gone"))}</p>`;
       return wrapper.firstElementChild ?? wrapper;
@@ -529,6 +644,10 @@ export function definePinStudio(): any {
       // on each slider tick. Keep the scroll when the tab is the same one.
       const before = content.querySelector<HTMLElement>(".dp-studio__tab");
       const scrollTop = before?.dataset.dpTab === this.tab ? before.scrollTop : 0;
+      // And keep the focus, which the same render destroyed: a slider moved with the
+      // arrow keys commits on every step, so it could be moved exactly one step, and a
+      // GM tabbing down the form was sent back to the window after each field.
+      const focus = snapshotFocus(content);
 
       content.replaceChildren(result);
       // Wired to `result`, the NEW subtree, not to `content`. ApplicationV2 hands back
@@ -539,6 +658,19 @@ export function definePinStudio(): any {
 
       const after = content.querySelector<HTMLElement>(".dp-studio__tab");
       if (after && scrollTop) after.scrollTop = scrollTop;
+
+      // ApplicationV2 writes the title bar once, when the frame is built; a pin renamed
+      // while its Studio is open is renamed here too.
+      const bar = this.window?.title;
+      if (bar instanceof HTMLElement && bar.textContent !== this.title)
+        bar.textContent = this.title;
+
+      if (this.focusAfterRender) {
+        content.querySelector<HTMLElement>(this.focusAfterRender)?.focus({ preventScroll: true });
+        this.focusAfterRender = null;
+      } else {
+        restoreFocus(content, focus);
+      }
     }
 
     #wire(root: HTMLElement) {
@@ -554,11 +686,35 @@ export function definePinStudio(): any {
         const target = event.target as HTMLInputElement;
         if (target?.type !== "range") return;
         const output = target.nextElementSibling;
-        if (output?.tagName === "OUTPUT") output.textContent = target.value;
+        if (output?.tagName === "OUTPUT") {
+          output.textContent = `${target.value}${target.dataset.dpUnit ?? ""}`;
+        }
         // The prop previews the intensity as the slider moves; the commit is on change.
         if (target.name === "effect.intensity") {
-          previewIntensity(this.doc?.id, Number(target.value));
+          previewIntensity(this.doc?.id, valueOf(target) as number);
         }
+      });
+
+      // The arrows move along the tab row, and the tab they reach is the one shown.
+      root.addEventListener("keydown", (event) => {
+        const tab = (event.target as HTMLElement)?.closest?.<HTMLElement>(".dp-studio__tabbtn");
+        if (!tab) return;
+        const at = TABS.findIndex((entry) => entry.id === tab.dataset.dpTab);
+        const next =
+          event.key === "ArrowRight"
+            ? (at + 1) % TABS.length
+            : event.key === "ArrowLeft"
+              ? (at - 1 + TABS.length) % TABS.length
+              : event.key === "Home"
+                ? 0
+                : event.key === "End"
+                  ? TABS.length - 1
+                  : -1;
+        if (next < 0) return;
+        event.preventDefault();
+        this.tab = TABS[next].id;
+        this.focusAfterRender = `.dp-studio__tabbtn[data-dp-tab="${TABS[next].id}"]`;
+        this.render();
       });
 
       root.addEventListener("click", (event) => {
@@ -581,6 +737,10 @@ export function definePinStudio(): any {
           this.aspectLocked = target.checked;
           return;
         }
+        if (field === "icon") {
+          await api.setPinIcon(this.doc, target.value);
+          return;
+        }
         // An emptied field is a GM part-way through typing, not a request for a
         // one-pixel tile — which is what `Number("")` clamped to on the way through
         // `#resize`. The same rule the payload's own number input follows in `valueOf`.
@@ -597,6 +757,21 @@ export function definePinStudio(): any {
       if (target.name === "mode") {
         await api.setMode(this.doc, target.value as any);
         this.render();
+        return;
+      }
+
+      // "Some players" with nobody chosen reaches nobody while its kind says otherwise —
+      // the Pinboard counted such a pin as visible, over a row of hollow chips. The HUD
+      // never allowed it; the dropdown wrote it. Now both ask for a player instead, and
+      // both take back a selection the pin remembers from before it was hidden.
+      if (target.name === "audience.kind" && target.value === "selected") {
+        if (await api.chooseSome(this.doc)) return;
+        target.value = readPin(this.doc)?.audience.kind ?? "hidden";
+        const status = target
+          .closest(".dp-studio")
+          ?.querySelector<HTMLElement>(".dp-studio__status");
+        if (status) status.textContent = t("DP.hud.chooseWho");
+        target.closest(".dp-studio")?.querySelector<HTMLElement>(".dp-chip")?.focus();
         return;
       }
 
@@ -667,8 +842,34 @@ function onFitHeight(this: any) {
   void api.fitToContent(this.doc).then(() => this.render());
 }
 
+/** The pin rides along, so the Preset Studio can offer to put a new preset on it. */
 function onEditPresets(this: any) {
-  Hooks.call(`${MODULE_ID}.openPresets`, readPin(this.doc)?.effect.id);
+  Hooks.call(`${MODULE_ID}.openPresets`, readPin(this.doc)?.effect.id, this.doc);
+}
+
+/** Any image as this pin's icon, from the file browser. */
+function onBrowseIcon(this: any) {
+  const FilePicker = ns("applications.apps.FilePicker.implementation");
+  if (!FilePicker) return;
+  const doc = this.doc;
+  new FilePicker({
+    type: "image",
+    current: doc?.texture?.src,
+    callback: (path: string) => void api.setPinIcon(doc, path),
+  }).render(true);
+}
+
+/**
+ * Core's map-note icons, which is the set a GM already knows from placing notes.
+ * Labels may be localisation keys; `localize` returns anything else unchanged.
+ */
+function noteIcons(): { label: string; src: string }[] {
+  const icons = cfg()?.JournalEntry?.noteIcons;
+  if (!icons || typeof icons !== "object") return [];
+  const localize = (label: string) => g()?.i18n?.localize?.(label) ?? label;
+  return Object.entries(icons)
+    .filter(([, src]) => typeof src === "string" && src)
+    .map(([label, src]) => ({ label: localize(label), src: src as string }));
 }
 
 function onResetSize(this: any) {
@@ -745,11 +946,17 @@ export function openStudio(doc: any, tab: TabId = "content"): any {
   return app;
 }
 
-/** Re-render every open Studio. Wired to the tile hooks. */
-export function refreshStudios(): void {
+/**
+ * Re-render the open Studios for these pins, or every one when no ids are given. Wired to
+ * the tile hooks, which pass the pins that changed.
+ */
+export function refreshStudios(ids?: readonly string[]): void {
   for (const [id, app] of open) {
-    if (app.rendered) app.render();
-    else open.delete(id);
+    if (!app.rendered) {
+      open.delete(id);
+      continue;
+    }
+    if (!ids || ids.includes(id)) app.render();
   }
 }
 

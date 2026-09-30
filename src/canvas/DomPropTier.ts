@@ -392,6 +392,38 @@ export function setDomPropHover(id: string, hovering: boolean): void {
   });
 }
 
+/**
+ * A pulse around the paper, for Flash and Locate.
+ *
+ * A ping is drawn inside the canvas, and this tier's cards are drawn OVER the canvas —
+ * so a flash aimed at a prop's centre landed underneath the one opaque thing it was
+ * pointing at. The pulse is its own element laid over the card, in the card's rectangle:
+ * inside the card it would be clipped by the card's own paint containment, and on the
+ * card it would have to replace the card's arrival animation. It removes itself.
+ *
+ * Local to this client: a card on another screen has no way to hear of it without a
+ * socket, which the module does not ship.
+ */
+export function flashDomProp(doc: any): boolean {
+  const prop = doc?.id ? props.get(doc.id) : undefined;
+  if (!prop) return false;
+  const rect = prop.placedAt ?? tileRect(doc);
+  const ring = document.createElement("div");
+  ring.className = "dp-flash";
+  ring.setAttribute("aria-hidden", "true");
+  ring.style.left = `${rect.x}px`;
+  ring.style.top = `${rect.y}px`;
+  ring.style.width = `${rect.width}px`;
+  ring.style.height = `${rect.height}px`;
+  ring.style.transform = `rotate(${rect.rotation ?? 0}deg)`;
+  const done = () => ring.remove();
+  ring.addEventListener("animationend", done, { once: true });
+  // A floor under the event, for a client whose animations never run at all.
+  setTimeout(done, 2000);
+  mount(ring);
+  return true;
+}
+
 /** The token fade and the peek, pushed to a card that has no mesh to carry them. */
 export function setDomPropAlpha(id: string, alpha: number): void {
   const prop = props.get(id);

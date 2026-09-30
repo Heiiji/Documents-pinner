@@ -79,11 +79,15 @@ export async function onboardingReady(): Promise<void> {
     ]
       .map((key) => `<li>${escapeHtml(t(key))}</li>`)
       .join("");
+    // "Not now", and where to find it: this dialog is shown once, and a button that said
+    // "Later" promised a second showing that never came.
     const wants = await DialogV2.confirm({
       window: { title: t("DP.onboarding.title") },
-      content: `<p>${escapeHtml(t("DP.onboarding.welcome"))}</p><ul>${lines}</ul>`,
+      content:
+        `<p>${escapeHtml(t("DP.onboarding.welcome"))}</p><ul>${lines}</ul>` +
+        `<p>${escapeHtml(t("DP.onboarding.findLater"))}</p>`,
       yes: { label: t("DP.onboarding.place"), default: true },
-      no: { label: t("DP.onboarding.later") },
+      no: { label: t("DP.onboarding.notNow") },
     }).catch(() => false);
     await settings.set("seenVersion", version);
     if (wants) openPicker();

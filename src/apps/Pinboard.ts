@@ -19,7 +19,7 @@
  *   the list into a scene script.
  */
 
-import { MODULE_ID } from "../const";
+import { MODULE_ID, PLACEHOLDER_TEXTURE } from "../const";
 import { cv, g, internal, ns } from "../fvtt";
 import { t, tn } from "../i18n";
 import { escapeAttr, escapeHtml } from "../html";
@@ -28,8 +28,11 @@ import * as store from "../data/PinStore";
 import { readPin } from "../data/PinData";
 import { releaseAnchor, syncAnchor } from "../data/ownership-sync";
 import { allPresets, findPreset } from "../effects/preset-library";
+import { swatchStyle } from "../effects/preset-css";
+import { modifierGlyphs, platform } from "../ui/modifiers";
 import { chipsMarkup } from "./chips";
 import { chipUsersFor } from "./PinHUD";
+import { focusSelectorIn } from "./focus-restore";
 import {
   dropIndex,
   filterRows,
@@ -59,13 +62,13 @@ export function pinboardFocusedDoc(): any {
   return instance.docFor(instance.focusedId) ?? null;
 }
 
-const FILTERS: { id: PinboardFilter; key: string }[] = [
+const FILTERS: { id: PinboardFilter; key: string; icon?: string }[] = [
   { id: "all", key: "DP.board.filterAll" },
   { id: "visible", key: "DP.board.filterVisible" },
   { id: "hidden", key: "DP.board.filterHidden" },
   { id: "props", key: "DP.board.filterProps" },
   { id: "pins", key: "DP.board.filterPins" },
-  { id: "mismatch", key: "DP.board.filterMismatch" },
+  { id: "mismatch", key: "DP.board.filterMismatch", icon: "fa-key" },
 ];
 
 /** Build the row model for a scene. The only place documents become plain data. */
@@ -82,16 +85,53 @@ export function rowsFor(scene: any): PinboardRow[] {
       name: api.labelFor(pin),
       breadcrumb: breadcrumbFor(source),
       mode: pin.mode,
-      visible: pin.audience.kind !== "hidden" && !doc.hidden,
+      // Whether anyone is reached, not whether the kind says "hidden": a selection that
+      // names nobody was counted as visible while every chip on its row was hollow.
+      visible: api.isRevealed(doc, pin),
       effectId: pin.effect.id,
       effectLabel: preset ? t(preset.label) : pin.effect.id,
       sort: doc.sort ?? 0,
       elevation: doc.elevation ?? 0,
       locked: doc.locked === true,
-      thumbnail: doc.texture?.src ?? null,
+      thumbnail: thumbnailFor(doc, pin, source),
+      icon: iconFor(pin, source),
       users,
     };
   });
+}
+
+/**
+ * A picture that tells this row from the next, or null.
+ *
+ * The tile's texture only when it is not the placeholder every document pin shares: the
+ * thumbnail column used to show the same book on every journal row, which is a column
+ * of pixels that says nothing. An image page shows its image.
+ */
+function thumbnailFor(doc: any, pin: any, source: any): string | null {
+  const texture = doc.texture?.src ?? null;
+  if (texture && texture !== PLACEHOLDER_TEXTURE) return texture;
+  if (pin.source.kind === "image") return pin.source.src ?? null;
+  if (source?.documentName === "JournalEntryPage" && source.type === "image" && source.src) {
+    return source.src;
+  }
+  return null;
+}
+
+/** What kind of thing the row points at, as an icon, for rows with no picture. */
+function iconFor(pin: any, source: any): string {
+  if (pin.source.kind === "image") return "fa-image";
+  if (!source) return "fa-circle-question";
+  if (source.documentName !== "JournalEntryPage") return "fa-book";
+  switch (source.type) {
+    case "image":
+      return "fa-image";
+    case "pdf":
+      return "fa-file-pdf";
+    case "video":
+      return "fa-film";
+    default:
+      return "fa-file-lines";
+  }
 }
 
 function breadcrumbFor(source: any): string {
@@ -106,32 +146,74 @@ function breadcrumbFor(source: any): string {
 // Markup
 // ---------------------------------------------------------------------------
 
-function rowMarkup(row: PinboardRow, selected: boolean, focused: boolean): string {
+/**
+ * One row, as a grid row of cells.
+ *
+ * A `listbox` of `option`s used to hold the chips, the effect and two buttons, and an
+ * option may not contain anything interactive: a screen reader flattens it to one string
+ * and every control inside becomes unreachable. A multi-select `grid` allows both — the
+ * row keeps its selection and its roving focus, and each cell may hold a control.
+ */
+function rowMarkup(
+  row: PinboardRow,
+  selected: boolean,
+  focused: boolean,
+  menu: MenuPlacement | null = null
+): string {
   const thumb = row.thumbnail
     ? `<img class="dp-row__thumb" src="${escapeAttr(row.thumbnail)}" alt="" loading="lazy">`
-    : `<span class="dp-row__thumb dp-row__thumb--missing" aria-hidden="true">?</span>`;
+    : `<span class="dp-row__thumb dp-row__thumb--icon" aria-hidden="true">` +
+      `<i class="fa-solid ${escapeAttr(row.icon ?? "fa-file")}"></i></span>`;
+  const cell = (content: string) => `<span class="dp-row__cell" role="gridcell">${content}</span>`;
+  const open = (kind: MenuKind) => menu?.id === row.id && (menu.kind ?? "actions") === kind;
 
   return [
-    `<li class="dp-row" role="option" data-dp-id="${escapeAttr(row.id)}"`,
+    `<li class="dp-row" role="row" data-dp-id="${escapeAttr(row.id)}"`,
     ` aria-selected="${selected}" tabindex="${focused ? 0 : -1}"`,
     ` data-dp-visible="${row.visible}" data-dp-mode="${row.mode}">`,
-    `<span class="dp-row__grip" data-dp-grip draggable="true" aria-hidden="true">⋮⋮</span>`,
-    thumb,
-    `<span class="dp-row__name" title="${escapeAttr(row.breadcrumb || row.name)}">`,
-    escapeHtml(row.name),
-    `</span>`,
-    `<span class="dp-row__mode">${escapeHtml(t(`DP.board.mode.${row.mode}`))}</span>`,
-    chipsMarkup(row.users, { t: tn, size: "sm" }),
-    `<button type="button" class="dp-row__fx" data-action="cycleEffect"`,
-    ` title="${escapeAttr(t("DP.board.effect"))}">${escapeHtml(row.effectLabel)}</button>`,
-    `<button type="button" class="dp-row__icon" data-action="locate"`,
-    ` title="${escapeAttr(t("DP.board.locate"))}" aria-label="${escapeAttr(t("DP.board.locate"))}">`,
-    `<i class="fa-solid fa-crosshairs" aria-hidden="true"></i></button>`,
-    `<button type="button" class="dp-row__icon" data-action="rowMenu"`,
-    ` title="${escapeAttr(t("DP.board.more"))}" aria-label="${escapeAttr(t("DP.board.more"))}">`,
-    `<i class="fa-solid fa-ellipsis" aria-hidden="true"></i></button>`,
+    cell(`<span class="dp-row__grip" data-dp-grip draggable="true" aria-hidden="true">⋮⋮</span>`),
+    cell(thumb),
+    cell(
+      `<span class="dp-row__name" data-tooltip-text="${escapeAttr(row.breadcrumb || row.name)}">` +
+        `${escapeHtml(row.name)}</span>`
+    ),
+    cell(`<span class="dp-row__mode">${escapeHtml(t(`DP.board.mode.${row.mode}`))}</span>`),
+    cell(chipsMarkup(row.users, { t: tn, size: "sm" })),
+    // A menu of the whole library, not a button that stepped through it one save at a
+    // time: reaching the tenth preset cost nine writes, and on a revealed prop the table
+    // watched every one of them go past.
+    cell(
+      `<button type="button" class="dp-row__fx" data-action="effectMenu"` +
+        ` aria-haspopup="menu" aria-expanded="${open("effect")}"` +
+        ` data-tooltip-text="${escapeAttr(t("DP.board.effect"))}">` +
+        `${escapeHtml(row.effectLabel)}</button>`
+    ),
+    cell(
+      `<button type="button" class="dp-row__icon" data-action="locate"` +
+        ` data-tooltip-text="${escapeAttr(t("DP.board.locate"))}"` +
+        ` aria-label="${escapeAttr(t("DP.board.locate"))}">` +
+        `<i class="fa-solid fa-crosshairs" aria-hidden="true"></i></button>`
+    ),
+    cell(
+      `<button type="button" class="dp-row__icon" data-action="rowMenu"` +
+        ` aria-haspopup="menu" aria-expanded="${open("actions")}"` +
+        ` data-tooltip-text="${escapeAttr(t("DP.board.more"))}"` +
+        ` aria-label="${escapeAttr(t("DP.board.more"))}">` +
+        `<i class="fa-solid fa-ellipsis" aria-hidden="true"></i></button>`
+    ),
     `</li>`,
   ].join("");
+}
+
+/**
+ * The shortcut line, in the keyboard's own names.
+ *
+ * It used to print ⌥, ⇧ and ⌃ to everyone — keys a Windows keyboard does not have, and
+ * on a Mac "⌃-click" is a right-click. The handlers accept ⌘ beside Ctrl, so a Mac is
+ * told ⌘.
+ */
+export function boardHelp(glyphs = modifierGlyphs(platform())): string {
+  return t("DP.board.help", { alt: glyphs.alt, shift: glyphs.shift, ctrl: glyphs.ctrl });
 }
 
 function filterBarMarkup(rows: PinboardRow[], query: PinboardQuery): string {
@@ -153,6 +235,7 @@ function filterBarMarkup(rows: PinboardRow[], query: PinboardQuery): string {
     (f) =>
       `<button type="button" class="dp-board__filter" data-action="setFilter"` +
       ` data-dp-filter="${f.id}" aria-pressed="${query.filter === f.id}">` +
+      (f.icon ? `<i class="fa-solid ${f.icon}" aria-hidden="true"></i> ` : "") +
       `${escapeHtml(t(f.key))} <span class="dp-board__count">${countFor(f.id)}</span></button>`
   ).join("");
 
@@ -174,11 +257,71 @@ function filterBarMarkup(rows: PinboardRow[], query: PinboardQuery): string {
   return `<div class="dp-board__filters" role="group">${chips}${levelPicker}</div>`;
 }
 
-/** Where the row menu sits, relative to the board, so the list's clipping cannot cut it. */
+/** Which of a row's two menus is open. */
+export type MenuKind = "actions" | "effect";
+
+/**
+ * Where a row menu sits, relative to the board, so the list's clipping cannot cut it.
+ *
+ * `top` opens it downward from the button; `bottom` opens it upward, for a row near the
+ * foot of the list, where a menu opened downward ran off the window and was clipped.
+ * `maxHeight` is the room it has, so a long menu scrolls rather than overflowing.
+ */
 export interface MenuPlacement {
   id: string;
-  top: number;
+  kind?: MenuKind;
+  top?: number;
+  bottom?: number;
   right: number;
+  maxHeight?: number;
+}
+
+/** The placement for a menu under — or, with no room there, over — its button. */
+export function placeMenu(
+  id: string,
+  kind: MenuKind,
+  board: { top: number; bottom: number; right: number },
+  button: { top: number; bottom: number; right: number },
+  wanted = kind === "effect" ? 320 : 220
+): MenuPlacement {
+  const below = board.bottom - button.bottom;
+  const above = button.top - board.top;
+  const right = board.right - button.right;
+  if (below >= wanted || below >= above) {
+    return { id, kind, top: button.bottom - board.top, right, maxHeight: Math.max(80, below - 8) };
+  }
+  return { id, kind, bottom: board.bottom - button.top, right, maxHeight: Math.max(80, above - 8) };
+}
+
+function menuStyle(at: MenuPlacement): string {
+  const edge =
+    at.bottom !== undefined
+      ? `bottom:${Math.round(at.bottom)}px`
+      : `top:${Math.round(at.top ?? 0)}px`;
+  const cap = at.maxHeight ? `;max-block-size:${Math.round(at.maxHeight)}px` : "";
+  return `${edge};right:${Math.round(at.right)}px${cap}`;
+}
+
+/**
+ * The effect menu: the whole library, each preset drawn as itself, the current one
+ * checked. The same swatches as the HUD's gallery, so a GM picks by look rather than by
+ * name.
+ */
+function effectMenuMarkup(row: PinboardRow, at: MenuPlacement): string {
+  const items = allPresets()
+    .map(
+      (preset) =>
+        `<button type="button" role="menuitemradio" data-action="menuAct" data-dp-act="effect"` +
+        ` data-dp-preset="${escapeAttr(preset.id)}" aria-checked="${preset.id === row.effectId}">` +
+        `<span class="dp-menu__swatch dp-card" aria-hidden="true"` +
+        ` style="${escapeAttr(swatchStyle(preset))}"></span>` +
+        `${escapeHtml(t(preset.label))}</button>`
+    )
+    .join("");
+  return (
+    `<div class="dp-menu dp-menu--effects" role="menu" data-dp-id="${escapeAttr(row.id)}"` +
+    ` aria-label="${escapeAttr(t("DP.board.effect"))}" style="${menuStyle(at)}">${items}</div>`
+  );
 }
 
 /**
@@ -188,12 +331,13 @@ export interface MenuPlacement {
  * clip it.
  */
 function menuMarkup(row: PinboardRow, at: MenuPlacement): string {
+  if (at.kind === "effect") return effectMenuMarkup(row, at);
   const item = (act: string, key: string, danger = false) =>
     `<button type="button" role="menuitem" data-action="menuAct" data-dp-act="${act}"` +
     `${danger ? ' class="dp-danger"' : ""}>${escapeHtml(t(key))}</button>`;
   return (
     `<div class="dp-menu" role="menu" data-dp-id="${escapeAttr(row.id)}"` +
-    ` style="top:${Math.round(at.top)}px;right:${Math.round(at.right)}px">` +
+    ` style="${menuStyle(at)}">` +
     item("visibility", row.visible ? "DP.hud.hide" : "DP.hud.reveal") +
     item("show", "DP.board.menuShow") +
     item("shape", "DP.board.menuShape") +
@@ -218,15 +362,19 @@ export function boardMarkup(
 
   // An empty scene says what to do, not just that there is nothing: the gesture that
   // places a pin is Alt-drag from the sidebar, which nothing on screen suggests.
+  // A row with one cell, like every other row of the grid.
   const empty = rows.length
-    ? `<li class="dp-board__empty">${escapeHtml(t("DP.board.noMatches"))}</li>`
-    : `<li class="dp-board__empty">` +
+    ? `<li class="dp-board__empty" role="row"><span role="gridcell">` +
+      `${escapeHtml(t("DP.board.noMatches"))}</span></li>`
+    : `<li class="dp-board__empty" role="row"><span role="gridcell">` +
       `<p>${escapeHtml(t("DP.board.noPins"))}</p>` +
       `<p class="dp-board__empty-hint">${escapeHtml(t("DP.board.emptyHint"))}</p>` +
       `<button type="button" data-action="place">${escapeHtml(t("DP.board.place"))}</button>` +
-      `</li>`;
+      `</span></li>`;
   const list = visible.length
-    ? visible.map((row) => rowMarkup(row, selected.includes(row.id), row.id === focusedId)).join("")
+    ? visible
+        .map((row) => rowMarkup(row, selected.includes(row.id), row.id === focusedId, menu))
+        .join("")
     : empty;
 
   // Always rendered, with nothing selected as a state of its own: a bar that appears on
@@ -252,7 +400,7 @@ export function boardMarkup(
     ` aria-label="${escapeAttr(t("DP.board.search"))}">`,
     `</header>`,
     filterBarMarkup(rows, query),
-    `<ul class="dp-board__list" role="listbox" aria-multiselectable="true"`,
+    `<ul class="dp-board__list" role="grid" aria-multiselectable="true"`,
     ` aria-label="${escapeAttr(t("DP.board.list"))}">${list}</ul>`,
     bulk,
     `<footer class="dp-board__foot">`,
@@ -262,11 +410,13 @@ export function boardMarkup(
     `<span class="dp-board__totals" aria-live="polite">`,
     escapeHtml(t("DP.board.totals", { visible: counts.visible, total: counts.total })),
     counts.mismatched
-      ? ` <span class="dp-board__warn" title="${escapeAttr(t("DP.board.mismatchHint"))}">⚿ ${counts.mismatched}</span>`
+      ? ` <span class="dp-board__warn" data-tooltip-text="${escapeAttr(t("DP.board.mismatchHint"))}">` +
+        `<i class="fa-solid fa-key" aria-hidden="true"></i> ${counts.mismatched}` +
+        `<span class="dp-visually-hidden"> ${escapeHtml(t("DP.board.mismatchHint"))}</span></span>`
       : "",
     `</span>`,
     `</footer>`,
-    `<p class="dp-board__help">${escapeHtml(t("DP.board.help"))}</p>`,
+    `<p class="dp-board__help">${escapeHtml(boardHelp())}</p>`,
     menuRow && menu ? menuMarkup(menuRow, menu) : "",
     `</div>`,
   ].join("");
@@ -297,7 +447,7 @@ export function definePinboard(): any {
       actions: {
         setFilter: onSetFilter,
         locate: onLocate,
-        cycleEffect: onCycleEffect,
+        effectMenu: onEffectMenu,
         rowMenu: onRowMenu,
         menuAct: onMenuAct,
         // ApplicationV2 invokes an action as `handler.call(app, event, target)`, so
@@ -330,8 +480,10 @@ export function definePinboard(): any {
     rangeAnchor: string | null = null;
     /** The open row menu, if any, and where it sits. */
     menu: MenuPlacement | null = null;
-    /** The row whose "…" button should get the focus back once its menu has closed. */
-    menuReturnTo: string | null = null;
+    /** The button that gets the focus back once its menu has closed. */
+    menuReturnTo: { id: string; kind: MenuKind } | null = null;
+    /** The scene the rows were last drawn from, so a scene change starts clean. */
+    renderedSceneId: string | null = null;
 
     get scene(): any {
       return cv()?.scene ?? g()?.scenes?.current ?? null;
@@ -350,6 +502,22 @@ export function definePinboard(): any {
     }
 
     async _renderHTML() {
+      // A different scene: every id held here names a pin that is not on it. The board
+      // used to keep the old scene's rows until something happened to re-render it, and
+      // then keep the old selection — "3 selected", and bulk buttons that did nothing.
+      const sceneId = this.scene?.id ?? null;
+      if (sceneId !== this.renderedSceneId) {
+        if (this.renderedSceneId !== null) {
+          this.selected = [];
+          this.focusedId = null;
+          this.rangeAnchor = null;
+          this.menu = null;
+          this.menuReturnTo = null;
+          this.query = { ...this.query, level: null };
+        }
+        this.renderedSceneId = sceneId;
+      }
+
       // Without this no row is ever tabbable — `rowMarkup` emits `tabindex="0"` only for
       // `focusedId` — so `P` opened the board with nothing focused and every one of the
       // ten advertised shortcuts was unreachable.
@@ -382,7 +550,14 @@ export function definePinboard(): any {
       const caret = active && active === document.activeElement ? active.selectionStart : null;
       // `#select` re-renders, and `replaceChildren` then destroyed the focus the click
       // had just established — so a GM could focus a row but never keep it.
-      const hadRowFocus = !!(document.activeElement as HTMLElement)?.closest?.(".dp-row");
+      const focused = document.activeElement as HTMLElement | null;
+      const hadRowFocus = !!focused?.classList?.contains("dp-row") && content.contains(focused);
+      // A control — a chip, a filter, a bulk button — is found again by what it is, and
+      // one inside a row by its row as well, or a chip click sent the focus to the first
+      // row's copy of that player.
+      const controlFocus =
+        !hadRowFocus && content.contains(focused) ? focusSelectorIn(content) : null;
+      const inRow = controlFocus ? focused?.closest?.<HTMLElement>(".dp-row")?.dataset.dpId : null;
       // A re-render replaces the scrolling list wholesale, which starts it at the top.
       const scrollTop = content.querySelector(".dp-board__list")?.scrollTop ?? 0;
 
@@ -402,20 +577,37 @@ export function definePinboard(): any {
         return;
       }
 
-      // The menu takes the focus while open and gives it back to its button after.
+      // The menu takes the focus while open — on the checked item when it has one, so
+      // the effect menu opens on the current effect — and gives it back to its button.
       if (this.menu) {
-        content.querySelector<HTMLElement>(".dp-menu button")?.focus({ preventScroll: true });
+        const menu = content.querySelector<HTMLElement>(".dp-menu");
+        (
+          menu?.querySelector<HTMLElement>('[aria-checked="true"]') ??
+          menu?.querySelector<HTMLElement>("button")
+        )?.focus({ preventScroll: true });
         return;
       }
       if (this.menuReturnTo) {
-        const id = this.menuReturnTo;
+        const { id, kind } = this.menuReturnTo;
         this.menuReturnTo = null;
+        const action = kind === "effect" ? "effectMenu" : "rowMenu";
         content
           .querySelector<HTMLElement>(
-            `.dp-row[data-dp-id="${CSS.escape(id)}"] [data-action="rowMenu"]`
+            `.dp-row[data-dp-id="${CSS.escape(id)}"] [data-action="${action}"]`
           )
           ?.focus({ preventScroll: true });
         return;
+      }
+
+      if (controlFocus) {
+        const scope = inRow
+          ? content.querySelector<HTMLElement>(`.dp-row[data-dp-id="${CSS.escape(inRow)}"]`)
+          : content;
+        const target = scope?.querySelector<HTMLElement>(controlFocus);
+        if (target) {
+          target.focus({ preventScroll: true });
+          return;
+        }
       }
 
       // On the first render there is nothing to preserve, so the board opens ready to
@@ -507,7 +699,7 @@ export function definePinboard(): any {
     /** Close the row menu, remembering whose button gets the focus back. */
     closeMenu() {
       if (!this.menu) return;
-      this.menuReturnTo = this.menu.id;
+      this.menuReturnTo = { id: this.menu.id, kind: this.menu.kind ?? "actions" };
       this.menu = null;
     }
 
@@ -531,6 +723,8 @@ export function definePinboard(): any {
           const at = items.indexOf(document.activeElement as HTMLElement);
           const next = focusIndex(items.length, at, event.key === "ArrowDown" ? 1 : -1);
           items[next]?.focus();
+          // The effect menu scrolls; the item the arrows reached must be in view.
+          items[next]?.scrollIntoView?.({ block: "nearest" });
           event.preventDefault();
           return;
         }
@@ -603,6 +797,19 @@ export function definePinboard(): any {
       const doc = this.focusedId ? this.docFor(this.focusedId) : null;
       if (!doc) return;
 
+      // Open the document on every screen in this pin's audience, right now. Not the same
+      // as revealing: it pushes the sheet up rather than making the pin visible. The one
+      // verb here that reaches the players' screens and cannot be taken back, so it is
+      // the one that needs Shift: a bare letter in a list is what a GM types expecting to
+      // jump to a row, and "s" for "Seal" used to put a document in front of the table.
+      if (event.key.toLowerCase() === "s") {
+        if (event.shiftKey) {
+          void api.showToAudience(doc);
+          event.preventDefault();
+        }
+        return;
+      }
+
       const actions: Record<string, () => void> = {
         " ": () => void api.toggleVisibility(doc)?.then(() => this.render()),
         Enter: () => Hooks.call(`${MODULE_ID}.openStudio`, doc),
@@ -610,9 +817,6 @@ export function definePinboard(): any {
         o: () => void api.openLocally(doc),
         f: () => api.flash(doc),
         m: () => void api.toggleMode(doc)?.then(() => this.render()),
-        // Open the document on every screen in this pin's audience, right now. Not the
-        // same as revealing: it pushes the sheet up rather than making the pin visible.
-        s: () => void api.showToAudience(doc),
       };
       const action = actions[event.key] ?? actions[event.key.toLowerCase()];
       if (action) {
@@ -729,43 +933,32 @@ function onLocate(this: any, _event: Event, target: HTMLElement) {
 }
 
 /**
- * Step to the next preset in the library.
+ * Open one of a row's menus beside its button, or close it if it is the one open.
  *
- * A cycle rather than a menu: the row already shows which effect is on, and a GM
- * comparing two of them against the same map wants one click per comparison, not a
- * dropdown opened and dismissed each time. Shift steps backwards, so overshooting by
- * one costs one keystroke rather than a full lap.
+ * The effect used to be a button that stepped to the next preset on every click. Each
+ * step was a save, and on a revealed prop the table watched the paper change nine times
+ * on the way to the tenth preset. A menu costs one open and one write.
  */
-function onCycleEffect(this: any, event: Event, target: HTMLElement) {
-  const doc = this.docFor(rowIdOf(target));
-  const pin = readPin(doc);
-  if (!pin) return;
-
-  const presets = allPresets();
-  const step = (event as MouseEvent).shiftKey ? -1 : 1;
-  const current = presets.findIndex((preset) => preset.id === pin.effect.id);
-  const next = presets[(current + step + presets.length) % presets.length];
-
-  void api.patch(doc, { effect: { id: next.id } })?.then(() => this.render());
-}
-
-/** Open the row's menu beside its button, or close it if it is already open. */
-function onRowMenu(this: any, _event: Event, target: HTMLElement) {
+function toggleMenu(app: any, target: HTMLElement, kind: MenuKind) {
   const id = rowIdOf(target);
-  if (this.menu?.id === id) {
-    this.closeMenu();
-    this.render();
+  if (app.menu?.id === id && (app.menu.kind ?? "actions") === kind) {
+    app.closeMenu();
+    app.render();
     return;
   }
   const board = target.closest<HTMLElement>(".dp-board");
   const at = board?.getBoundingClientRect();
   const button = target.getBoundingClientRect();
-  this.menu = {
-    id,
-    top: at ? button.bottom - at.top : 0,
-    right: at ? at.right - button.right : 0,
-  };
-  this.render();
+  app.menu = at ? placeMenu(id, kind, at, button) : { id, kind, top: 0, right: 0 };
+  app.render();
+}
+
+function onRowMenu(this: any, _event: Event, target: HTMLElement) {
+  toggleMenu(this, target, "actions");
+}
+
+function onEffectMenu(this: any, _event: Event, target: HTMLElement) {
+  toggleMenu(this, target, "effect");
 }
 
 /** One verb from the row menu, then the menu closes. */
@@ -779,6 +972,9 @@ async function onMenuAct(this: any, _event: Event, target: HTMLElement) {
   }
 
   switch (act) {
+    case "effect":
+      if (target.dataset.dpPreset) await api.setEffect(doc, target.dataset.dpPreset);
+      break;
     case "visibility":
       await api.toggleVisibility(doc);
       break;

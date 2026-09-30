@@ -202,6 +202,17 @@ export const SETTINGS = {
     type: Number,
     default: 0,
   },
+  /**
+   * Whether this client has been told about the peek key. Hold-to-peek is the one
+   * binding players have, and nothing in the game ever mentioned it; the first prop a
+   * player hovers says so, once.
+   */
+  peekTaught: {
+    scope: "client",
+    config: false,
+    type: Boolean,
+    default: false,
+  },
 } as const satisfies Record<string, SettingDef>;
 
 export type SettingKey = keyof typeof SETTINGS;
@@ -223,6 +234,7 @@ interface SettingTypes {
   lastSourceUuid: string;
   lastTypeSize: number;
   seenVersion: string;
+  peekTaught: boolean;
 }
 
 /**

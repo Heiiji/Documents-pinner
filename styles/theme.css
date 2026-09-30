@@ -21,6 +21,26 @@
 }
 
 /*
+ * Accent and warning colours for TEXT, derived from the theme's own text colour.
+ *
+ * The gold accent and a fixed salmon were chosen against a dark window, and as text on
+ * a light one they fell to roughly two to one. Mixing each toward the text colour moves
+ * it the right way on either theme — lighter where the text is light, darker where it is
+ * dark — with no theme-specific rule to keep in step. Fills and borders keep the pure
+ * accent; only text uses these.
+ */
+.dp-scope,
+.dp-card-root,
+#documents-pinner-overlay {
+  --dp-accent-text: color-mix(
+    in oklab,
+    var(--color-warm-1, #c9ad6a) 65%,
+    var(--color-text-primary, #eeeeee)
+  );
+  --dp-danger-text: color-mix(in oklab, #c0392b 55%, var(--color-text-primary, #eeeeee));
+}
+
+/*
  * Motion tokens.
  *
  * Mirrored from `src/motion.ts` and kept equal by `tests/motion.test.ts`, so the canvas

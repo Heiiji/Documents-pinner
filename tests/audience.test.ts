@@ -5,8 +5,10 @@ import {
   cycleAudience,
   grantKeysFor,
   makeAudience,
+  reachesAnyone,
   setUserVisible,
   shouldRecordDiscovery,
+  someAudience,
   soloUser,
   toggleVisibility,
 } from "../src/data/audience";
@@ -199,5 +201,46 @@ describe("grantKeysFor", () => {
   it("grants to discovered users only", () => {
     const a = makeAudience({ kind: "discovered", discovered: ["ben"] });
     expect(grantKeysFor(a, PLAYERS)).toEqual(["ben"]);
+  });
+});
+
+/**
+ * "Is it revealed?" used to be asked of the kind alone, and a `selected` audience naming
+ * nobody answered yes: the Pinboard counted it visible, the HUD's eye was open, and every
+ * chip underneath was hollow.
+ */
+describe("reachesAnyone", () => {
+  const players = ["ali", "ben"];
+
+  it("is false for hidden and true for everyone", () => {
+    expect(reachesAnyone(makeAudience({ kind: "hidden" }), players)).toBe(false);
+    expect(reachesAnyone(makeAudience({ kind: "everyone" }), players)).toBe(true);
+  });
+
+  it("is false for a selection naming nobody, or only players who have left", () => {
+    expect(reachesAnyone(makeAudience({ kind: "selected", users: [] }), players)).toBe(false);
+    expect(reachesAnyone(makeAudience({ kind: "selected", users: ["gone"] }), players)).toBe(false);
+    expect(reachesAnyone(makeAudience({ kind: "selected", users: ["ben"] }), players)).toBe(true);
+  });
+});
+
+describe("someAudience", () => {
+  it("keeps the list the pin already has", () => {
+    const next = someAudience(makeAudience({ kind: "everyone", users: ["ali"] }));
+    expect(next).toMatchObject({ kind: "selected", users: ["ali"], restore: null });
+  });
+
+  it("takes back a selection remembered from before the pin was hidden", () => {
+    const hidden = makeAudience({ kind: "hidden", restore: { kind: "selected", users: ["ben"] } });
+    expect(someAudience(hidden)).toMatchObject({ kind: "selected", users: ["ben"] });
+  });
+
+  it("is null when there is nobody to choose, rather than hidden in disguise", () => {
+    expect(someAudience(makeAudience({ kind: "everyone" }))).toBeNull();
+    const rememberedEveryone = makeAudience({
+      kind: "hidden",
+      restore: { kind: "everyone", users: [] },
+    });
+    expect(someAudience(rememberedEveryone)).toBeNull();
   });
 });

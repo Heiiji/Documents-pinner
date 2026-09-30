@@ -106,6 +106,46 @@ export function anchorHidden(audience: DpAudience): boolean {
 }
 
 /**
+ * Whether this audience reaches any player at all — the question "is it revealed?" asks.
+ *
+ * Not `kind !== "hidden"`. A `selected` audience whose list is empty, or names only
+ * players who have since left the world, reaches nobody while its kind says otherwise,
+ * and every surface that asked the kind reported it as visible: the Pinboard counted it,
+ * the HUD's eye was open, and every chip underneath was hollow.
+ *
+ * `discovered` counts as reaching someone, because whether it does is a line-of-sight
+ * question each client answers for itself.
+ */
+export function reachesAnyone(audience: DpAudience, allPlayerIds: readonly string[]): boolean {
+  switch (audience.kind) {
+    case "hidden":
+      return false;
+    case "selected":
+      return audience.users.some((id) => allPlayerIds.includes(id));
+    default:
+      return true;
+  }
+}
+
+/**
+ * "Some players": the audience that choice should produce, or null when there is nobody
+ * to choose yet.
+ *
+ * The list the pin already has, else the one it remembers from before it was hidden. An
+ * empty `selected` means nobody, which is hidden in disguise — the caller asks the GM to
+ * pick someone rather than writing a state they cannot tell apart from hidden.
+ */
+export function someAudience(audience: DpAudience): DpAudience | null {
+  const users = audience.users.length
+    ? audience.users
+    : audience.restore?.kind === "selected"
+      ? audience.restore.users
+      : [];
+  if (!users.length) return null;
+  return { ...audience, kind: "selected", users: [...users], restore: null };
+}
+
+/**
  * The eye toggle. Hiding remembers the current state; un-hiding restores it, so the
  * control behaves as a true on/off rather than resetting the GM's per-player work.
  */

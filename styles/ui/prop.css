@@ -146,6 +146,51 @@
 }
 
 /*
+ * Flash and Locate, on the paper.
+ *
+ * A ping is drawn inside the canvas and a card is drawn over it, so a flash aimed at a
+ * prop's centre landed under the one thing it pointed at. A ring laid over the card in
+ * its own rectangle leaves the paper's edge twice, then removes itself.
+ */
+.dp-flash {
+  position: absolute;
+  transform-origin: 50% 50%;
+  border-radius: 0.25rem;
+  pointer-events: none;
+  animation: dp-flash 700ms var(--dp-ease-out, ease-out) 2;
+}
+
+@keyframes dp-flash {
+  from {
+    box-shadow:
+      0 0 0 0 var(--dp-controlled, #ff9829),
+      0 0 0 0 rgb(0 0 0 / 60%);
+  }
+
+  to {
+    box-shadow:
+      0 0 0 28px transparent,
+      0 0 0 30px transparent;
+  }
+}
+
+/* A stated preference still gets the answer to "where is it": a ring that holds and
+   goes, with nothing expanding. */
+@keyframes dp-flash-still {
+  from {
+    box-shadow:
+      0 0 0 4px var(--dp-controlled, #ff9829),
+      0 0 0 6px rgb(0 0 0 / 60%);
+  }
+
+  to {
+    box-shadow:
+      0 0 0 4px var(--dp-controlled, #ff9829),
+      0 0 0 6px rgb(0 0 0 / 60%);
+  }
+}
+
+/*
  * The hover tooltip.
  *
  * Positioned in scene space like everything else in the overlay, and counter-scaled so it
@@ -176,6 +221,17 @@
   transition: opacity var(--dp-dur-exit, 140ms) var(--dp-ease-in, ease-in);
 }
 
+.dp-tooltip__text,
+.dp-tooltip__hint {
+  display: block;
+}
+
+/* How to open it, under the name: quieter, because it is the same on every pin. */
+.dp-tooltip__hint {
+  font-size: 0.85em;
+  opacity: 0.75;
+}
+
 .dp-tooltip--in {
   opacity: 1;
   transition-duration: var(--dp-dur-state, 120ms);
@@ -202,5 +258,9 @@
   .dp-prop {
     animation: none;
     filter: none;
+  }
+
+  .dp-flash {
+    animation: dp-flash-still 1200ms steps(1, end) 1;
   }
 }

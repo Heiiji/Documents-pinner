@@ -44,6 +44,7 @@ describe("valueOf", () => {
       type: attrs.type,
       value: attrs.value,
       checked: attrs.checked === "true",
+      dataset: attrs.scale ? { dpScale: attrs.scale } : {},
     };
     Object.setPrototypeOf(el, HTMLInputElement.prototype);
     return el as unknown as HTMLInputElement;
@@ -57,6 +58,10 @@ describe("valueOf", () => {
   it("reads a range and a number as numbers, so the schema's clamps apply", () => {
     expect(valueOf(input({ type: "range", value: "0.35", name: "a" }))).toBe(0.35);
     expect(valueOf(input({ type: "number", value: "20", name: "a" }))).toBe(20);
+  });
+
+  it("reads a slider shown in percent back as the fraction the schema stores", () => {
+    expect(valueOf(input({ type: "range", value: "55", name: "a", scale: "100" }))).toBe(0.55);
   });
 
   it("reads text as text", () => {

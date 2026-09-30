@@ -167,20 +167,68 @@ describe("the focus reader", () => {
     expect(pans).toHaveLength(1);
   });
 
+  /** A press and its release, `moved` pixels apart. */
+  function click(x: number, y: number, moved = 0, button = 0) {
+    const board = document.getElementById("board")!;
+    board.dispatchEvent(
+      new MouseEvent("pointerdown", { bubbles: true, clientX: x, clientY: y, button })
+    );
+    window.dispatchEvent(
+      new MouseEvent("pointerup", { bubbles: true, clientX: x + moved, clientY: y, button })
+    );
+  }
+
   it("ignores a press on the prop being read, so the hit layer's tap can toggle it", async () => {
     const { openReader } = await import("../src/apps/ReaderOverlay");
     await openReader(tile);
-    const board = document.getElementById("board")!;
 
     // Inside the 200x280 prop centred on the origin, which spans -100..100 by -140..140.
-    board.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, clientX: 50, clientY: 50 }));
+    click(50, 50);
     expect(reader()).not.toBeNull();
 
     // Just beside it — inside the old reading of the point as a corner, and not the prop.
-    board.dispatchEvent(
-      new MouseEvent("pointerdown", { bubbles: true, clientX: 150, clientY: 150 })
-    );
+    click(150, 150);
     expect(reader()).toBeNull();
+  });
+
+  it("stays open through a drag that starts beside it — a pan, a token, a ruler", async () => {
+    const { openReader } = await import("../src/apps/ReaderOverlay");
+    await openReader(tile);
+
+    // A right-drag pan used to close it on the press, before the view had moved at all.
+    click(300, 300, 80, 2);
+    expect(reader()).not.toBeNull();
+    click(300, 300, 80, 0);
+    expect(reader()).not.toBeNull();
+
+    // A click that stays put is a click, whichever button made it.
+    click(300, 300, 2, 2);
+    expect(reader()).toBeNull();
+  });
+
+  it("opens upright over a prop lying at an angle, turning from the angle it lies at", async () => {
+    tile.rotation = 30;
+    const { openReader } = await import("../src/apps/ReaderOverlay");
+    await openReader(tile);
+    await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
+
+    expect(reader()!.style.transform).toBe("rotate(0deg)");
+    expect(reader()!.style.getPropertyValue("--dp-reader-turn")).toBe("30deg");
+    // The same box, centred on the same point.
+    expect(reader()!.style.width).toBe(`${tile.width}px`);
+  });
+
+  it("still treats a press on the tilted paper outside the upright reader as on the prop", async () => {
+    // A long, thin letter turned on its side: its corners reach well outside the reader.
+    tile.width = 400;
+    tile.height = 40;
+    tile.rotation = 90;
+    const { openReader } = await import("../src/apps/ReaderOverlay");
+    await openReader(tile);
+
+    // On the paper as it lies (x ≈ 0, y ≈ 150), outside the upright 400x40 reader.
+    click(0, 150);
+    expect(reader()).not.toBeNull();
   });
 
   it("closes when the pin is hidden from the player reading it, and stays when it is not", async () => {

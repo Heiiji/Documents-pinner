@@ -18,6 +18,8 @@
 import { ns } from "../fvtt";
 import { t } from "../i18n";
 import { escapeAttr, escapeHtml } from "../html";
+import * as api from "../api";
+import { readPin } from "../data/PinData";
 import * as library from "../effects/preset-library";
 import { dressing } from "../effects/EffectRegistry";
 import {
@@ -29,6 +31,7 @@ import {
   type DpPreset,
 } from "../effects/preset-schema";
 import { currentLevel } from "../effects/level";
+import { restoreFocus, snapshotFocus } from "./focus-restore";
 
 let StudioClass: any = null;
 let instance: any = null;
@@ -122,6 +125,85 @@ const CHOICES: {
   },
 ];
 
+/**
+ * The parameters, by the layer of the effect they shape.
+ *
+ * They used to be one column of twenty-eight controls in no order a GM could predict,
+ * with the layers a preset does not use sitting at zero among the ones it does. Each
+ * layer is now a disclosure, open when the preset uses it — so a shipped preset opens on
+ * the handful of settings that make it what it is — and a GM's own opening and closing
+ * is remembered while the window is open.
+ */
+export const GROUPS: {
+  id: string;
+  key: string;
+  paths: string[];
+  inUse: (p: DpPreset["params"]) => boolean;
+}[] = [
+  {
+    id: "surface",
+    key: "DP.presets.group.surface",
+    paths: ["tint.color", "tint.amount", "surface.opacity", "noise.amount", "noise.scale"],
+    inUse: (p) => p.tint.amount > 0 || p.surface.opacity > 0 || p.noise.amount > 0,
+  },
+  {
+    id: "edges",
+    key: "DP.presets.group.edges",
+    paths: [
+      "edge.style",
+      "edge.amount",
+      "frame.style",
+      "frame.color",
+      "frame.thickness",
+      "shadow.opacity",
+    ],
+    inUse: (p) =>
+      (p.edge.style !== "none" && p.edge.amount > 0) ||
+      (p.frame.style !== "none" && p.frame.thickness > 0) ||
+      p.shadow.opacity > 0,
+  },
+  {
+    id: "glow",
+    key: "DP.presets.group.glow",
+    paths: ["glow.color", "glow.radius", "glow.opacity", "glow.pulseHz"],
+    inUse: (p) => p.glow.opacity > 0 && p.glow.radius > 0,
+  },
+  {
+    id: "lens",
+    key: "DP.presets.group.lens",
+    paths: ["blur", "chroma.offset", "jitter.amount", "flicker.amount"],
+    inUse: (p) => p.blur > 0 || p.chroma.offset > 0 || p.jitter.amount > 0 || p.flicker.amount > 0,
+  },
+  {
+    id: "scanlines",
+    key: "DP.presets.group.scanlines",
+    paths: ["scanlines.spacing", "scanlines.opacity"],
+    inUse: (p) => p.scanlines.opacity > 0,
+  },
+  {
+    id: "projection",
+    key: "DP.presets.group.projection",
+    paths: [
+      "hud.color",
+      "hud.opacity",
+      "hud.marks",
+      "hud.grid",
+      "hud.pitch",
+      "hud.weight",
+      "hud.sweepSec",
+    ],
+    inUse: (p) => p.hud.opacity > 0,
+  },
+];
+
+/** What the window knows beyond the preset itself. */
+export interface PresetStudioContext {
+  /** The GM's own opening and closing of a layer, when there is one; else it follows use. */
+  isOpen?: (groupId: string) => boolean | undefined;
+  /** The pin the studio was opened from, so a preset can be put on it from here. */
+  target?: { name: string; effectId: string } | null;
+}
+
 /** PURE. Read a dotted path out of a preset's parameters. */
 export function readParam(preset: DpPreset, path: string): number {
   const value = path
@@ -202,49 +284,78 @@ function previewMarkup(preset: DpPreset, backdrop: Backdrop, frozen: boolean): s
   );
 }
 
-function paramsMarkup(preset: DpPreset, editable: boolean): string {
+function sliderMarkup(preset: DpPreset, path: string, editable: boolean): string {
+  const slider = SLIDERS.find((entry) => entry.path === path)!;
+  const value = readParam(preset, slider.path);
+  return (
+    `<label class="dp-presets__param">` +
+    `<span>${escapeHtml(t(slider.key))}</span>` +
+    `<input type="range" name="${escapeAttr(slider.path)}" min="${slider.min}"` +
+    ` max="${slider.max}" step="${slider.step}" value="${value}"` +
+    `${editable ? "" : " disabled"}>` +
+    `<output>${Math.round(value * 100) / 100}</output>` +
+    `</label>`
+  );
+}
+
+function colourMarkup(preset: DpPreset, path: string, editable: boolean): string {
+  const entry = COLOURS.find((colour) => colour.path === path)!;
+  const value = readParamText(preset, entry.path) || "#ffffff";
+  return (
+    `<label class="dp-presets__param">` +
+    `<span>${escapeHtml(t(entry.key))}</span>` +
+    // A colour input rather than a text field: it accepts only `#rrggbb`, which is
+    // exactly the subset `HEX` allows, so the control cannot produce a bad value.
+    `<input type="color" name="${escapeAttr(entry.path)}" value="${escapeAttr(value.slice(0, 7))}"` +
+    `${editable ? "" : " disabled"}>` +
+    `<output>${escapeHtml(value)}</output>` +
+    `</label>`
+  );
+}
+
+function choiceMarkup(preset: DpPreset, path: string, editable: boolean): string {
+  const entry = CHOICES.find((choice) => choice.path === path)!;
+  const value = readParamText(preset, entry.path);
+  const options = entry.options
+    .map(
+      (option) =>
+        `<option value="${escapeAttr(option)}"${option === value ? " selected" : ""}>` +
+        `${escapeHtml(entry.label(option))}</option>`
+    )
+    .join("");
+  return (
+    `<label class="dp-presets__param">` +
+    `<span>${escapeHtml(t(entry.key))}</span>` +
+    `<select name="${escapeAttr(entry.path)}"${editable ? "" : " disabled"}>${options}</select>` +
+    `</label>`
+  );
+}
+
+function controlMarkup(preset: DpPreset, path: string, editable: boolean): string {
+  if (COLOURS.some((entry) => entry.path === path)) return colourMarkup(preset, path, editable);
+  if (CHOICES.some((entry) => entry.path === path)) return choiceMarkup(preset, path, editable);
+  return sliderMarkup(preset, path, editable);
+}
+
+function paramsMarkup(
+  preset: DpPreset,
+  editable: boolean,
+  context: PresetStudioContext = {}
+): string {
   const cost = estimateCost(preset);
-  const sliders = SLIDERS.map((slider) => {
-    const value = readParam(preset, slider.path);
-    return (
-      `<label class="dp-presets__param">` +
-      `<span>${escapeHtml(t(slider.key))}</span>` +
-      `<input type="range" name="${escapeAttr(slider.path)}" min="${slider.min}"` +
-      ` max="${slider.max}" step="${slider.step}" value="${value}"` +
-      `${editable ? "" : " disabled"}>` +
-      `<output>${Math.round(value * 100) / 100}</output>` +
-      `</label>`
-    );
-  }).join("");
 
-  const colours = COLOURS.map((entry) => {
-    const value = readParamText(preset, entry.path) || "#ffffff";
+  const groups = GROUPS.map((group) => {
+    const used = group.inUse(preset.params);
+    const open = context.isOpen?.(group.id) ?? used;
     return (
-      `<label class="dp-presets__param">` +
-      `<span>${escapeHtml(t(entry.key))}</span>` +
-      // A colour input rather than a text field: it accepts only `#rrggbb`, which is
-      // exactly the subset `HEX` allows, so the control cannot produce a bad value.
-      `<input type="color" name="${escapeAttr(entry.path)}" value="${escapeAttr(value.slice(0, 7))}"` +
-      `${editable ? "" : " disabled"}>` +
-      `<output>${escapeHtml(value)}</output>` +
-      `</label>`
-    );
-  }).join("");
-
-  const choices = CHOICES.map((entry) => {
-    const value = readParamText(preset, entry.path);
-    const options = entry.options
-      .map(
-        (option) =>
-          `<option value="${escapeAttr(option)}"${option === value ? " selected" : ""}>` +
-          `${escapeHtml(entry.label(option))}</option>`
-      )
-      .join("");
-    return (
-      `<label class="dp-presets__param">` +
-      `<span>${escapeHtml(t(entry.key))}</span>` +
-      `<select name="${escapeAttr(entry.path)}"${editable ? "" : " disabled"}>${options}</select>` +
-      `</label>`
+      `<details class="dp-presets__group" data-dp-group="${group.id}"${open ? " open" : ""}>` +
+      `<summary data-dp-focus-key="group-${group.id}">${escapeHtml(t(group.key))}` +
+      (used
+        ? ""
+        : ` <span class="dp-presets__unused">${escapeHtml(t("DP.presets.unused"))}</span>`) +
+      `</summary>` +
+      group.paths.map((path) => controlMarkup(preset, path, editable)).join("") +
+      `</details>`
     );
   }).join("");
 
@@ -263,12 +374,32 @@ function paramsMarkup(preset: DpPreset, editable: boolean): string {
       ? ""
       : `<p class="dp-presets__locked">${escapeHtml(t("DP.presets.readOnlyHint"))}</p>`) +
     name +
-    choices +
-    colours +
-    sliders +
+    groups +
     `<p class="dp-presets__cost" data-dp-cost="${escapeAttr(cost.tier)}">` +
     escapeHtml(t("DP.presets.cost", { tier: t(`DP.cost.${cost.tier}`), score: cost.score })) +
     `</p></div>`
+  );
+}
+
+/**
+ * The way back to the pin the studio was opened from.
+ *
+ * A GM who duplicated a preset from a pin's gallery, tuned the copy and closed the window
+ * found the pin still wearing the original: nothing here could put the copy on it, and
+ * the gallery was two windows away. Now the studio names the pin and offers the preset
+ * that is showing.
+ */
+function useOnPinMarkup(selected: DpPreset, target: PresetStudioContext["target"]): string {
+  if (!target) return "";
+  if (target.effectId === selected.id) {
+    return (
+      `<p class="dp-presets__using">` +
+      `${escapeHtml(t("DP.presets.inUseOn", { name: target.name }))}</p>`
+    );
+  }
+  return (
+    `<button type="button" class="dp-presets__use" data-action="useOnPin">` +
+    `${escapeHtml(t("DP.presets.useOn", { name: target.name }))}</button>`
   );
 }
 
@@ -276,7 +407,8 @@ export function presetStudioMarkup(
   presets: readonly DpPreset[],
   selected: DpPreset,
   backdrop: Backdrop,
-  frozen: boolean
+  frozen: boolean,
+  context: PresetStudioContext = {}
 ): string {
   const editable = selected.author !== "core";
   return (
@@ -293,9 +425,10 @@ export function presetStudioMarkup(
     `</div></div>` +
     `<div class="dp-presets__pane dp-presets__pane--preview">` +
     previewMarkup(selected, backdrop, frozen) +
+    useOnPinMarkup(selected, context.target) +
     `</div>` +
     `<div class="dp-presets__pane dp-presets__pane--params">` +
-    paramsMarkup(selected, editable) +
+    paramsMarkup(selected, editable, context) +
     `</div></div>`
   );
 }
@@ -325,12 +458,17 @@ export function definePresetStudio(): any {
         remove: onRemove,
         import: onImport,
         export: onExport,
+        useOnPin: onUseOnPin,
       },
     };
 
     selectedId = "aged-parchment";
     backdrop: Backdrop = "map";
     frozen = false;
+    /** The pin this window was opened from, if any. */
+    forDoc: any = null;
+    /** The layers the GM opened or closed by hand, by preset and layer. */
+    groupState = new Map<string, boolean>();
 
     get selected(): DpPreset {
       return library.findPreset(this.selectedId) ?? library.allPresets()[0];
@@ -338,17 +476,38 @@ export function definePresetStudio(): any {
 
     async _renderHTML() {
       const wrapper = document.createElement("div");
+      const selected = this.selected;
+      const pin = this.forDoc ? readPin(this.forDoc) : null;
       wrapper.innerHTML = presetStudioMarkup(
         library.allPresets(),
-        this.selected,
+        selected,
         this.backdrop,
-        this.frozen
+        this.frozen,
+        {
+          isOpen: (group) => this.groupState.get(`${selected.id}:${group}`),
+          target: pin ? { name: api.labelFor(pin), effectId: pin.effect.id } : null,
+        }
       );
       return wrapper.firstElementChild ?? wrapper;
     }
 
     _replaceHTML(result: HTMLElement, content: HTMLElement) {
+      // Every change saves the preset and re-renders, which used to drop the focus: a
+      // slider moved with the arrow keys commits on each step, so it moved one step.
+      const focus = snapshotFocus(content);
       content.replaceChildren(result);
+      restoreFocus(content, focus);
+
+      // `toggle` does not bubble, so it is caught on the way down.
+      result.addEventListener(
+        "toggle",
+        (event) => {
+          const details = event.target as HTMLDetailsElement;
+          const group = details?.dataset?.dpGroup;
+          if (group) this.groupState.set(`${this.selected.id}:${group}`, details.open);
+        },
+        true
+      );
 
       // Wired to `result`, the NEW subtree, not to `content`. ApplicationV2 hands back
       // the same `content` element on every render, so listeners attached there
@@ -474,12 +633,24 @@ async function onExport(this: any) {
   }
 }
 
-/** Open the studio, on a given preset when one is named — from the galleries. */
-export function openPresetStudio(id?: string): any {
+/** Put the preset that is showing on the pin the studio was opened from. */
+async function onUseOnPin(this: any) {
+  if (!this.forDoc) return;
+  await api.setEffect(this.forDoc, this.selectedId);
+  this.render();
+}
+
+/**
+ * Open the studio, on a given preset when one is named — from the galleries — and for
+ * the pin it was opened from, when there is one. Opened from the settings menu, it is
+ * for no pin, and forgets the last one.
+ */
+export function openPresetStudio(id?: string, doc?: any): any {
   const Studio = definePresetStudio();
   if (!Studio) return null;
   instance ??= new Studio();
   if (id && library.findPreset(id)) instance.selectedId = id;
+  instance.forDoc = doc ?? null;
   instance.render(true);
   return instance;
 }

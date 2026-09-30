@@ -24,6 +24,8 @@
   display: flex;
   flex-direction: column;
   min-inline-size: 11rem;
+  /* Capped inline to the room the board has, so a long menu scrolls, never clips. */
+  overflow-y: auto;
   padding: 0.25rem;
   border: 1px solid var(--color-border-light-1, #7a7971);
   border-radius: 0.4rem;
@@ -49,7 +51,27 @@
     &:focus-visible {
       background: color-mix(in oklab, var(--color-warm-1, #c9ad6a) 18%, transparent);
     }
+
+    &[aria-checked="true"] {
+      box-shadow: inset 3px 0 0 var(--color-warm-1, #c9ad6a);
+      font-weight: 600;
+    }
   }
+}
+
+/* The effect menu: each preset drawn as itself beside its name. */
+.dp-menu--effects button {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.dp-menu__swatch {
+  flex: none;
+  inline-size: 1.1rem;
+  block-size: 1.4rem;
+  border-radius: 0.15rem;
+  overflow: hidden;
 }
 
 .dp-board__head {
@@ -134,7 +156,7 @@
 
 .dp-row {
   display: grid;
-  grid-template-columns: auto auto 1fr auto auto auto auto auto;
+  grid-template-columns: auto auto minmax(0, 1fr) auto auto auto auto auto;
   align-items: center;
   gap: 0.45rem;
   padding: 0.25rem 0.5rem;
@@ -175,6 +197,13 @@
   }
 }
 
+/* A grid cell: one per column, laid out as a row of its own content. */
+.dp-row__cell {
+  display: flex;
+  align-items: center;
+  min-inline-size: 0;
+}
+
 .dp-row__grip {
   cursor: grab;
   opacity: 0.4;
@@ -193,16 +222,17 @@
   background: color-mix(in oklab, var(--color-bg-option, #1b1b23) 70%, transparent);
 }
 
-/* Written out in full: `&--missing` is Sass concatenation, which native nesting does not
-   have, so this rule never applied and the "?" placeholder was never centred. */
-.dp-row__thumb--missing {
+/* No picture: what the row points at, as an icon — a journal, a page, a PDF. Written
+   out in full; `&--icon` would be Sass concatenation, which native nesting does not have. */
+.dp-row__thumb--icon {
   display: grid;
   place-items: center;
-  font-size: 0.8em;
-  opacity: 0.5;
+  font-size: 0.85em;
+  opacity: 0.6;
 }
 
 .dp-row__name {
+  min-inline-size: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -281,8 +311,18 @@
 }
 
 .dp-board__warn {
-  color: var(--color-warm-1, #c9ad6a);
+  color: var(--dp-accent-text, #c9ad6a);
   font-weight: 700;
+}
+
+/* Read by a screen reader, drawn for nobody: the words behind an icon-only count. */
+.dp-visually-hidden {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 .dp-board__help {
@@ -294,7 +334,7 @@
 
 .dp-danger {
   border-color: color-mix(in oklab, #b03a2e 70%, transparent);
-  color: color-mix(in oklab, #e8907f 85%, var(--color-text-primary, #eee));
+  color: var(--dp-danger-text, #e8907f);
 }
 
 /* Hover eases; selection, filters and counts arrive by re-render and stay instant. */

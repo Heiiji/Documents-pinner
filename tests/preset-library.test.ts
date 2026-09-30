@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { presetStudioMarkup, readParam, writeParam } from "../src/apps/PresetStudio";
+import { GROUPS, presetStudioMarkup, readParam, writeParam } from "../src/apps/PresetStudio";
 import { exportPreset, isCorePreset } from "../src/effects/preset-library";
 import { CORE_PRESETS, getCorePreset } from "../src/effects/presets/core-presets";
 import { validatePreset } from "../src/effects/preset-schema";
@@ -162,5 +162,67 @@ describe("the colours and the shapes", () => {
     const { preset, warnings } = validatePreset(broken);
     expect(preset!.params.hud.grid).toBe("none");
     expect(warnings.map((w) => w.key)).toContain("DP.preset.warn.badEnum");
+  });
+});
+
+/**
+ * Twenty-eight controls in one column, the layers a preset does not use sitting at zero
+ * among the ones it does. Each layer is a disclosure now, open when the preset uses it.
+ */
+describe("the parameters, by layer", () => {
+  const groups = (markup: string) =>
+    [...markup.matchAll(/<details class="dp-presets__group" data-dp-group="([^"]+)"( open)?/g)].map(
+      (m) => [m[1], m[2] === " open"] as const
+    );
+
+  it("offers every control exactly once, each in a layer", () => {
+    const paths = GROUPS.flatMap((group) => group.paths);
+    expect(new Set(paths).size).toBe(paths.length);
+    const markup = presetStudioMarkup(CORE_PRESETS, parchment(), "map", false);
+    for (const path of paths) {
+      expect(markup.split(`name="${path}"`).length - 1, path).toBe(1);
+    }
+  });
+
+  it("opens the layers the preset uses and closes the rest", () => {
+    const shown = new Map(groups(presetStudioMarkup(CORE_PRESETS, parchment(), "map", false)));
+    // Aged Parchment is a tinted, grained, deckled sheet with no glow and no scanlines.
+    expect(shown.get("surface")).toBe(true);
+    expect(shown.get("edges")).toBe(true);
+    expect(shown.get("glow")).toBe(false);
+    expect(shown.get("scanlines")).toBe(false);
+  });
+
+  it("keeps a layer the GM opened by hand open", () => {
+    const markup = presetStudioMarkup(CORE_PRESETS, parchment(), "map", false, {
+      isOpen: (group) => (group === "glow" ? true : undefined),
+    });
+    expect(new Map(groups(markup)).get("glow")).toBe(true);
+  });
+});
+
+/**
+ * A preset duplicated from a pin's gallery and tuned here was never put on the pin:
+ * nothing in this window could, and the gallery was two windows away.
+ */
+describe("the way back to the pin", () => {
+  it("offers the showing preset to the pin the studio was opened from", () => {
+    const markup = presetStudioMarkup(CORE_PRESETS, getCorePreset("glitch")!, "map", false, {
+      target: { name: "The Letter", effectId: "aged-parchment" },
+    });
+    expect(markup).toContain('data-action="useOnPin"');
+    expect(markup).toContain("DP.presets.useOn");
+  });
+
+  it("says the pin already wears it, rather than offering what is done", () => {
+    const markup = presetStudioMarkup(CORE_PRESETS, parchment(), "map", false, {
+      target: { name: "The Letter", effectId: "aged-parchment" },
+    });
+    expect(markup).not.toContain('data-action="useOnPin"');
+    expect(markup).toContain("DP.presets.inUseOn");
+  });
+
+  it("offers nothing when opened for no pin", () => {
+    expect(presetStudioMarkup(CORE_PRESETS, parchment(), "map", false)).not.toContain("useOnPin");
   });
 });

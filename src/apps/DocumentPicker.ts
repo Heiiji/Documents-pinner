@@ -12,7 +12,7 @@
  */
 
 import { g, ns } from "../fvtt";
-import { t } from "../i18n";
+import { t, tOr } from "../i18n";
 import { escapeAttr, escapeHtml } from "../html";
 import { fold } from "./pinboard-model";
 import { arm } from "./PlacementGhost";
@@ -79,7 +79,10 @@ function entryMarkup(entry: PickerEntry, index: number, active: boolean): string
     `<i class="fa-solid ${icon}" aria-hidden="true"></i>` +
     `<span class="dp-picker__name">${escapeHtml(entry.name)}</span>` +
     (entry.context ? `<span class="dp-picker__context">${escapeHtml(entry.context)}</span>` : "") +
-    (entry.pageType ? `<span class="dp-picker__type">${escapeHtml(entry.pageType)}</span>` : "") +
+    (entry.pageType
+      ? `<span class="dp-picker__type">` +
+        `${escapeHtml(tOr(`DP.pageType.${entry.pageType}`, entry.pageType))}</span>`
+      : "") +
     `</li>`
   );
 }

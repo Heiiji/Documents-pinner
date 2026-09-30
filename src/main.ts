@@ -39,7 +39,7 @@ import { closeReader, openReader, repositionReader, revalidateReader } from "./a
 import { disarm } from "./apps/PlacementGhost";
 import { hidePropTooltip, setPropHover } from "./apps/PropTooltip";
 import { onGetSceneControlButtons } from "./ui/controls";
-import { registerKeybindings } from "./ui/keybindings";
+import { registerKeybindings, teachPeekOnce } from "./ui/keybindings";
 import {
   addContextOption,
   onChatMessage,
@@ -48,7 +48,7 @@ import {
   onRenderConfig,
   onSourceRenamed,
 } from "./ui/entry-points";
-import { setDomPropHover } from "./canvas/DomPropTier";
+import { flashDomProp, setDomPropHover } from "./canvas/DomPropTier";
 import { onboardingReady } from "./ui/onboarding";
 
 const log = logger("boot");
@@ -110,6 +110,9 @@ Hooks.on("canvasReady", () => {
   checkTileGeometry();
   syncHitLayer();
   void migrateOnCanvasReady(cv()?.scene);
+  // An open Pinboard is about the scene being viewed; it used to keep listing the last
+  // one's pins until a tile happened to change.
+  refreshPinboard();
 });
 
 Hooks.on("canvasTearDown", () => {
@@ -156,6 +159,12 @@ Hooks.on(`${MODULE_ID}.propHover`, (doc: any, hovering: boolean) => {
   // The cue that says "this opens": warm light on the paper, on whichever tier draws it.
   setDomPropHover(doc?.id, hovering);
   propManager().setHover(doc?.id, hovering);
+  if (hovering) teachPeekOnce(doc);
+});
+
+// Flash and Locate ping inside the canvas, under a text prop's card; the card pulses.
+Hooks.on(`${MODULE_ID}.flash`, (doc: any) => {
+  flashDomProp(doc);
 });
 
 // --- Entry points -----------------------------------------------------------
@@ -178,7 +187,7 @@ Hooks.on(`${MODULE_ID}.openReader`, (doc: any) => {
   openReader(doc).catch((error) => log.warn(`the reader could not open`, error));
 });
 Hooks.on(`${MODULE_ID}.openStudio`, (doc: any, tab?: any) => openStudio(doc, tab));
-Hooks.on(`${MODULE_ID}.openPresets`, (id?: string) => openPresetStudio(id));
+Hooks.on(`${MODULE_ID}.openPresets`, (id?: string, doc?: any) => openPresetStudio(id, doc));
 Hooks.on(`${MODULE_ID}.peek`, (active: boolean) => propManager().setPeeking(active));
 
 // --- Keeping surfaces in step with the world --------------------------------
@@ -224,7 +233,9 @@ function onTileChanged(doc: any, changed?: any): void {
     revalidateReader();
     // The HUD is bound to at most one anchor, so it only cares whether that one moved.
     for (const id of ids) refreshPinHUD({ id });
-    refreshStudios();
+    // Only the Studios showing a pin that changed: re-rendering every open Studio on any
+    // pin's change threw away the focus — and a half-typed label — in all of them.
+    refreshStudios(ids);
     refreshPinboard();
   });
 }

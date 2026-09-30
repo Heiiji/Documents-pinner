@@ -62,7 +62,24 @@ describe("chipMarkup", () => {
 
   it("escapes a name inside the tooltip attribute too", () => {
     const markup = chipMarkup(user({ name: 'a" onmouseover="x' }), { t });
-    expect(markup).not.toMatch(/title="[^"]*" onmouseover=/);
+    expect(markup).not.toMatch(/data-tooltip-html="[^"]*" onmouseover=/);
+  });
+
+  it("escapes a name as HTML inside the tooltip, which Foundry renders as HTML", () => {
+    const t2 = (n: { key: string; data?: Record<string, unknown> }) =>
+      `${n.key} ${String(n.data?.name ?? "")}`;
+    const markup = chipMarkup(user({ name: "<b>x</b>" }), { t: t2 });
+    const html = markup.match(/data-tooltip-html="([^"]*)"/)![1];
+    // Attribute-decoded once by the browser, the name is still escaped text.
+    const decoded = html.replace(/&amp;/g, "&").replace(/&quot;/g, '"');
+    expect(decoded).toContain("&lt;b&gt;x&lt;/b&gt;");
+    expect(decoded).not.toContain("<b>");
+  });
+
+  it("marks a disagreement with Font Awesome's key, not a code point most fonts lack", () => {
+    const markup = chipMarkup(user({ canSee: true, canOpen: false }), { t });
+    expect(markup).toContain("fa-key");
+    expect(markup).not.toContain("⚿");
   });
 
   it("falls back to an initial when there is no avatar, one glyph even for an emoji", () => {
@@ -118,9 +135,9 @@ describe("describeChips", () => {
 describe("the chip's tooltip", () => {
   it("states the result first and the two gestures second, the same on every surface", () => {
     const markup = chipMarkup(user({ canSee: true, canOpen: false }), { t });
-    const title = markup.match(/title="([^"]*)"/)![1];
+    const title = markup.match(/data-tooltip-html="([^"]*)"/)![1];
     expect(title.startsWith("DP.chip.seesButCannotOpen")).toBe(true);
-    expect(title).toContain("DP.chip.actions");
+    expect(title).toContain("&lt;br&gt;DP.chip.actions");
     // The accessible name stays the state alone.
     expect(markup).toMatch(/aria-label="DP\.chip\.seesButCannotOpen[^"]*"/);
   });

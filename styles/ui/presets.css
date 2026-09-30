@@ -208,11 +208,48 @@
   font-variant-numeric: tabular-nums;
 
   &[data-dp-cost="medium"] {
-    color: var(--color-warm-1, #c9ad6a);
+    color: var(--dp-accent-text, #c9ad6a);
   }
   &[data-dp-cost="high"] {
-    color: #e08a72;
+    color: var(--dp-danger-text, #e08a72);
   }
+}
+
+/* One layer of the effect per disclosure, open when the preset uses it. A block, not a
+   flex box: `display` on a <details> is a newer thing than this module's baseline. */
+.dp-presets__group {
+  padding-block-end: 0.35rem;
+  border-block-end: 1px solid
+    color-mix(in oklab, var(--color-border-light-1, #7a7971) 40%, transparent);
+
+  & > summary {
+    padding-block: 0.2rem;
+    font-size: 0.85em;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  & > .dp-presets__param {
+    margin-block-start: 0.35rem;
+  }
+}
+
+.dp-presets__unused {
+  font-weight: 400;
+  font-style: italic;
+  opacity: 0.6;
+}
+
+/* Back to the pin the studio was opened from. */
+.dp-presets__use {
+  inline-size: 100%;
+}
+
+.dp-presets__using {
+  margin: 0;
+  font-size: 0.8em;
+  text-align: center;
+  opacity: 0.75;
 }
 
 .dp-presets__item {

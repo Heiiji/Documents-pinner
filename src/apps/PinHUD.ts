@@ -38,6 +38,7 @@ import { readPin } from "../data/PinData";
 import { allPresets } from "../effects/preset-library";
 import { swatchStyle } from "../effects/preset-css";
 import { chipsMarkup, describeChips, type ChipUser } from "./chips";
+import { focusSelectorIn } from "./focus-restore";
 import type { DpPinFlags } from "../types/dp";
 
 const log = logger("hud");
@@ -65,6 +66,12 @@ interface ButtonSpec {
   key: string;
   /** Rendered pressed when true; omitted entirely when the control is stateless. */
   pressed?: boolean;
+  /**
+   * Drawn "on" without claiming `aria-pressed`: for a control whose LABEL already changes
+   * with its state. A button that renames itself AND reports pressed is announced as
+   * "Hide from players, pressed", which reads as the opposite of what it is.
+   */
+  on?: boolean;
   expands?: string;
 }
 
@@ -76,10 +83,14 @@ function buttonMarkup(spec: ButtonSpec): string {
       : spec.pressed !== undefined
         ? ` aria-pressed="${spec.pressed}"`
         : "";
+  const on = spec.on ? ` data-dp-on="true"` : "";
 
+  // Foundry's own tooltip rather than `title`: the native one waits a second, looks like
+  // no other control in the interface, and never appears on a touch screen.
   return (
     `<button type="button" class="dp-hud__btn" data-action="${escapeAttr(spec.action)}"` +
-    `${state} tabindex="-1" title="${escapeAttr(label)}" aria-label="${escapeAttr(label)}">` +
+    `${state}${on} tabindex="-1" data-tooltip-text="${escapeAttr(label)}"` +
+    ` aria-label="${escapeAttr(label)}">` +
     `<i class="${escapeAttr(spec.icon)}" aria-hidden="true"></i></button>`
   );
 }
@@ -127,7 +138,7 @@ function effectsPaletteMarkup(pin: DpPinFlags): string {
       (preset) =>
         `<button type="button" class="dp-hud__swatch" data-action="setEffect"` +
         ` data-dp-preset="${escapeAttr(preset.id)}" aria-pressed="${pin.effect.id === preset.id}"` +
-        ` title="${escapeAttr(t(preset.label))}" data-dp-fx="${escapeAttr(preset.id)}">` +
+        ` data-tooltip-text="${escapeAttr(t(preset.label))}" data-dp-fx="${escapeAttr(preset.id)}">` +
         `<span class="dp-hud__swatch-preview dp-card" aria-hidden="true"` +
         ` style="${escapeAttr(swatchStyle(preset))}"></span>` +
         `<span class="dp-hud__swatch-label">${escapeHtml(t(preset.label))}</span></button>`
@@ -142,19 +153,23 @@ function effectsPaletteMarkup(pin: DpPinFlags): string {
     `${escapeHtml(t("DP.presets.edit"))}</button>` +
     `<label class="dp-hud__slider">${escapeHtml(t("DP.hud.intensity"))}` +
     `<input type="range" min="0" max="100" step="5" value="${Math.round(pin.effect.intensity * 100)}"` +
-    ` data-action="setIntensity"></label>` +
+    ` data-action="setIntensity">` +
+    // The same 0–100 % the Studio shows, so the two sliders read as one control.
+    `<output>${Math.round(pin.effect.intensity * 100)}%</output></label>` +
     `</div>`
   );
 }
 
 export function hudMarkup(anchorDoc: any, pin: DpPinFlags): string {
-  const visible = pin.audience.kind !== "hidden";
+  // Whether anyone is actually reached, not whether the kind says "hidden": a selection
+  // naming nobody left the eye open over a row of hollow chips.
+  const visible = api.isRevealed(anchorDoc, pin);
   const left: ButtonSpec[] = [
     {
       action: "toggleVisibility",
       icon: visible ? "fa-solid fa-eye" : "fa-solid fa-eye-slash",
       key: visible ? "DP.hud.hide" : "DP.hud.reveal",
-      pressed: visible,
+      on: visible,
     },
     {
       action: "togglePalette",
@@ -374,6 +389,8 @@ export function definePinHUD(): any {
       root.addEventListener("input", (event) => {
         const input = event.target as HTMLInputElement;
         if (input?.dataset?.action !== "setIntensity") return;
+        const output = input.nextElementSibling;
+        if (output?.tagName === "OUTPUT") output.textContent = `${input.value}%`;
         previewIntensity(this.anchorDoc?.id, Number(input.value) / 100);
       });
 
@@ -505,33 +522,8 @@ function onTogglePalette(this: any, _event: Event, target: HTMLElement) {
   }
 }
 
-/**
- * A selector that will find the focused control again in freshly built markup.
- *
- * Identity-based, never positional: a chip is found by its user and a button by its
- * action, so restoring focus survives a re-render that changed how many chips there are.
- */
-export function focusSelectorIn(root: ParentNode): string | null {
-  const active = typeof document === "undefined" ? null : (document.activeElement as HTMLElement);
-  if (!active || !root.contains?.(active)) return null;
-
-  const user = active.dataset?.dpUser;
-  if (user) return `.dp-chip[data-dp-user="${CSS.escape(user)}"]`;
-
-  const kind = active.dataset?.dpKind;
-  if (kind) return `[data-dp-kind="${CSS.escape(kind)}"]`;
-
-  const preset = active.dataset?.dpPreset;
-  if (preset) return `[data-dp-preset="${CSS.escape(preset)}"]`;
-
-  const action = active.dataset?.action;
-  if (!action) return null;
-  // `togglePalette` appears twice; the palette it controls is what tells them apart.
-  const controls = active.getAttribute("aria-controls");
-  return controls
-    ? `[data-action="${CSS.escape(action)}"][aria-controls="${CSS.escape(controls)}"]`
-    : `[data-action="${CSS.escape(action)}"]`;
-}
+// Re-exported: the helper moved to `focus-restore.ts` when the Studios needed it too.
+export { focusSelectorIn };
 
 function onToggleLock(this: any) {
   const doc = this.anchorDoc;
@@ -567,12 +559,19 @@ function onSetAudienceKind(this: any, _event: Event, target: HTMLElement) {
   // "Some" with nobody chosen yet would mean nobody, which is indistinguishable from
   // hidden. Open the chips instead of applying a state the GM cannot tell apart — and
   // say so on the status line, because a click that only moved the focus read as a
-  // click that did nothing.
-  if (kind === "selected" && !pin.audience.users.length) {
-    const root = target.closest(".dp-hud");
-    const status = root?.querySelector<HTMLElement>(".dp-hud__status");
-    if (status) status.textContent = t("DP.hud.chooseWho");
-    root?.querySelector<HTMLElement>(".dp-chip")?.focus();
+  // click that did nothing. A pin that remembers a selection from before it was hidden
+  // takes that one back, which is the same rule the Studio's dropdown now follows.
+  if (kind === "selected") {
+    void api.chooseSome(doc).then((chosen) => {
+      if (chosen) {
+        this.render();
+        return;
+      }
+      const root = target.closest(".dp-hud");
+      const status = root?.querySelector<HTMLElement>(".dp-hud__status");
+      if (status) status.textContent = t("DP.hud.chooseWho");
+      root?.querySelector<HTMLElement>(".dp-chip")?.focus();
+    });
     return;
   }
   void api
@@ -586,8 +585,10 @@ function onSetEffect(this: any, _event: Event, target: HTMLElement) {
   void api.setEffect(this.anchorDoc, id)?.then(() => this.render());
 }
 
+/** The pin rides along, so the Preset Studio can offer to put a new preset on it. */
 function onEditPresets(this: any) {
-  Hooks.call(`${MODULE_ID}.openPresets`, readPin(this.anchorDoc)?.effect.id);
+  const doc = this.anchorDoc;
+  Hooks.call(`${MODULE_ID}.openPresets`, readPin(doc)?.effect.id, doc);
 }
 
 declare const Hooks: any;

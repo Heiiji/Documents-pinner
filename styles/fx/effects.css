@@ -213,6 +213,36 @@
 }
 
 /*
+ * The reader is for reading.
+ *
+ * Clearing the blur was only the first of the effects that fight the text. Glitch's
+ * colour fringe doubled every glyph, jitter slid the whole sheet sideways several times
+ * a second, flicker dimmed it, and a rolling scanline or a sweeping band dragged a stripe
+ * across the line being read — all at full strength, on the one surface someone is
+ * looking at closely. Each keeps its look on the prop; in the reader the motion stops,
+ * the fringe goes, and the textures and the projected overlay sit at half strength. The
+ * glow pulse stays: it moves light around the sheet, not across the words.
+ */
+.dp-reader .dp-card[data-dp-motion="loop"],
+.dp-reader .dp-card[data-dp-motion="loop"]::before,
+.dp-reader .dp-card[data-dp-motion="loop"] .dp-card__hud-sweep {
+  animation: none;
+}
+
+.dp-reader .dp-card[data-dp-preset] .dp-card__body,
+.dp-reader .dp-card[data-dp-preset] .dp-card__title {
+  text-shadow: none;
+}
+
+.dp-reader .dp-card::before {
+  opacity: calc(var(--dp-i, 1) * 0.5);
+}
+
+.dp-reader .dp-card__hud {
+  opacity: calc(var(--dp-hud-op, 0) * var(--dp-i, 1) * 0.5);
+}
+
+/*
  * The projected overlay — the AR family's grid, corner geometry and sweep.
  *
  * Three layers on two elements, each with its own relative weight under one master

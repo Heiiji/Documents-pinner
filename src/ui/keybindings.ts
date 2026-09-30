@@ -15,8 +15,9 @@
  */
 
 import { MODULE_ID } from "../const";
-import { cv, g, notify } from "../fvtt";
+import { cv, g, isGM, notify, ns } from "../fvtt";
 import * as api from "../api";
+import * as settings from "../settings";
 import { openPicker } from "../apps/DocumentPicker";
 import { openPinboard, pinboardFocusedDoc } from "../apps/Pinboard";
 import { armLastUsed, disarm, isArmed } from "../apps/PlacementGhost";
@@ -147,6 +148,38 @@ export function registerKeybindings(): void {
       return true;
     },
   });
+}
+
+/** Asked once per session at most; the setting remembers it across sessions. */
+let peekTaughtThisSession = false;
+
+/**
+ * Tell a player about the peek key, once, the first time they hover a prop.
+ *
+ * The one binding players get was documented only in the README, which players do not
+ * read, and in Configure Controls, which they have no reason to open. The moment a prop
+ * is under their pointer is the moment it can be in the way. The key is named as it is
+ * bound, so a rebinding is what they are told.
+ */
+export function teachPeekOnce(doc: any): void {
+  if (peekTaughtThisSession || isGM()) return;
+  if (readPin(doc)?.mode !== "prop") return;
+  peekTaughtThisSession = true;
+  if (settings.get("peekTaught")) return;
+
+  const binding = g()?.keybindings?.get?.(MODULE_ID, "peek")?.[0];
+  if (!binding?.key) return;
+  notify({ key: "DP.notice.peekTip", data: { key: bindingName(binding) } }, "info");
+  void settings.set("peekTaught", true);
+}
+
+/** A binding as the keyboard names it: core's own display string where there is one. */
+export function bindingName(binding: { key: string; modifiers?: string[] }): string {
+  const Keyboard = ns("helpers.interaction.KeyboardManager");
+  const display = (code: string) =>
+    Keyboard?.getKeycodeDisplayString?.(code) ??
+    code.replace(/^(Key|Digit)/, "").replace(/(Left|Right)$/, "");
+  return [...(binding.modifiers ?? []).map(display), display(binding.key)].join("+");
 }
 
 /**

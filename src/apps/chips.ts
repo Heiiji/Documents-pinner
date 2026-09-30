@@ -95,10 +95,18 @@ export function chipMarkup(user: ChipUser, options: ChipMarkupOptions): string {
     ? `<img class="dp-chip__avatar" src="${escapeAttr(avatar)}" alt="">`
     : `<span class="dp-chip__initial" aria-hidden="true">${escapeHtml(initialOf(user.name))}</span>`;
 
-  const key = isMismatch(state) ? `<span class="dp-chip__key" aria-hidden="true">⚿</span>` : "";
+  // Font Awesome's key, which Foundry already loads, rather than U+26BF: that code point
+  // is missing from most interface fonts and rendered as a box, at seven pixels, on the
+  // one badge whose whole job is to be noticed.
+  const key = isMismatch(state)
+    ? `<span class="dp-chip__key" aria-hidden="true"><i class="fa-solid fa-key"></i></span>`
+    : "";
   // The state first, then the gestures: the tooltip is the one place the modifier
-  // vocabulary is taught, and it is the same two gestures on every surface.
-  const title = `${label}\n${options.t({ key: "DP.chip.actions", data: { name: user.name } })}`;
+  // vocabulary is taught, and it is the same two gestures on every surface. Foundry's own
+  // tooltip, as HTML so the two lines stay two lines; both are escaped TEXT first.
+  const tooltip =
+    `${escapeHtml(label)}<br>` +
+    escapeHtml(options.t({ key: "DP.chip.actions", data: { name: user.name } }));
 
   return [
     `<button type="button" class="dp-chip"`,
@@ -106,7 +114,7 @@ export function chipMarkup(user: ChipUser, options: ChipMarkupOptions): string {
     ` data-dp-user="${escapeAttr(user.id)}"`,
     ` data-dp-state="${state}"`,
     ` style="--dp-chip-color:${safeColor(user.color)}"`,
-    ` title="${escapeAttr(title)}" aria-label="${escapeAttr(label)}">`,
+    ` data-tooltip-html="${escapeAttr(tooltip)}" aria-label="${escapeAttr(label)}">`,
     inner,
     key,
     `</button>`,

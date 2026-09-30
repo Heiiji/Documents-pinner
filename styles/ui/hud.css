@@ -84,7 +84,9 @@
     );
   }
 
-  &[aria-pressed="true"] {
+  /* Pressed, or — for the eye, whose label already says its state — simply on. */
+  &[aria-pressed="true"],
+  &[data-dp-on="true"] {
     border-color: var(--color-warm-1, #c9ad6a);
     box-shadow: inset 0 0 0 1px var(--color-warm-1, #c9ad6a);
   }
@@ -251,6 +253,13 @@
   & input {
     flex: 1;
   }
+
+  & output {
+    min-inline-size: 4ch;
+    text-align: end;
+    font-variant-numeric: tabular-nums;
+    opacity: 0.75;
+  }
 }
 
 /* Hover and press ease; a pressed state arrives by re-render and stays instant. */
@@ -266,7 +275,7 @@
   padding: 0.1rem 0.4rem;
   border: none;
   background: transparent;
-  color: var(--color-warm-1, #c9ad6a);
+  color: var(--dp-accent-text, #c9ad6a);
   font-size: 0.8em;
   cursor: pointer;
   text-decoration: underline;

@@ -30,8 +30,13 @@ export interface PinboardRow {
   sort: number;
   elevation: number;
   locked: boolean;
-  /** Null when the source is gone — the row still exists, which is the point. */
+  /**
+   * A picture that tells this row from the next: an image source, an image page or a
+   * pin icon the GM chose. Null for the shared placeholder, which tells nothing apart.
+   */
   thumbnail: string | null;
+  /** What the row points at, as a Font Awesome icon, shown when there is no picture. */
+  icon?: string;
   users: ChipUser[];
 }
 

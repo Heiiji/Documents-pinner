@@ -71,21 +71,27 @@
   text-shadow: 0 1px 2px rgb(0 0 0 / 60%);
 }
 
-/* The mismatch badge. Amber rather than red: this is "check this", not "this failed". */
+/* The mismatch badge. Amber rather than red: this is "check this", not "this failed".
+   A Font Awesome key at a size it can be read at, where a U+26BF glyph was a box. */
 .dp-chip__key {
   position: absolute;
-  inset-block-end: -0.15rem;
-  inset-inline-end: -0.25rem;
-  font-size: 0.6em;
+  inset-block-end: -0.2rem;
+  inset-inline-end: -0.3rem;
+  display: grid;
+  place-items: center;
+  inline-size: 0.95rem;
+  block-size: 0.95rem;
+  font-size: 0.55rem;
   line-height: 1;
-  padding: 0.1em 0.15em;
-  border-radius: 0.35em;
+  border-radius: 50%;
   background: var(--color-warm-1, #c9ad6a);
   color: #1b1b23;
   box-shadow: 0 1px 2px rgb(0 0 0 / 50%);
 }
 
+/* 24 px, the smallest target a pointer should be asked to hit (WCAG 2.2, 2.5.8). The
+   Pinboard's chips were 20. */
 .dp-chips[data-dp-size="sm"] .dp-chip {
-  --dp-chip-size: 1.25rem;
+  --dp-chip-size: 1.5rem;
   border-width: 1.5px;
 }

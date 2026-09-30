@@ -7,7 +7,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { defaultPin } from "../src/data/pin-schema";
-import { hidePropTooltip, setPropHover, tooltipText } from "../src/apps/PropTooltip";
+import { hidePropTooltip, setPropHover, tooltipHint, tooltipText } from "../src/apps/PropTooltip";
 import { fakeTile, installWorld, uninstallWorld } from "./helpers/fake-foundry";
 
 const frame = () => new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
@@ -79,9 +79,38 @@ describe("the tooltip", () => {
     expect(node()!.style.left).toBe("100px");
   });
 
-  it("shows nothing for a pin with no tooltip", async () => {
+  it("shows nothing to the GM for a titled prop with no tooltip", async () => {
+    uninstallWorld();
+    installWorld({ isGM: true });
     setPropHover(pinned("a", "   "), true);
     await frame();
     expect(tooltipText()).toBeNull();
+  });
+
+  it("tells a player how to open a prop, which the pointer cursor alone did not", async () => {
+    setPropHover(pinned("a", "   "), true);
+    await frame();
+    // A titled prop already shows its name on the paper; the hint is the whole tooltip.
+    expect(tooltipText()).toBe("");
+    expect(tooltipHint()).toBe("DP.tooltip.doubleRead");
+  });
+
+  it("names a pin icon when the GM wrote no tooltip, as a map note shows its label", async () => {
+    const tile = pinned("a", "");
+    tile.flags["documents-pinner"].pin.mode = "pin";
+    tile.flags["documents-pinner"].pin.display.label = "The Duke's Letter";
+    setPropHover(tile, true);
+    await frame();
+    expect(tooltipText()).toBe("The Duke's Letter");
+    expect(tooltipHint()).toBe("DP.tooltip.doubleOpen");
+  });
+
+  it("offers no hint on a pin that does not open", async () => {
+    const tile = pinned("a", "A seal");
+    tile.flags["documents-pinner"].pin.interaction.open = "never";
+    setPropHover(tile, true);
+    await frame();
+    expect(tooltipText()).toBe("A seal");
+    expect(tooltipHint()).toBe("");
   });
 });

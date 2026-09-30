@@ -81,6 +81,8 @@ describe("localisation files", () => {
     const families = [
       ["DP.chip.", ["visible", "hidden", "seesButCannotOpen", "opensButCannotSee"]],
       ["DP.board.mode.", ["pin", "prop"]],
+      // Core's page types; a system's own falls back to its raw name through `tOr`.
+      ["DP.pageType.", ["text", "image", "pdf", "video"]],
       ["DP.cost.", ["low", "medium", "high"]],
       ["DP.edge.", ["none", "torn", "burnt", "deckled", "singed"]],
       ["DP.frame.", ["none", "holo", "gilt", "rune", "plain"]],

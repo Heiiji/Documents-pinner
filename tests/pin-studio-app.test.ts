@@ -97,3 +97,132 @@ describe("the strip's width and height", () => {
     expect(tile.height).toBe(1120);
   });
 });
+
+const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+/**
+ * High #5 of the UX audit: "Some players" chosen from the dropdown with nobody picked
+ * wrote a `selected` audience naming nobody. It reached no one, while the Pinboard
+ * counted it visible and the HUD's eye stayed open. The HUD always refused; now the
+ * dropdown does too.
+ */
+describe("the audience dropdown's 'Some'", () => {
+  it("writes nothing and asks for a player when there is nobody to choose", async () => {
+    const studio = await studioOn("audience");
+    document.body.appendChild(contentOf(studio));
+    change(studio, "audience.kind", "selected");
+    await settled();
+    await tick();
+
+    expect(tile.flags[MODULE_ID][FLAGS.PIN].audience.kind).toBe("everyone");
+    const status = contentOf(studio).querySelector<HTMLElement>(".dp-studio__status")!;
+    expect(status.textContent).toContain("chooseWho");
+    const select = contentOf(studio).querySelector<HTMLSelectElement>('[name="audience.kind"]')!;
+    expect(select.value).toBe("everyone");
+  });
+
+  it("takes back the selection a hidden pin remembers", async () => {
+    tile.hidden = true;
+    tile.flags[MODULE_ID][FLAGS.PIN].audience = {
+      ...defaultPin().audience,
+      kind: "hidden",
+      restore: { kind: "selected", users: ["ali"] },
+    };
+    const studio = await studioOn("audience");
+    change(studio, "audience.kind", "selected");
+    await settled();
+    await tick();
+
+    const audience = tile.flags[MODULE_ID][FLAGS.PIN].audience;
+    expect(audience.kind).toBe("selected");
+    expect(audience.users).toEqual(["ali"]);
+  });
+});
+
+describe("the keyboard's place across a render", () => {
+  it("keeps the focus on the control that changed, in the markup that replaced it", async () => {
+    const studio = await studioOn("appearance");
+    document.body.appendChild(contentOf(studio));
+    const before = contentOf(studio).querySelector<HTMLElement>('[name="display.paper"]')!;
+    before.focus();
+    change(studio, "display.paper", "vellum");
+    await settled();
+    await studio.render();
+
+    const after = contentOf(studio).querySelector('[name="display.paper"]');
+    expect(after).not.toBe(before);
+    expect(document.activeElement).toBe(after);
+  });
+
+  it("moves along the tabs with the arrows, and the panel names the tab that shows it", async () => {
+    const studio = await studioOn("content");
+    document.body.appendChild(contentOf(studio));
+    const tab = contentOf(studio).querySelector<HTMLElement>(
+      '.dp-studio__tabbtn[data-dp-tab="content"]'
+    )!;
+    tab.focus();
+    tab.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+    await tick();
+    await tick();
+
+    expect(studio.tab).toBe("appearance");
+    const active = document.activeElement as HTMLElement;
+    expect(active.dataset.dpTab).toBe("appearance");
+    expect(active.getAttribute("tabindex")).toBe("0");
+    const panel = contentOf(studio).querySelector('[role="tabpanel"]')!;
+    expect(panel.getAttribute("aria-labelledby")).toBe(active.id);
+  });
+});
+
+describe("which Studios a change re-renders", () => {
+  it("only the ones showing a pin that changed", async () => {
+    const { openStudio, refreshStudios } = await import("../src/apps/PinStudio");
+    const studio = openStudio(tile);
+    await tick();
+    const before = studio.renderCount;
+
+    refreshStudios(["another-pin"]);
+    expect(studio.renderCount).toBe(before);
+    refreshStudios(["t1"]);
+    expect(studio.renderCount).toBe(before + 1);
+  });
+});
+
+describe("the window", () => {
+  it("names the pin in its title, so two Studios can be told apart", async () => {
+    tile.flags[MODULE_ID][FLAGS.PIN].display.label = "The Duke's Letter";
+    (globalThis as any).game.i18n.format = (key: string, data: any) => `${key}|${data.name}`;
+    const studio = await studioOn("content");
+    expect(studio.title).toBe("DP.studio.titleFor|The Duke's Letter");
+  });
+});
+
+describe("the pin's icon", () => {
+  it("offers core's note icons and writes the tile's texture", async () => {
+    (globalThis as any).CONFIG.JournalEntry = { noteIcons: { Anchor: "icons/svg/anchor.svg" } };
+    const studio = await studioOn("appearance");
+    const select = contentOf(studio).querySelector<HTMLSelectElement>('[name="_icon"]')!;
+    expect([...select.options].map((o) => o.value)).toEqual([
+      "icons/svg/book.svg",
+      "icons/svg/anchor.svg",
+    ]);
+
+    change(studio, "_icon", "icons/svg/anchor.svg");
+    await settled();
+    await tick();
+    expect(tile.texture.src).toBe("icons/svg/anchor.svg");
+  });
+
+  it("is not offered on an image pin, which shows its image", async () => {
+    tile.flags[MODULE_ID][FLAGS.PIN].source = {
+      kind: "image",
+      uuid: null,
+      src: "maps/scrap.webp",
+      pageId: null,
+      pdfPage: null,
+      followName: false,
+    };
+    const studio = await studioOn("appearance");
+    expect(contentOf(studio).querySelector('[name="_icon"]')).toBeNull();
+  });
+});

@@ -17,7 +17,7 @@
  * place in the module that teaches itself.
  */
 
-import { cv, isGM, notify } from "../fvtt";
+import { cfg, cv, isGM, notify } from "../fvtt";
 import { t } from "../i18n";
 import { logger } from "../log";
 import { escapeAttr, escapeHtml } from "../html";
@@ -38,6 +38,7 @@ import { swatchStyle } from "../effects/preset-css";
 import { resolveCard } from "../render/ContentResolver";
 import { measureCardHeight } from "../render/measure";
 import { leave, mount, syncTransform, write } from "./OverlayRoot";
+import { modifierGlyphs, platform } from "../ui/modifiers";
 import type { DpMode, DpPinFlags, DpSource } from "../types/dp";
 
 const log = logger("ghost");
@@ -65,6 +66,12 @@ export interface GhostState {
   audience: "everyone" | "hidden";
   /** Stays armed after a click, for placing a run of markers in one gesture. */
   sticky: boolean;
+  /**
+   * The Shift being held has already been used as a modifier — a fine rotation, a step
+   * back through the effects. Such a hold is not a request to keep stamping, so the click
+   * that ends it places once. Cleared when Shift is released.
+   */
+  shiftChorded: boolean;
   /** Suspend grid snapping while held. */
   freePlace: boolean;
   x: number;
@@ -78,24 +85,12 @@ export const TYPE_SIZE_GHOST_MAX = 72;
 export const TYPE_SIZE_STEP = 0.5;
 
 /**
- * The modifier glyphs the legend prints, by platform.
- *
- * PURE. The legend used to be one string of Mac glyphs for everyone; on a Windows or
- * Linux keyboard "⌥" names a key that does not exist. The letters E, V, R and F are
- * window handlers rather than keybindings, so this cannot be derived from Configure
- * Controls — but the modifiers can at least be named in the language of the keyboard.
+ * The modifier glyphs the legend prints, by platform — see `ui/modifiers.ts`, which the
+ * Pinboard's help line shares. The letters E, V, R and F are window handlers rather than
+ * keybindings, so they cannot be derived from Configure Controls; the modifiers can at
+ * least be named in the language of the keyboard.
  */
-export function modifierGlyphs(platform: "mac" | "other") {
-  return platform === "mac"
-    ? { alt: "⌥", shift: "⇧", ctrl: "⌃", wheel: "⟳", space: "␣", esc: "⎋" }
-    : { alt: "Alt+", shift: "Shift+", ctrl: "Ctrl+", wheel: "⟳", space: "Space", esc: "Esc" };
-}
-
-function platform(): "mac" | "other" {
-  const nav = (globalThis as any).navigator;
-  const name = nav?.userAgentData?.platform ?? nav?.platform ?? "";
-  return /mac/i.test(String(name)) ? "mac" : "other";
-}
+export { modifierGlyphs };
 
 export function initialState(source: DpSource, mode: DpMode, gridSize = 100): GhostState {
   return {
@@ -113,6 +108,7 @@ export function initialState(source: DpSource, mode: DpMode, gridSize = 100): Gh
     ),
     audience: settings.get("defaultAudience"),
     sticky: false,
+    shiftChorded: false,
     freePlace: false,
     x: 0,
     y: 0,
@@ -134,6 +130,8 @@ export function stepWheel(
   mods: { shift?: boolean; alt?: boolean }
 ): GhostState {
   const direction = delta > 0 ? 1 : -1;
+  // A Shift used here is a modifier on the wheel, not a request to keep placing.
+  if (mods.shift) state = { ...state, sticky: false, shiftChorded: true };
 
   if (mods.alt && mods.shift) {
     const typeSize = state.typeSize - direction * TYPE_SIZE_STEP;
@@ -181,7 +179,8 @@ export function stepKey(
     case "E": {
       const step = mods.shift ? -1 : 1;
       const next = (state.effectIndex + step + allPresets().length) % allPresets().length;
-      return { ...state, effectIndex: next };
+      const chord = mods.shift ? { sticky: false, shiftChorded: true } : {};
+      return { ...state, ...chord, effectIndex: next };
     }
     case "v":
     case "V":
@@ -285,6 +284,8 @@ export function legendLines(): string {
     key("alt", `${g.alt}${g.wheel} ${t("DP.ghost.scale")}`) +
     sep +
     key("shift alt", `${g.shift}${g.alt}${g.wheel} ${t("DP.ghost.textSize")}`) +
+    sep +
+    key("ctrl", `${g.ctrl}${g.wheel} ${t("DP.ghost.zoom")}`) +
     `</span>` +
     `<span>` +
     key("space", `${g.space} ${t("DP.ghost.shape")}`) +
@@ -301,6 +302,8 @@ export function legendLines(): string {
     key("shift", `${g.shift}${t("DP.ghost.click")} ${t("DP.ghost.stamp")}`) +
     sep +
     key("esc", `${g.esc} ${t("DP.ghost.cancel")}`) +
+    sep +
+    key("right", t("DP.ghost.pan")) +
     `</span>` +
     `</div>`
   );
@@ -530,19 +533,35 @@ function attach(): void {
       if (!state) return;
       event.preventDefault();
       event.stopPropagation();
+      // Ctrl or ⌘ zooms — and so does a trackpad pinch, which arrives as a ctrl-wheel.
+      // The plain wheel is the rotation, as it is in the template placement the common
+      // systems ship, so without this there was no way to zoom while a pin was armed.
+      if (event.ctrlKey || event.metaKey) {
+        zoomAt(event);
+        return;
+      }
       state = stepWheel(state, event.deltaY, { shift: event.shiftKey, alt: event.altKey });
       render();
     },
     { passive: false, capture: true }
   );
 
+  // Where a right press began, so its release can tell a click from a drag.
+  let rightPress: { x: number; y: number } | null = null;
+
   on(
     board,
     "pointerdown",
     (event: PointerEvent) => {
       if (!state) return;
-      // Right-click and middle-click cancel; they are the universal "not this" and a
-      // GM should never have to find the Escape key to get out of a placement.
+      // A right press is left to core, because a right DRAG is how Foundry pans — and a
+      // target off the edge of the screen was unreachable while every right press
+      // cancelled. A right CLICK still cancels, on its release, below.
+      if (event.button === 2) {
+        rightPress = { x: event.clientX, y: event.clientY };
+        return;
+      }
+      // Middle-click cancels at once; it pans nothing in Foundry.
       if (event.button !== 0) {
         event.preventDefault();
         event.stopPropagation();
@@ -551,7 +570,11 @@ function attach(): void {
       }
       event.preventDefault();
       event.stopPropagation();
-      place(state.sticky || event.shiftKey).catch((error) => {
+      // Shift at the click stamps — unless this Shift was already spent on the wheel or
+      // on stepping back through the effects, which a click at the end of a fine rotation
+      // used to turn into "and keep placing".
+      const stamp = state.sticky || (event.shiftKey && !state.shiftChorded);
+      place(stamp).catch((error) => {
         // The ghost stays armed, so the GM can simply press again.
         log.warn(`placing the pin failed`, error);
         notify({ key: "DP.notice.placeFailed" }, "warn");
@@ -571,7 +594,9 @@ function attach(): void {
         return;
       }
       if (event.key === "Shift") {
-        state = { ...state, sticky: true };
+        // A fresh hold: nothing has used it yet, so it means "keep placing" until the
+        // wheel or a key claims it as a modifier. A key-repeat is the same hold.
+        if (!event.repeat) state = { ...state, sticky: true, shiftChorded: false };
         renderChip(state);
         return;
       }
@@ -595,16 +620,65 @@ function attach(): void {
       renderChip(state);
     }
     if (event.key === "Shift") {
-      state = { ...state, sticky: false };
+      state = { ...state, sticky: false, shiftChorded: false };
       renderChip(state);
     }
   });
+
+  // The release that decides whether a right press was a click (cancel) or a pan (keep).
+  on(
+    window,
+    "pointerup",
+    (event: PointerEvent) => {
+      if (!state || event.button !== 2 || !rightPress) return;
+      const moved = Math.hypot(event.clientX - rightPress.x, event.clientY - rightPress.y);
+      rightPress = null;
+      if (moved < RIGHT_CLICK_SLOP) disarm();
+    },
+    { capture: true }
+  );
 
   // Losing the window mid-placement leaves a ghost stuck to a cursor that is no longer
   // there; so does switching layers. Both disarm.
   on(window, "blur", () => disarm());
   on(document, "visibilitychange", () => {
     if (document.hidden) disarm();
+  });
+}
+
+/** How far a right press may travel and still be a click rather than the start of a pan. */
+const RIGHT_CLICK_SLOP = 6;
+
+/** How much one wheel notch zooms, the step core's own wheel uses. */
+const ZOOM_STEP = 1.1;
+
+/**
+ * Zoom toward the pointer, within the canvas's own limits.
+ *
+ * The scene point under the pointer stays under it, which is what a zoom by wheel does
+ * everywhere else and what keeps the ghost where the GM was aiming.
+ */
+function zoomAt(event: WheelEvent): void {
+  const canvas = cv();
+  const current = canvas?.stage?.scale?.x;
+  if (!canvas?.pan || !current || !event.deltaY) return;
+  const limits = cfg()?.Canvas ?? {};
+  const next = Math.min(
+    limits.maxZoom ?? 3,
+    Math.max(limits.minZoom ?? 0.1, current * (event.deltaY < 0 ? ZOOM_STEP : 1 / ZOOM_STEP))
+  );
+  if (next === current) return;
+  const pivot = canvas.stage?.pivot;
+  if (!pivot || !Number.isFinite(pivot.x)) {
+    canvas.pan({ scale: next });
+    return;
+  }
+  const at = pointerScenePoint(event as unknown as PointerEvent);
+  const keep = current / next;
+  canvas.pan({
+    x: at.x + (pivot.x - at.x) * keep,
+    y: at.y + (pivot.y - at.y) * keep,
+    scale: next,
   });
 }
 
