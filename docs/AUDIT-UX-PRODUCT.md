@@ -1,6 +1,9 @@
 # Documents Pinner — ergonomics and product audit
 
 **Audited:** `59f786a` (0.3.3), 2026-09-30. 57 test files, 964 tests, all green.
+**Status:** S1 resolved by documenting the default in the README; S2 and S5 fixed on
+`main` (`5485811`, `e71bc0c`). Everything else is scheduled in
+[`PLAN-FEATURE-GAPS.md`](PLAN-FEATURE-GAPS.md).
 **Lens:** two people. A GM who has run investigation and dungeon games at a real table for
 years and cares what the table *experiences*, and a product lead who cares whether the
 module's promises hold and whether the next release moves it forward.
