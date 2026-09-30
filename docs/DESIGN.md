@@ -1227,3 +1227,36 @@ It also came within one line of a deadlock that nothing would have reported.
 a task that enqueues on the same anchor id awaits its own completion: no error, no timeout,
 the button simply never does anything. Only a test that puts work on the queue *first* can
 see it, and there is now one.
+
+### A23 — The grant follows the page the pin shows (2026-09-30)
+
+A22 kept the grant on the entry so that the journal would reach the player's sidebar, and
+measured that a page inherits from it. Both halves were right, and together they were the
+fault: **every page inherits**, so a pin showing page 3 of "Chapter 3 — GM notes" granted
+the whole chapter, and the sidebar access outlives the pin by design. A GM revealing one
+letter handed over the adventure.
+
+`grantTargets` now decides where a grant lands, and every writer and the `ready` sweep ask
+it. The page the pin shows gets the level its audience asks for; its journal gets
+**LIMITED**, which lists the journal in the sidebar and lets its sheet open, and opens no
+text page that inherits (§4). A pin on a whole journal still shares the whole journal, and
+the Studio's Audience tab now says which of the two a reveal will do. A chosen page that
+has since been deleted grants nothing, rather than falling back to the journal.
+
+Three consequences worth stating:
+
+- **A pin's grants span a family**, the journal and its pages, so releasing one walks the
+  family, and a retarget passes the old uuid INTO the sync rather than releasing after it.
+  Re-pointing a pin from a journal to one of its own pages puts both documents in one
+  family, and a release after the sync took back the grant it had just made.
+- **Choosing another page is an ownership change.** `patchAndSync` re-synced only on an
+  audience patch, so the grant stayed on the page the pin no longer showed.
+- **Worlds already hold the old grants.** `reconcile` narrows any holder recorded above
+  the level its target now asks for, once, on the primary GM's `ready`, and says how many.
+
+**Unverified, and the first thing to check in a live world:** that on 14.365 a player
+with LIMITED on an entry and OBSERVER on one of its pages sees the entry in the sidebar and
+can open that page from the sidebar and from a pin; and whether an IMAGE page inheriting
+LIMITED is shown to them. §4 measured text pages only. If image pages show at LIMITED, the
+journal's listing leaks its images and the entry needs NONE plus a different route to the
+sidebar.

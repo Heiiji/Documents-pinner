@@ -67,6 +67,7 @@ describe("retarget, as the payload sees it", () => {
     vi.doMock("../src/data/ownership-sync", () => ({
       syncAnchor: vi.fn(async () => {}),
       releaseAnchor: vi.fn(async () => {}),
+      grantTargets: vi.fn(() => []),
     }));
     tile = pinnedTile();
     installWorld({ isGM: true, tiles: [tile] });
@@ -111,15 +112,15 @@ describe("retarget, as the payload sees it", () => {
     expect(toDocument[`flags.${MODULE_ID}.${FLAGS.PIN}`].source.uuid).toBe("JournalEntry.new");
   });
 
-  it("grants on the new source before releasing the old, so nobody is briefly locked out", async () => {
-    const order: string[] = [];
-    vi.mocked(sync.syncAnchor).mockImplementation(async () => void order.push("grant"));
-    vi.mocked(sync.releaseAnchor).mockImplementation(async () => void order.push("release"));
-
+  it("hands the sync the old document, so one pass grants the new and releases the old", async () => {
     await api.retarget(tile, source({ uuid: "JournalEntry.new" }));
 
-    expect(order).toEqual(["grant", "release"]);
-    expect(sync.releaseAnchor).toHaveBeenCalledWith(tile, "JournalEntry.old");
+    // One call, not a sync and then a release: a pin moved between a journal and one of
+    // its own pages has both documents in one family, and a separate release of the old
+    // family took back the grant the sync had just made. The order — grant, then
+    // release — is asserted on real documents below.
+    expect(sync.syncAnchor).toHaveBeenCalledWith(tile, "JournalEntry.old");
+    expect(sync.releaseAnchor).not.toHaveBeenCalled();
   });
 
   it("does nothing for a player, or for the source the pin already has", async () => {
@@ -195,6 +196,37 @@ describe("retarget, as the two documents see it", () => {
     expect(oldDoc.ownership.ali).toBe(3);
     expect(oldDoc.flags[MODULE_ID]?.[FLAGS.GRANTS] ?? null).toBeNull();
     // LIMITED by hand is raised to the level the audience asks for, reversibly.
+    expect(newDoc.ownership.ali).toBe(2);
+  });
+
+  it("grants on the new document before releasing the old, so nobody is briefly locked out", async () => {
+    vi.doUnmock("../src/data/ownership-sync");
+    vi.resetModules();
+    const tile = pinnedTile();
+    const writes: string[] = [];
+    const oldDoc = fakeDoc({ id: "old", uuid: "JournalEntry.old", ownership: {} });
+    const newDoc = fakeDoc({ id: "new", uuid: "JournalEntry.new", ownership: {} });
+    for (const doc of [oldDoc, newDoc]) {
+      const update = doc.update;
+      doc.update = async (changes: any, context?: any) => {
+        writes.push(doc.id);
+        return update(changes, context);
+      };
+    }
+    const byUuid: Record<string, any> = { "JournalEntry.old": oldDoc, "JournalEntry.new": newDoc };
+
+    installWorld({ isGM: true, tiles: [tile] });
+    (globalThis as any).fromUuid = async (uuid: string) => byUuid[uuid] ?? null;
+
+    const api = await import("../src/api");
+    const sync = await import("../src/data/ownership-sync");
+    await sync.syncAnchor(tile);
+    writes.length = 0;
+
+    await api.retarget(tile, source({ uuid: "JournalEntry.new" }));
+
+    expect(writes).toEqual(["new", "old"]);
+    expect(oldDoc.ownership.ali).toBeUndefined();
     expect(newDoc.ownership.ali).toBe(2);
   });
 });

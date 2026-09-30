@@ -15,7 +15,7 @@
  * add their own holder and write back, and the slower would erase the faster's claim.
  */
 
-import { DELETE_PREFIX, FLAGS, MODULE_ID } from "../const";
+import { DELETE_PREFIX, FLAGS, MODULE_ID, OWNERSHIP } from "../const";
 import { logger } from "../log";
 import {
   forcedDeletion,
@@ -29,6 +29,7 @@ import {
   ns,
   playerIds,
   resolveUuid,
+  resolveUuidSync,
 } from "../fvtt";
 import type { DpGrantLedger } from "../types/dp";
 import { grantKeysFor } from "./audience";
@@ -139,44 +140,124 @@ function writeLedger(
   if (doc?.flags?.[MODULE_ID]?.[FLAGS.GRANTS] !== undefined) data[path] = forcedDeletion() ?? null;
 }
 
+/** One document an anchor's grant lands on, and the level it is raised to there. */
+export interface GrantTarget {
+  doc: any;
+  level: number;
+}
+
+/**
+ * Where one anchor's grant lands, and at what level.
+ *
+ * The document the pin SHOWS gets the level its audience asks for. When that is a page,
+ * its journal gets LIMITED beside it: enough for the journal to be listed in the player's
+ * sidebar and for its sheet to open on the page — which a grant on the page alone does
+ * not do (DESIGN A22) — and not enough to open any page that inherits from it, because
+ * at LIMITED a text page is not even listed (DESIGN §4).
+ *
+ * It used to be the level on the journal, whatever page the pin showed. Every page with
+ * `default: -1` inherits, so revealing page 3 of "Chapter 3 — GM notes" put the whole
+ * chapter in every player's sidebar, and the sidebar access outlives the pin by design.
+ *
+ * A chosen page that no longer exists grants nothing. The card falls back to the
+ * journal's first page, but a page the GM picked and then deleted is not a request to
+ * share the whole journal.
+ */
+export function grantTargets(named: any, pageId: string | null, level: number): GrantTarget[] {
+  if (!named) return [];
+  let shown = named;
+  if (pageId && named.pages?.get) {
+    shown = named.pages.get(pageId);
+    if (!shown) return [];
+  }
+  const entry = shown.documentName === "JournalEntryPage" ? shown.parent : null;
+  if (!entry) return [{ doc: shown, level }];
+  return [
+    { doc: shown, level },
+    { doc: entry, level: Math.min(level, OWNERSHIP.LIMITED) },
+  ];
+}
+
+/**
+ * Every document a grant for this source can sit on: its journal and each of its pages.
+ *
+ * A pin's grants never leave that family — choosing another page moves them between its
+ * members — so this is the whole set a stale grant can be found in without walking the
+ * world. Changing the pin's DOCUMENT is the one move that leaves it, and `syncAnchor`
+ * takes the old uuid for exactly that.
+ */
+function familyOf(doc: any): any[] {
+  if (!doc) return [];
+  const entry = doc.documentName === "JournalEntryPage" ? (doc.parent ?? null) : doc;
+  if (!entry) return [doc];
+  return [entry, ...(entry.pages?.contents ?? [])];
+}
+
+/** Compendium ownership is role-based and pack-wide: there is no per-user grant to make. */
+const grantable = (doc: any) => !!doc?.update && !doc.pack;
+
+async function grantOn(doc: any, anchor: string, keys: string[], level: number): Promise<void> {
+  await enqueue(`grants:${doc.uuid}`, async () => {
+    const plan = planRetarget({ ...(doc.ownership ?? {}) }, ledgerOf(doc), {
+      anchorUuid: anchor,
+      keys,
+      level,
+    });
+    await applyPlan(doc, plan);
+  });
+}
+
+async function releaseOn(doc: any, anchor: string): Promise<void> {
+  if (!grantable(doc)) return;
+  await enqueue(`grants:${doc.uuid}`, async () => {
+    // Read inside the queue, so a grant still in flight on this document is seen. Most of
+    // a journal's pages hold nothing for this anchor, and asking them must cost no write.
+    const stored = ledgerOf(doc);
+    if (!keysHeldBy(stored, anchor).length) return;
+    await applyPlan(doc, planRelease({ ...(doc.ownership ?? {}) }, stored, anchor));
+  });
+}
+
 /**
  * Bring a source document's ownership in line with one anchor's audience.
  *
  * Retarget rather than release-then-grant, so a user present in both the old and the
  * new audience is never transiently revoked — which on a live table would show up as
- * the journal blinking out of a player's sidebar mid-sentence.
+ * the journal blinking out of a player's sidebar mid-sentence. The same order holds
+ * across documents: every target is granted before anything is released, so choosing
+ * another page never leaves the player holding neither.
+ *
+ * `previousUuid` is the document the pin named before a retarget. Its family is swept
+ * too, since the payload no longer names it and nothing else could find it.
  */
-export async function syncAnchor(anchorDoc: any): Promise<void> {
+export async function syncAnchor(
+  anchorDoc: any,
+  previousUuid: string | null = null
+): Promise<void> {
   if (!isGM()) return;
 
   const pin = readPin(anchorDoc);
   if (!pin) return;
-  if (pin.source.kind !== "document" || !pin.source.uuid) return;
-
-  const source = await resolveUuid(pin.source.uuid);
-  if (!source?.update) return;
-
-  // Compendium ownership is role-based and pack-wide; there is no per-user grant to
-  // make, so the pin still reveals content but the sidebar half simply does not apply.
-  if (source.pack) return;
 
   const anchor = anchorDoc.uuid;
-  await enqueue(`grants:${source.uuid}`, async () => {
-    const current = { ...(source.ownership ?? {}) };
-    const stored = ledgerOf(source);
+  const named = pin.source.kind === "document" ? await resolveUuid(pin.source.uuid) : null;
+  const own = grantable(named) ? named : null;
 
-    const keys = pin.audience.ownershipSync.enabled ? grantKeysFor(pin.audience, playerIds()) : [];
+  const keys = pin.audience.ownershipSync.enabled ? grantKeysFor(pin.audience, playerIds()) : [];
+  const targets = keys.length
+    ? grantTargets(own, pin.source.pageId, pin.audience.ownershipSync.level)
+    : [];
+  for (const target of targets) await grantOn(target.doc, anchor, keys, target.level);
 
-    const plan = keys.length
-      ? planRetarget(current, stored, {
-          anchorUuid: anchor,
-          keys,
-          level: pin.audience.ownershipSync.level,
-        })
-      : planRelease(current, stored, anchor);
-
-    await applyPlan(source, plan);
-  });
+  const previous =
+    previousUuid && previousUuid !== pin.source.uuid ? await resolveUuid(previousUuid) : null;
+  const kept = new Set(targets.map((target) => target.doc.uuid));
+  const seen = new Set<string>();
+  for (const doc of [...familyOf(own), ...familyOf(previous)]) {
+    if (kept.has(doc.uuid) || seen.has(doc.uuid)) continue;
+    seen.add(doc.uuid);
+    await releaseOn(doc, anchor);
+  }
 }
 
 /** Drop every claim an anchor holds. Called when a pin is deleted or unpinned. */
@@ -189,13 +270,7 @@ export async function releaseAnchor(anchorDoc: any, sourceUuid?: string | null):
   const uuid = sourceUuid ?? readPin(anchorDoc)?.source.uuid ?? null;
   const anchor = anchorDoc?.uuid ?? "";
 
-  const source = await resolveUuid(uuid);
-  if (!source?.update || source.pack) return;
-
-  await enqueue(`grants:${source.uuid}`, async () => {
-    const plan = planRelease({ ...(source.ownership ?? {}) }, ledgerOf(source), anchor);
-    await applyPlan(source, plan);
-  });
+  for (const doc of familyOf(await resolveUuid(uuid))) await releaseOn(doc, anchor);
 }
 
 /**
@@ -312,31 +387,60 @@ export function ownershipChange(
  *
  * Runs on the primary GM only, and reports what it repaired rather than doing it
  * quietly: an orphaned grant is a player still holding permission they should not.
+ *
+ * It also NARROWS. Until 0.3.4 a pin showing one page granted its level on the whole
+ * journal; `grantTargets` now puts it on the page and LIMITED on the journal. A world
+ * holds grants made the old way, and a pin whose audience is never touched again would
+ * keep handing out the whole journal forever — so a holder recorded above the level its
+ * anchor's target asks for is re-synced, which moves the grant where it belongs.
  */
 export async function reconcile(): Promise<number> {
   if (!isPrimaryGM()) return 0;
 
-  // Anchor uuid -> the source uuid it currently names. A live anchor is not enough; what
-  // matters is whether it still points at the document holding the grant.
-  const anchorSources = new Map<string, string | null>();
+  // Anchor uuid -> the tile, and the level it may hold on each document it targets. A
+  // live anchor is not enough; what matters is whether it still points at the document
+  // holding the grant. Resolved synchronously: a grant never sits in a compendium, and
+  // loading packs to learn that at `ready` would cost more than the sweep.
+  const anchors = new Map<
+    string,
+    { tile: any; source: string | null; levels: Map<string, number> }
+  >();
   for (const scene of g()?.scenes?.contents ?? []) {
     for (const tile of scene.tiles?.contents ?? []) {
       const pin = readPin(tile);
-      if (pin) anchorSources.set(tile.uuid, pin.source.uuid);
+      if (!pin) continue;
+      const named = pin.source.kind === "document" ? resolveUuidSync(pin.source.uuid) : null;
+      const targets = grantTargets(
+        grantable(named) ? named : null,
+        pin.source.pageId,
+        pin.audience.ownershipSync.level
+      );
+      anchors.set(tile.uuid, {
+        tile,
+        source: pin.source.uuid,
+        levels: new Map(targets.map((target) => [target.doc.uuid, target.level])),
+      });
     }
   }
 
   let repaired = 0;
+  const narrow = new Set<string>();
   for (const source of sourcesWithLedger()) {
     const stored = ledgerOf(source);
     if (!stored) continue;
 
     const orphans = new Set<string>();
     for (const holders of Object.values(stored.holders ?? {})) {
-      for (const anchorUuid of Object.keys(holders)) {
-        // Exact comparison against what `syncAnchor` resolves, which keeps the
-        // entry-source / page-source asymmetry correct with no special case.
-        if (anchorSources.get(anchorUuid) !== source.uuid) orphans.add(anchorUuid);
+      for (const [anchorUuid, level] of Object.entries(holders)) {
+        const anchor = anchors.get(anchorUuid);
+        // The document the pin names is always its own, as it always was; a page or a
+        // journal beside it is its own when `grantTargets` says so.
+        const target = anchor?.levels.get(source.uuid);
+        if (!anchor || (target === undefined && anchor.source !== source.uuid)) {
+          orphans.add(anchorUuid);
+        } else if (target !== undefined && level > target) {
+          narrow.add(anchorUuid);
+        }
       }
     }
     if (!orphans.size) continue;
@@ -356,6 +460,14 @@ export async function reconcile(): Promise<number> {
 
   if (repaired) {
     notify({ key: "DP.notice.ledgerRepaired", data: { count: repaired } }, "warn");
+  }
+
+  for (const anchorUuid of narrow) {
+    const tile = anchors.get(anchorUuid)?.tile;
+    if (tile) await syncAnchor(tile);
+  }
+  if (narrow.size) {
+    notify({ key: "DP.notice.grantsNarrowed", data: { count: narrow.size } }, "info");
   }
   return repaired;
 }

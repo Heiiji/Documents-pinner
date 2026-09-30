@@ -7,7 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Nothing yet.
+### Fixed
+
+- **Revealing one page handed over the whole journal.** Access was granted on the journal
+  whatever page the pin showed, and every page that inherits its permissions — every page,
+  by default — went with it, into the players' sidebars, for good. A pin showing one page
+  now grants that page, and lists its journal as Limited so the page can be reached; a pin
+  on a whole journal still shares the whole journal. The Studio's Audience tab says which
+  a reveal will do. Grants an earlier version made are narrowed the next time the world
+  loads, and the GM is told how many.
+- **Choosing another page in Pin Studio left the access on the old one.** The grant moves
+  with the page now.
+- **The README said a new pin stays hidden until you reveal it.** It is visible by default
+  — that is the *Default visibility* setting — and the README now says so, and how to
+  change it.
 
 ## [0.3.3] — 2026-09-30
 

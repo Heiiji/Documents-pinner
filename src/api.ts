@@ -26,7 +26,7 @@ import {
   naturalSize,
   type PinPatch,
 } from "./data/pin-schema";
-import { releaseAnchor, syncAnchor } from "./data/ownership-sync";
+import { grantTargets, releaseAnchor, syncAnchor } from "./data/ownership-sync";
 import { findPreset } from "./effects/preset-library";
 import { resolveCard } from "./render/ContentResolver";
 import * as settings from "./settings";
@@ -135,6 +135,31 @@ export function pageChoices(pin: DpPinFlags): { id: string; name: string; type: 
     name: page.name ?? "",
     type: page.type ?? "text",
   }));
+}
+
+/** What revealing a pin shares, for the Studio to say where the choice is made. */
+export type GrantScope =
+  { kind: "page"; page: string; entry: string } | { kind: "journal"; entry: string; pages: number };
+
+/**
+ * One page and its journal's listing, or a whole journal — or null when revealing grants
+ * nothing at all: an image, a compendium, a document that is gone.
+ *
+ * Read off `grantTargets`, the function the grant itself is made by, so the sentence the
+ * GM reads and the permission the player receives cannot drift apart.
+ */
+export function grantScope(pin: DpPinFlags): GrantScope | null {
+  if (pin.source.kind !== "document") return null;
+  const named = resolveUuidSync(pin.source.uuid);
+  if (!named || named.pack) return null;
+  const [shown, entry] = grantTargets(
+    named,
+    pin.source.pageId,
+    pin.audience.ownershipSync.level
+  ).map((target) => target.doc);
+  if (!shown) return null;
+  if (entry) return { kind: "page", page: shown.name ?? "", entry: entry.name ?? "" };
+  return { kind: "journal", entry: shown.name ?? "", pages: shown.pages?.contents?.length ?? 0 };
 }
 
 /**
@@ -299,17 +324,22 @@ export async function setAudience(anchorDoc: any, next: DpAudience): Promise<voi
 }
 
 /**
- * Patch a pin and, if the patch touched its audience, bring ownership in line.
+ * Patch a pin and, if the patch touched its audience or its page, bring ownership in line.
  *
  * The single entry point for a form or an API caller editing audience fields by path.
  * It deep-merges through `PinStore.update` rather than spreading, because a shallow
  * spread of `{ ownershipSync: { level } }` would replace the whole group and silently
  * re-enable a sync the GM had turned off.
+ *
+ * The page counts because the grant follows it (`grantTargets`). Choosing another page in
+ * the Studio used to leave the access on the page the pin no longer showed.
  */
 export async function patchAndSync(anchorDoc: any, changes: PinPatch): Promise<void> {
   if (!isGM()) return;
   await store.update(anchorDoc, changes);
-  if (changes.audience) await syncAnchor(anchorDoc);
+  if (changes.audience || (changes.source && "pageId" in changes.source)) {
+    await syncAnchor(anchorDoc);
+  }
 }
 
 function withAudience(
@@ -737,10 +767,12 @@ export async function retarget(anchorDoc: any, source: DpSource): Promise<boolea
     keepIcon ? {} : { "texture.src": anchorTexture(source) }
   );
 
-  await syncAnchor(anchorDoc);
-  // `releaseAnchor` takes an explicit uuid precisely for this: the payload no longer
-  // names the old document, so it cannot find it on its own any more.
-  if (oldUuid && oldUuid !== source.uuid) await releaseAnchor(anchorDoc, oldUuid);
+  // The old uuid rides along precisely for this: the payload no longer names the old
+  // document, so the sync cannot find it on its own any more. One call, not a sync and
+  // then a release, because a pin moved between a journal and one of its own pages has
+  // an old document and a new one in the same family — and releasing the old family
+  // after granting the new one took back the grant just made.
+  await syncAnchor(anchorDoc, oldUuid);
 
   return true;
 }

@@ -419,6 +419,25 @@ function appearanceTab(doc: any, pin: DpPinFlags, options: StudioOptions = {}, a
   );
 }
 
+/**
+ * What revealing this pin shares, said where access is switched on.
+ *
+ * A grant outlives the pin by design, so "which document, and how much of it" is the one
+ * question to answer before the checkbox rather than after. A pin on a whole journal
+ * shares every page in it, and nothing on this tab used to say so.
+ */
+function grantNote(pin: DpPinFlags): string {
+  if (!pin.audience.ownershipSync.enabled) return "";
+  const scope = api.grantScope(pin);
+  if (!scope) return "";
+  const text =
+    scope.kind === "page"
+      ? t("DP.studio.grantsPage", { page: scope.page, entry: scope.entry })
+      : t("DP.studio.grantsJournal", { entry: scope.entry }) +
+        (scope.pages > 1 ? ` ${t("DP.studio.grantsJournalHint")}` : "");
+  return `<p class="dp-studio__note" data-dp-grants="${scope.kind}">${escapeHtml(text)}</p>`;
+}
+
 function audienceTab(doc: any, pin: DpPinFlags, attrs = ""): string {
   const users = chipUsersFor(doc);
   return (
@@ -444,6 +463,7 @@ function audienceTab(doc: any, pin: DpPinFlags, attrs = ""): string {
       checkbox("audience.ownershipSync.enabled", pin.audience.ownershipSync.enabled),
       "DP.studio.syncHint"
     ) +
+    grantNote(pin) +
     field(
       "DP.studio.syncLevel",
       select("audience.ownershipSync.level", String(pin.audience.ownershipSync.level), [
