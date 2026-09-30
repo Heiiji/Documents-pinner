@@ -1,6 +1,6 @@
 # Documents Pinner
 
-Pin any journal, page or image onto the map — as a small icon players click, or as a
+Pin any journal, page or image onto the map — as a small **icon** players click, or as a
 full-size **readable prop lying on the scene**.
 
 Per-pin visibility the GM changes in one click. Foundry VTT **v14+**.
@@ -57,7 +57,7 @@ sidebar — so if you prepare scenes while players are connected, change the def
 | Placing | |
 |---|---|
 | wheel | rotate 15° · `Shift` 1° · `Alt` scale the box · `Shift+Alt` text size · `Ctrl`/`⌘` zoom |
-| `Space` | pin ↔ prop |
+| `Space` | icon ↔ prop |
 | `E` / `V` / `R` / `F` | effect · audience · reset rotation · fit height to content |
 | `Ctrl`/`⌘` | free placement (no grid snap) |
 | click | place · `Shift+click` keeps placing · `Esc` or right-click cancels · right-drag pans |
@@ -177,8 +177,9 @@ MIT — see [LICENSE](LICENSE).
 
 # Documents Pinner (français)
 
-Épinglez n'importe quel journal, page ou image sur la carte — sous forme d'une petite icône
-sur laquelle les joueurs cliquent, ou d'un **accessoire lisible posé à même la scène**.
+Épinglez n'importe quel journal, page ou image sur la carte — sous forme d'une petite
+**icône** sur laquelle les joueurs cliquent, ou d'un **accessoire lisible posé à même la
+scène**.
 
 Une visibilité que le MJ change en un clic. Foundry VTT **v14+**.
 
@@ -236,7 +237,7 @@ réglage.
 | Placement | |
 |---|---|
 | molette | pivoter 15° · `Maj` 1° · `Alt` redimensionner le cadre · `Maj+Alt` taille du texte · `Ctrl`/`⌘` zoom |
-| `Espace` | épingle ↔ accessoire |
+| `Espace` | icône ↔ accessoire |
 | `E` / `V` / `R` / `F` | effet · public · réinitialiser la rotation · ajuster la hauteur au contenu |
 | `Ctrl`/`⌘` | placement libre (sans aimantation) |
 | clic | poser · `Maj+clic` enchaîne · `Échap` ou clic droit annule · glisser clic droit déplace la vue |

@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **The small shape is called an icon.** *Pin* named both the thing you place and one of
+  the two shapes it can take, so the HUD offered to "Shrink to a pin", a key switched "the
+  selected pins between pin and prop", and the Pinboard filtered its list of pins by
+  *Pins*. The shape is *Icon* now — in the HUD, the Pinboard's column and filter, the
+  placement legend, Pin Studio, the *Default shape* setting, Configure Controls and the
+  README, and *icône* in French. A pin is still the thing itself, whichever shape it takes.
+  Nothing stored changes, so every pin and the setting keep their shape.
+
 ### Fixed
 
 - **Revealing one page handed over the whole journal.** Access was granted on the journal
