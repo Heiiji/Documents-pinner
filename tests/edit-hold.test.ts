@@ -261,6 +261,73 @@ describe("Hide while I edit", () => {
 
     expect(stored()).toMatchObject({ kind: "hidden", restore: { kind: "everyone" } });
   });
+
+  /**
+   * Shown again and hidden again by hand, the pin remembers exactly what the hold
+   * remembered, so "is it still as the hold left it?" answers yes — and the close used to
+   * reveal it against the GM's last word. Once it has shown, the hold is over.
+   */
+  describe("a pin shown again by hand, then hidden again by hand", () => {
+    const hiddenForAli = { kind: "hidden", restore: { kind: "selected", users: ["ali"] } };
+
+    async function showThenHide() {
+      const api = await import("../src/api");
+      await openStudio();
+      await studio.dispatch("holdForEdit");
+      await settle();
+      await api.toggleVisibility(tile);
+      // What `refreshStudios` does when the tile's update lands.
+      await studio.render();
+      await api.toggleVisibility(tile);
+      await studio.render();
+    }
+
+    it("stays hidden when the Studio closes", async () => {
+      await showThenHide();
+      expect(stored()).toMatchObject(hiddenForAli);
+      expect(holds()).toEqual([]);
+
+      await studio.close();
+      await settle();
+      await settle();
+      expect(stored()).toMatchObject(hiddenForAli);
+      expect(tile.hidden).toBe(true);
+      expect(holds()).toEqual([]);
+    });
+
+    it("stays hidden across a reload", async () => {
+      await showThenHide();
+      const { resumeEditHolds } = await import("../src/apps/PinStudio");
+      expect(await resumeEditHolds()).toBe(0);
+      expect(stored()).toMatchObject(hiddenForAli);
+    });
+
+    it("stays hidden when the chips did it", async () => {
+      await setup({ kind: "everyone" });
+      await openStudio();
+      await studio.dispatch("holdForEdit");
+      await settle();
+      studio.tab = "audience";
+      await studio.render();
+
+      const chip = () =>
+        contentOf(studio).querySelector<HTMLElement>('.dp-chip[data-dp-user="ali"]')!;
+      // Ali alone sees it; then nobody does, which hides it remembering everyone — the
+      // very audience the hold remembered.
+      chip().click();
+      await vi.waitFor(() => expect(stored()).toMatchObject({ kind: "selected" }));
+      await settle();
+      chip().click();
+      await vi.waitFor(() => expect(stored().kind).toBe("hidden"));
+      expect(stored().restore).toMatchObject({ kind: "everyone" });
+
+      await studio.close();
+      await settle();
+      await settle();
+      expect(stored().kind).toBe("hidden");
+      expect(holds()).toEqual([]);
+    });
+  });
 });
 
 /** A reload between the hide and the close: the Studio never gets to end its hold. */

@@ -763,6 +763,24 @@ export function definePinStudio(): any {
       if (this.rendered) this.render();
     }
 
+    /**
+     * The pin showed again since the hide: whatever the GM does to it next is theirs, not
+     * the close's.
+     *
+     * `resumeAfterEdit` can only compare what the pin remembers with what the hold
+     * remembers, and a pin shown again by hand and hidden again by hand remembers the
+     * same audience — so the close revealed it against the GM's last word. The hold ends
+     * the moment the pin is seen showing, in memory and in the setting a reload reads.
+     */
+    dropHold() {
+      const hold = this.hold;
+      if (!hold) return;
+      this.hold = null;
+      void writeHolds((holds) => holds.filter((h) => h.anchor !== hold.anchor)).catch(
+        (error: unknown) => log.warn("could not forget the edit hold", error)
+      );
+    }
+
     /** The fire-and-forget form the close and the banner's button use. */
     runResume() {
       void this.resumeHold().catch((error: unknown) => {
@@ -795,6 +813,11 @@ export function definePinStudio(): any {
 
     async _renderHTML() {
       const pin = readPin(this.doc);
+      // Every audience change reaches an open Studio as a render — `refreshStudios` on the
+      // tile's update, or the chip handler's own — so the first render that finds the pin
+      // showing, outside the hide's own write, is where a hold learns it is over.
+      const showing = this.doc?.hidden !== true && pin?.audience.kind !== "hidden";
+      if (pin && showing && this.hold && !this.hiding) this.dropHold();
       const wrapper = document.createElement("div");
       wrapper.innerHTML = pin
         ? studioMarkup(this.doc, pin, this.tab, {
