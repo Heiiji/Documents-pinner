@@ -33,6 +33,7 @@ import type {
   DpSource,
 } from "../types/dp";
 import { makeAudience } from "./audience";
+import { fontFamily } from "../effects/typeface";
 
 export const PIN_SCHEMA_VERSION = SCHEMA_VERSION;
 
@@ -135,6 +136,7 @@ export function defaultDisplay(): DpDisplay {
     padding: 0.06,
     typeSize: null,
     margin: null,
+    font: null,
     fadeUnderTokens: true,
     fadeUnderTokensAlpha: 0.25,
   };
@@ -260,6 +262,9 @@ function normaliseDisplay(raw: unknown, warnings: DpNotice[]): DpDisplay {
     padding: num(s.padding, d.padding, 0, 0.5),
     typeSize: nullableNum(s.typeSize, TYPE_SIZE_MIN, TYPE_SIZE_MAX),
     margin: nullableNum(s.margin, 0, MARGIN_MAX_EM),
+    // A name reaching CSS from a flag anyone with the file can edit: the same rule a
+    // stranger's preset meets, and a name it refuses leaves the preset to decide.
+    font: fontFamily(s.font, warnings, "display.font", "DP.pin.warn.badFont"),
     fadeUnderTokens: bool(s.fadeUnderTokens, d.fadeUnderTokens),
     fadeUnderTokensAlpha: num(s.fadeUnderTokensAlpha, d.fadeUnderTokensAlpha, 0, 1),
   };

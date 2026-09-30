@@ -235,6 +235,20 @@ describe("syncDomTier", () => {
     expect(resolveCard).toHaveBeenCalledTimes(2);
   });
 
+  it("re-resolves when the pin's own typeface changes, and not before", async () => {
+    const faced = (font: string | null) =>
+      pin({ display: { ...defaultPin().display, typeSize: 12, margin: 1.5, font } });
+    syncDomTier([entry({ pin: faced(null) })]);
+    await settle();
+    syncDomTier([entry({ pin: faced(null) })]);
+    await settle();
+    expect(resolveCard).toHaveBeenCalledTimes(1);
+
+    syncDomTier([entry({ pin: faced("monospace") })]);
+    await settle();
+    expect(resolveCard).toHaveBeenCalledTimes(2);
+  });
+
   it("still re-resolves a legacy prop when its short edge changes, since its type derives from the tile", async () => {
     // Default pin: typeSize and margin are null, so the metrics follow min(width, height).
     syncDomTier([entry()]);

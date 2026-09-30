@@ -339,6 +339,11 @@ describe("the appearance tab for a PDF prop", () => {
     }
   });
 
+  it("disables the typeface too: a PDF has no card and no text of the module's to set", () => {
+    expect(pdfMarkup()).toMatch(/<select name="display\.font" disabled>/);
+    expect(studioMarkup(doc, pin(), "appearance")).toMatch(/<select name="display\.font">/);
+  });
+
   it("leaves the controls a PDF DOES honour alone", () => {
     const markup = pdfMarkup();
     expect(markup).toMatch(/name="effect\.intensity"[^>]*>/);

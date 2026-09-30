@@ -129,6 +129,9 @@ export async function resolveCard(
     effectId: pin.effect.id,
     effectStyle: dressed?.style,
     effectAttrs: dressed?.attrs,
+    // The pin's own face wins, then the preset's. Read from the preset rather than from
+    // the dressing, which is empty at `off` and at the silhouette rung (K6).
+    font: pin.display.font ?? preset?.params.type.family ?? null,
   };
 
   if (pin.source.kind === "image") {

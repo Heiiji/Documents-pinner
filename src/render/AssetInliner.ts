@@ -18,7 +18,7 @@
  */
 
 import { logger } from "../log";
-import { g, onIdle } from "../fvtt";
+import { cfg, g, ns, onIdle } from "../fvtt";
 import { serialiseXml } from "./enrich";
 
 const log = logger("assets");
@@ -165,15 +165,56 @@ let fontFaceCss: string | null = null;
 let fontWarm: Promise<string> | null = null;
 
 /**
+ * Every font family this world defines, with the files behind it.
+ *
+ * Two sources, and the second is the one that was missed: core's `CONFIG.fontDefinitions`,
+ * and the faces a GM added in Font Config, which live in core's own `fonts` setting and are
+ * NOT merged into CONFIG (`FontConfig._collectDefinitions` reads both). A name both define
+ * takes CONFIG's definition. The setting read is guarded: on a build where the setting is
+ * not registered, `settings.get` throws, and the answer is simply CONFIG's list.
+ */
+function fontDefinitions(): Record<string, any> {
+  const out: Record<string, any> = {};
+  try {
+    const FontConfig = ns("applications.settings.menus.FontConfig");
+    const stored = g()?.settings?.get?.("core", FontConfig?.SETTING ?? "fonts");
+    if (stored && typeof stored === "object") Object.assign(out, stored);
+  } catch (error) {
+    log.debug(`Font Config's own fonts could not be read`, error);
+  }
+  const config = cfg()?.fontDefinitions;
+  if (config && typeof config === "object") Object.assign(out, config);
+  return out;
+}
+
+/**
+ * The family names a typeface picker may offer, before `typeface.fontChoices` filters them.
+ *
+ * Defined HERE, beside the inliner, so the canvas tier can draw whatever the picker lists:
+ * both read `fontDefinitions`. `getAvailableFonts` — the faces that loaded with `editor:
+ * true` — is folded in for a build that registers a face some other way.
+ */
+export function registeredFontFamilies(): string[] {
+  const names = new Set(Object.keys(fontDefinitions()));
+  try {
+    const available = ns("applications.settings.menus.FontConfig")?.getAvailableFonts?.();
+    if (Array.isArray(available)) {
+      for (const name of available) if (typeof name === "string") names.add(name);
+    }
+  } catch (error) {
+    log.debug(`the available fonts could not be listed`, error);
+  }
+  return [...names];
+}
+
+/**
  * `@font-face` rules with the font files inlined.
  *
  * Built once per session and reused by every card, because the same two or three faces
  * serve every prop and re-encoding them per rasterisation would dominate the cost of
- * drawing one.
- *
- * The source of the font list is derived at runtime: v14 exposes both
- * `CONFIG.fontDefinitions` and `FontConfig.getAvailableFonts()`, and which one carries
- * the URLs has moved between generations.
+ * drawing one. Every defined face is inlined, not only the ones in use: a journal page
+ * can name a face through the editor as well as through a pin. A world that added fonts
+ * pays for them once per session, on the canvas tier only.
  */
 export async function inlineFonts(): Promise<string> {
   if (fontFaceCss !== null) return fontFaceCss;
@@ -188,11 +229,8 @@ export async function inlineFonts(): Promise<string> {
 }
 
 async function buildFontCss(): Promise<string> {
-  const definitions = (globalThis as any).CONFIG?.fontDefinitions;
-  if (!definitions) return "";
-
   const rules: string[] = [];
-  for (const [family, definition] of Object.entries<any>(definitions)) {
+  for (const [family, definition] of Object.entries<any>(fontDefinitions())) {
     for (const face of definition?.fonts ?? []) {
       const urls: string[] = Array.isArray(face?.urls) ? face.urls : [];
       const inlined = (await Promise.all(urls.map(inlineAsset))).filter(Boolean) as string[];

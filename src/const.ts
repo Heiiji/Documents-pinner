@@ -23,8 +23,11 @@ export const MODULE_ID = "documents-pinner";
  *    folded into `pdfPage` by the NORMALISER rather than by the migration, so a player's
  *    unmigrated client already behaves as a migrated one — the same call `clickThrough`
  *    made at schema 2.
+ * 5: `display.font`, a pin's own typeface. Null means "the preset decides", and the
+ *    NORMALISER supplies that null, so a version 4 payload on a player's client already
+ *    draws exactly as it will once the primary GM's sweep has rewritten it.
  */
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 5;
 
 /** Version of the `flags[MODULE_ID].grants` ownership ledger. */
 export const LEDGER_VERSION = 1;

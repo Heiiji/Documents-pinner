@@ -38,7 +38,9 @@
   box-sizing: border-box;
   overflow: hidden;
   color: var(--dp-paper-ink);
-  font-family: "Signika", "Palatino Linotype", Palatino, Georgia, serif;
+  /* The chosen typeface, a stack the card sets on itself (`typeface.fontStack`), else
+     the house face. The fallback is `HOUSE_STACK` verbatim, and a test holds them equal. */
+  font-family: var(--dp-font, "Signika", "Palatino Linotype", Palatino, Georgia, serif);
   line-height: 1.45;
   /*
    * Layered gradients rather than an image: a texture file cannot be referenced from

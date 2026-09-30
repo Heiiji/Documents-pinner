@@ -64,6 +64,8 @@ function card(presetId: string, tier: LodTier, level: EffectsLevel, paper: strin
       effectId: preset.id,
       effectStyle: dressed.style,
       effectAttrs: dressed.attrs,
+      // As `ContentResolver` does: the face is the preset's, handed to the card directly.
+      font: preset.params.type.family,
     }) +
     `</div>` +
     `<p class="cap">${preset.id}<br><span>${tier} · ${level} · cost ${cost.score} ` +

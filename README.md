@@ -91,6 +91,13 @@ page shows at the current width. *Text size* and *Margins* are in Pin Studio, wi
 width and height in grid squares and a ratio lock. So is a pin's **icon** — one of core's
 map-note icons or any image — and hovering a pin names it.
 
+**A prop can have its own typeface.** Pin Studio's Appearance tab sets it — serif, sans
+serif, typewriter, handwriting, or any font your world has, including one added in
+Foundry's Font Config — and otherwise the effect decides: CRT Scanlines, Projected
+Readout, Tagged and Signal Loss type in monospace, Aged Parchment and Sealed & Wax in a
+serif. The Preset Studio's *Type* group sets an effect's own. *Fit to content* measures in
+the chosen face.
+
 Also: a journal sheet header button, the Notes scene controls, sidebar context menus, a
 checkbox on any tile's config sheet to adopt it, and a button on a map note to convert it.
 
@@ -275,6 +282,14 @@ placement) règle la hauteur pour que toute la page tienne à la largeur actuell
 du texte* et *Marges* sont dans Pin Studio, avec la largeur et la hauteur en cases et un
 verrou de ratio. L'**icône** d'une épingle aussi — une icône de note de carte de Foundry
 ou n'importe quelle image — et survoler une épingle affiche son nom.
+
+**Un accessoire peut avoir sa propre police.** L'onglet Apparence du Studio la choisit —
+avec empattements, sans empattements, machine à écrire, manuscrite, ou toute police de
+votre monde, y compris une police ajoutée dans la configuration des polices de Foundry —
+et sinon, l'effet décide : Balayage cathodique, Relevé projeté, Balisé et Perte de signal
+écrivent en chasse fixe, Parchemin vieilli et Sceau de cire avec empattements. Le groupe
+*Typographie* du Studio de préréglages règle celle d'un effet. *Ajuster au contenu* mesure
+dans la police choisie.
 
 Également : un bouton dans l'en-tête d'une fiche de journal, les contrôles de scène Notes,
 les menus contextuels de la barre latérale, une case sur la fiche de n'importe quelle tuile

@@ -16,8 +16,17 @@
 
 import { num, oneOf, warnUnknownKeys } from "../normalise";
 import type { DpMode, DpNotice } from "../types/dp";
+import { fontFamily } from "./typeface";
 
-export const PRESET_SCHEMA_VERSION = 2;
+/**
+ * Bump when the shape of a preset changes.
+ *
+ * 2: the projected overlay, `params.hud`.
+ * 3: the typeface, `params.type.family`. Its null — the card's own face — is supplied by
+ *    the normaliser, so a version 2 preset reads exactly as it drew before, and a version
+ *    3 one imported into an older install is reported as newer and loses only its face.
+ */
+export const PRESET_SCHEMA_VERSION = 3;
 
 export type DpMotion = "none" | "loop" | "onReveal";
 export type DpCost = "low" | "medium" | "high";
@@ -100,6 +109,14 @@ export interface DpPresetParams {
     /** Seconds per sweep pass. Zero is still — the sweep is the only motion here. */
     sweepSec: number;
   };
+  /**
+   * The typeface, as `typeface.fontFamily` accepts it; `null` is the house face.
+   *
+   * Deliberately NOT a variable in the dressing, which drops every effect variable at
+   * `off` and at the silhouette rung: a ransom note does not change its lettering when a
+   * player switches effects off. `ContentResolver` hands it to the card directly.
+   */
+  type: { family: string | null };
 }
 
 export interface DpPreset {
@@ -181,6 +198,7 @@ export function defaultParams(): DpPresetParams {
       weight: 1,
       sweepSec: 0,
     },
+    type: { family: null },
   };
 }
 
@@ -324,6 +342,14 @@ function normaliseParams(raw: unknown, warnings: DpNotice[]): DpPresetParams {
       pitch: num(grp("hud").pitch, d.hud.pitch, 2, 128),
       weight: num(grp("hud").weight, d.hud.weight, 0, 8),
       sweepSec: num(grp("hud").sweepSec, d.hud.sweepSec, 0, 60),
+    },
+    type: {
+      family: fontFamily(
+        grp("type").family,
+        warnings,
+        "params.type.family",
+        "DP.preset.warn.badFont"
+      ),
     },
   };
 }

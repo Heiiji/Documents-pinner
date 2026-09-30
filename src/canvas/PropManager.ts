@@ -747,7 +747,11 @@ class Manager {
       // Removing this would let a GM's texture be served to a player.
       userId: g()?.user?.id ?? "",
       resTier: longEdge,
-      presetBake: `${pin.effect.id}:${pin.effect.intensity}:${pin.effect.seed}:${pin.display.paper}:${this.#level}`,
+      // The pin's own typeface is drawn into the pixels like the paper; a preset's own is
+      // covered by its id.
+      presetBake:
+        `${pin.effect.id}:${pin.effect.intensity}:${pin.effect.seed}:${pin.display.paper}` +
+        `:${pin.display.font ?? ""}:${this.#level}`,
       // The chosen page goes in the docHash and NEVER in `uuid`: `TextureCache.keysFor`
       // prefix-matches `${uuid}|`, so folding it into the uuid would break `invalidate`
       // for every prop on the scene. It has to be here, though — the provisional key

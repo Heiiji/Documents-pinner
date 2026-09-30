@@ -117,6 +117,8 @@ function contentKeyOf(entry: DomPropEntry): string {
     pin.effect.intensity,
     pin.effect.seed,
     pin.display.paper,
+    // The pin's own face; a preset's is covered by the effect id above.
+    pin.display.font ?? "",
     fontPx,
     padPx,
     pin.display.showTitle ? 1 : 0,

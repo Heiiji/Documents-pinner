@@ -31,6 +31,8 @@ import {
   type DpPreset,
 } from "../effects/preset-schema";
 import { currentLevel } from "../effects/level";
+import { fontChoices, fontLabel, fontOptionsMarkup, fontStack } from "../effects/typeface";
+import { registeredFontFamilies } from "../render/AssetInliner";
 import { restoreFocus, snapshotFocus } from "./focus-restore";
 
 let StudioClass: any = null;
@@ -147,6 +149,12 @@ export const GROUPS: {
     inUse: (p) => p.tint.amount > 0 || p.surface.opacity > 0 || p.noise.amount > 0,
   },
   {
+    id: "type",
+    key: "DP.presets.group.type",
+    paths: ["type.family"],
+    inUse: (p) => p.type.family !== null,
+  },
+  {
     id: "edges",
     key: "DP.presets.group.edges",
     paths: [
@@ -202,6 +210,8 @@ export interface PresetStudioContext {
   isOpen?: (groupId: string) => boolean | undefined;
   /** The pin the studio was opened from, so a preset can be put on it from here. */
   target?: { name: string; effectId: string } | null;
+  /** The world's own font families, resolved by the window so this markup stays pure. */
+  fonts?: string[];
 }
 
 /** PURE. Read a dotted path out of a preset's parameters. */
@@ -221,7 +231,11 @@ function readParamText(preset: DpPreset, path: string): string {
 }
 
 /** PURE. Write a dotted path, returning a new preset. */
-export function writeParam(preset: DpPreset, path: string, value: number | string): DpPreset {
+export function writeParam(
+  preset: DpPreset,
+  path: string,
+  value: number | string | null
+): DpPreset {
   const keys = path.split(".");
   const params: any = structuredClone(preset.params);
 
@@ -268,10 +282,14 @@ function previewMarkup(preset: DpPreset, backdrop: Backdrop, frozen: boolean): s
   const attrs = Object.entries(dressed.attrs)
     .map(([key, value]) => ` ${escapeAttr(key)}="${escapeAttr(value)}"`)
     .join("");
+  // The face goes on the card by hand, as the resolver puts it on a pin's: it is not in
+  // the dressing, so a preview built from the dressing alone would show the house face.
+  const font = fontStack(preset.params.type.family);
+  const style = font ? `${dressed.style};--dp-font:${font}` : dressed.style;
 
   return (
     `<div class="dp-presets__preview" data-dp-bg="${backdrop}">` +
-    `<div class="dp-card"${attrs} style="${escapeAttr(dressed.style)}">` +
+    `<div class="dp-card"${attrs} style="${escapeAttr(style)}">` +
     `<div class="dp-card__sheet">` +
     `<h1 class="dp-card__title">${escapeHtml(t(preset.label))}</h1>` +
     `<div class="dp-card__body"><p>${escapeHtml(t("DP.presets.sample"))}</p></div>` +
@@ -331,7 +349,32 @@ function choiceMarkup(preset: DpPreset, path: string, editable: boolean): string
   );
 }
 
-function controlMarkup(preset: DpPreset, path: string, editable: boolean): string {
+/**
+ * The typeface, from the same list the Pin Studio offers. The empty choice is the card's
+ * own face, which is what a preset without one has always drawn in.
+ */
+function fontMarkup(preset: DpPreset, editable: boolean, fonts: readonly string[]): string {
+  const items = fontOptionsMarkup(
+    fontChoices(fonts),
+    preset.params.type.family,
+    t("DP.presets.typeDefault"),
+    (name) => fontLabel(name, t)
+  );
+  return (
+    `<label class="dp-presets__param">` +
+    `<span>${escapeHtml(t("DP.presets.typeFamily"))}</span>` +
+    `<select name="type.family"${editable ? "" : " disabled"}>${items}</select>` +
+    `</label>`
+  );
+}
+
+function controlMarkup(
+  preset: DpPreset,
+  path: string,
+  editable: boolean,
+  context: PresetStudioContext
+): string {
+  if (path === "type.family") return fontMarkup(preset, editable, context.fonts ?? []);
   if (COLOURS.some((entry) => entry.path === path)) return colourMarkup(preset, path, editable);
   if (CHOICES.some((entry) => entry.path === path)) return choiceMarkup(preset, path, editable);
   return sliderMarkup(preset, path, editable);
@@ -354,7 +397,7 @@ function paramsMarkup(
         ? ""
         : ` <span class="dp-presets__unused">${escapeHtml(t("DP.presets.unused"))}</span>`) +
       `</summary>` +
-      group.paths.map((path) => controlMarkup(preset, path, editable)).join("") +
+      group.paths.map((path) => controlMarkup(preset, path, editable, context)).join("") +
       `</details>`
     );
   }).join("");
@@ -486,6 +529,7 @@ export function definePresetStudio(): any {
         {
           isOpen: (group) => this.groupState.get(`${selected.id}:${group}`),
           target: pin ? { name: api.labelFor(pin), effectId: pin.effect.id } : null,
+          fonts: registeredFontFamilies(),
         }
       );
       return wrapper.firstElementChild ?? wrapper;
@@ -531,6 +575,11 @@ export function definePresetStudio(): any {
           void this.#setParam(input.name, Number(input.value));
           return;
         }
+        // The typeface's empty choice is "none", which the schema stores as null.
+        if (input.name === "type.family") {
+          void this.#setParam(input.name, input.value || null);
+          return;
+        }
         // A colour and an enum both arrive as strings; `validatePreset` decides whether
         // either is one this version understands.
         if (input.type === "color" || input.tagName === "SELECT") {
@@ -547,7 +596,7 @@ export function definePresetStudio(): any {
       this.render();
     }
 
-    async #setParam(path: string, value: number | string) {
+    async #setParam(path: string, value: number | string | null) {
       const preset = this.selected;
       if (preset.author === "core") return;
       await library.savePreset(writeParam(preset, path, value));

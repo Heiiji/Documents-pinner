@@ -741,6 +741,7 @@ export function installWorld(world: FakeWorld = {}): InstalledWorld {
       },
       hud: { BasePlaceableHUD: fakeBasePlaceableHUD() },
       ux: {},
+      settings: { menus: { FontConfig: fakeFontConfig() } },
     },
     abstract: {},
     data: { operators: { DataFieldOperator, ForcedDeletion, ForcedReplacement } },
@@ -760,4 +761,34 @@ export function uninstallWorld(): void {
     else (globalThis as any)[name] = value;
   }
   saved.clear();
+}
+
+// ---------------------------------------------------------------------------
+// Fonts
+// ---------------------------------------------------------------------------
+
+/** What `FontConfig.getAvailableFonts()` answers. Set per test; reset by `installWorld`. */
+let availableFonts: string[] = [];
+
+/** The families Font Config reports as loaded, for the next `getAvailableFonts()`. */
+export function offerFonts(names: string[]): void {
+  availableFonts = [...names];
+}
+
+/**
+ * `foundry.applications.settings.menus.FontConfig`, for the two statics the module reads.
+ *
+ * TYPES (`settings/menus/font-config.d.mts`): `SETTING` is the literal `"fonts"`, the core
+ * setting holding the faces a GM added — which `CONFIG.fontDefinitions` does NOT contain;
+ * tests put those under `world.settings.fonts`. `getAvailableFonts()` lists only families
+ * that LOADED with `editor: true`, so it answers nothing unless a test says so.
+ */
+function fakeFontConfig(): any {
+  availableFonts = [];
+  return class FontConfig {
+    static SETTING = "fonts";
+    static getAvailableFonts(): string[] {
+      return [...availableFonts];
+    }
+  };
 }

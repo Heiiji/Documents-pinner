@@ -29,6 +29,8 @@ import { cardMetrics, freezeMetrics } from "../data/pin-schema";
 import { PAPERS } from "../render/CardTemplate";
 import { allPresets } from "../effects/preset-library";
 import { swatchStyle } from "../effects/preset-css";
+import { fontChoices, fontLabel, fontOptionsMarkup } from "../effects/typeface";
+import { registeredFontFamilies } from "../render/AssetInliner";
 import { pdfPageCount, pdfSourceOf } from "../render/PdfPage";
 import { chipsMarkup, describeChips } from "./chips";
 import { openPicker } from "./DocumentPicker";
@@ -71,6 +73,7 @@ function field(labelKey: string, control: string, hintKey?: string): string {
  */
 const PDF_INERT = new Set([
   "display.paper",
+  "display.font",
   "display.typeSize",
   "display.margin",
   "effect.speed",
@@ -163,6 +166,8 @@ export interface StudioOptions {
   pdfPages?: number;
   /** The icons a pin may wear: core's map-note icons, labelled. */
   icons?: { label: string; src: string }[];
+  /** The world's own font families, before `fontChoices` filters them. */
+  fonts?: string[];
 }
 
 function contentTab(pin: DpPinFlags, options: StudioOptions, attrs = ""): string {
@@ -306,6 +311,25 @@ function iconField(doc: any, pin: DpPinFlags, options: StudioOptions): string {
   );
 }
 
+/**
+ * The typeface: the effect's, a generic family, or one of this world's faces, each option
+ * drawn in its own face so the choice can be judged from the list. Inert for a PDF, which
+ * has no card and no text of the module's to set.
+ */
+function fontField(pin: DpPinFlags, options: StudioOptions, pdf: boolean): string {
+  const items = fontOptionsMarkup(
+    fontChoices(options.fonts ?? []),
+    pin.display.font,
+    t("DP.studio.fontFromEffect"),
+    (name) => fontLabel(name, t)
+  );
+  return field(
+    "DP.studio.font",
+    `<select name="display.font"${inert("display.font", pdf)}>${items}</select>`,
+    "DP.studio.fontHint"
+  );
+}
+
 function appearanceTab(doc: any, pin: DpPinFlags, options: StudioOptions = {}, attrs = ""): string {
   // The EFFECTIVE metrics, so a pin that predates stored type sizes shows the size it
   // is actually drawn at rather than an empty slider; the first edit freezes both.
@@ -360,6 +384,7 @@ function appearanceTab(doc: any, pin: DpPinFlags, options: StudioOptions = {}, a
         pdf
       )
     ) +
+    fontField(pin, options, pdf) +
     field(
       "DP.studio.typeSize",
       range("display.typeSize", round2(metrics.fontPx), 6, 72, 0.5, pdf, { unit: " px" }),
@@ -668,6 +693,7 @@ export function definePinStudio(): any {
             // arrive leaves the field with no ceiling, which is still a usable control.
             pdfPages: await pdfPageCountFor(pin),
             icons: noteIcons(),
+            fonts: registeredFontFamilies(),
           })
         : `<p class="dp-studio__gone">${escapeHtml(t("DP.studio.gone"))}</p>`;
       return wrapper.firstElementChild ?? wrapper;

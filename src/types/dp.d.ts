@@ -65,6 +65,12 @@ export interface DpDisplay {
    * legacy `padding` fraction.
    */
   margin: number | null;
+  /**
+   * This pin's typeface: a generic family or a registered face, validated by
+   * `typeface.fontFamily`. `null` means "the preset decides", and a preset with none sets
+   * the card in the house face — which is every pin before this field existed.
+   */
+  font: string | null;
   fadeUnderTokens: boolean;
   /** Alpha the prop fades to when a token overlaps it, 0–1. */
   fadeUnderTokensAlpha: number;

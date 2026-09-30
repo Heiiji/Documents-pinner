@@ -15,6 +15,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   it changes. Lights and fog still do not reach them, so Pin Studio's Audience tab now
   says, on every text prop, that it shows through unexplored fog — reveal it when the
   party gets there.
+- **A ransom note no longer looks like the settings dialog.** Every card was set in
+  Foundry's interface font. A prop can now have its own typeface — serif, sans serif,
+  typewriter, handwriting, or any font the world has, including one added in Font Config —
+  from Pin Studio's Appearance tab, and a preset can carry one in the Preset Studio's new
+  *Type* group. It holds with effects switched off, and *Fit to content* measures in it.
+  A shared preset can only name a face this way; anything else is refused with a warning.
+
+### Changed
+
+- **CRT Scanlines, Projected Readout, Tagged and Signal Loss now type in monospace, and
+  Aged Parchment and Sealed & Wax in a serif.** A terminal set in the interface font read
+  as a letter held up to a lamp. Generic faces only, so they look right in every world
+  with no font installed; a pin that should keep the old face can choose it in Pin Studio.
 
 ### Fixed
 
