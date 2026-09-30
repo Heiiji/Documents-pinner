@@ -65,6 +65,12 @@ export interface DpDisplay {
    * legacy `padding` fraction.
    */
   margin: number | null;
+  /**
+   * This pin's typeface: a generic family or a registered face, validated by
+   * `typeface.fontFamily`. `null` means "the preset decides", and a preset with none sets
+   * the card in the house face — which is every pin before this field existed.
+   */
+  font: string | null;
   fadeUnderTokens: boolean;
   /** Alpha the prop fades to when a token overlaps it, 0–1. */
   fadeUnderTokensAlpha: number;
@@ -112,6 +118,13 @@ export interface DpEffectRef {
   motion: "loop" | "onReveal" | "none";
   /** Per-pin parameter overrides on top of the preset. */
   params: Record<string, unknown>;
+  /**
+   * This prop's own reveal sound, a same-origin path (`normalise.soundPath`). `null`
+   * means "the preset's". Its own field rather than a key in `params`: those are capped at
+   * 128 characters, and a dotted key inside a flag is expanded by v14 into an object that
+   * `params` then drops as non-scalar.
+   */
+  revealSound: string | null;
 }
 
 export interface DpInteraction {

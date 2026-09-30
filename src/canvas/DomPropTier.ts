@@ -24,15 +24,22 @@
  *    or zoom with no per-frame write at all.
  * 3. **One resolve per content key.** Card resolution enriches a document; doing it per
  *    LOD pass would enrich fifty documents after every pan.
+ *
+ * One thing the canvas gives for free is taken back by hand: the scene's GLOBAL darkness.
+ * A bright sheet of paper floating over a black crypt was the loudest of the losses, and
+ * it is one number, so the overlay carries it as a custom property and the stylesheet
+ * dims the cards. Per-light illumination and the fog mask stay out of reach — those are
+ * fragment-shader work over the primary group, and no CSS can fake them.
  */
 
 import { logger } from "../log";
+import { cv } from "../fvtt";
 import { curveFor } from "../motion";
 import { escapeAttr } from "../html";
 import { cardMetrics } from "../data/pin-schema";
 import { resolveCard } from "../render/ContentResolver";
 import { currentLevel } from "../effects/level";
-import { mount, write } from "../apps/OverlayRoot";
+import { mount, overlay, write } from "../apps/OverlayRoot";
 import { tileRect, type PlacedRect } from "./transform";
 import type { LodTier } from "./lod";
 import type { DpPinFlags } from "../types/dp";
@@ -110,6 +117,8 @@ function contentKeyOf(entry: DomPropEntry): string {
     pin.effect.intensity,
     pin.effect.seed,
     pin.display.paper,
+    // The pin's own face; a preset's is covered by the effect id above.
+    pin.display.font ?? "",
     fontPx,
     padPx,
     pin.display.showTitle ? 1 : 0,
@@ -434,6 +443,67 @@ export function setDomPropAlpha(id: string, alpha: number): void {
 export function clearDomTier(): void {
   for (const prop of props.values()) prop.element.remove();
   props.clear();
+  // The overlay this value was written on goes with the scene. A stale memo would
+  // swallow the next scene's first value whenever it happened to match the last one's.
+  sceneDim = null;
+}
+
+/**
+ * How dark a card gets at a scene darkness of 1 — the one number the live check tunes.
+ *
+ * Not black: the dim says "it is dark in here", it does not hide the letter, and the
+ * reader a player actually reads in is never dimmed at all.
+ */
+const DARKEST_CARD = 0.35;
+
+/** Twentieths, so a full 0 → 1 transition is at most 21 writes whatever the hook cadence. */
+const DIM_STEPS = 20;
+
+/**
+ * The brightness a card is drawn at under a scene darkness level.
+ *
+ * PURE. Anything that is not a finite number reads as daylight: before the canvas
+ * environment initialises there is no level at all, and an undimmed card is the
+ * behaviour every client had before this existed.
+ */
+export function sceneBrightness(darkness: unknown): number {
+  const level =
+    typeof darkness === "number" && Number.isFinite(darkness)
+      ? Math.min(1, Math.max(0, darkness))
+      : 0;
+  const raw = 1 - (1 - DARKEST_CARD) * level;
+  return Math.max(DARKEST_CARD, Math.round(raw * DIM_STEPS) / DIM_STEPS);
+}
+
+/** The value last written onto the overlay, so an unchanged level costs a compare. */
+let sceneDim: number | null = null;
+
+/**
+ * Put the scene's darkness on the overlay as `--dp-scene-dim`.
+ *
+ * One custom property on the ROOT, never a card re-resolve: darkness is deliberately in
+ * no content key, and the stylesheet folds it into each card's existing filter chain. So
+ * an animated darkness transition costs at most one property write per quantised step,
+ * and nothing at all while the level holds.
+ *
+ * `canvas.environment.darknessLevel` rather than `canvas.darknessLevel`, which throws
+ * when read before the canvas has initialised — and this runs from the environment's own
+ * initialisation hook. Total: a hook body that threw would break core's canvas draw.
+ */
+export function syncSceneDim(force = false): void {
+  try {
+    const canvas = cv();
+    const value = sceneBrightness(
+      canvas?.environment?.darknessLevel ?? canvas?.scene?.environment?.darknessLevel
+    );
+    if (!force && value === sceneDim) return;
+    const root = overlay();
+    if (!root) return;
+    sceneDim = value;
+    write(root, () => root.style.setProperty("--dp-scene-dim", String(value)));
+  } catch (error) {
+    log.warn(`could not read the scene's darkness`, error);
+  }
 }
 
 /** For the Pinboard's diagnostics and for tests. */

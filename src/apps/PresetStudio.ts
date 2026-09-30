@@ -15,7 +15,7 @@
  * would be worse than no meter at all.
  */
 
-import { ns } from "../fvtt";
+import { notify, ns } from "../fvtt";
 import { t } from "../i18n";
 import { escapeAttr, escapeHtml } from "../html";
 import * as api from "../api";
@@ -27,11 +27,20 @@ import {
   FRAME_STYLES,
   HUD_GRIDS,
   HUD_MARKS,
+  REVEAL_ANIMATIONS,
   estimateCost,
   type DpPreset,
 } from "../effects/preset-schema";
 import { currentLevel } from "../effects/level";
+import { fontChoices, fontLabel, fontOptionsMarkup, fontStack } from "../effects/typeface";
+import { registeredFontFamilies } from "../render/AssetInliner";
+import { logger } from "../log";
+import { soundPath } from "../normalise";
+import { playRevealSound } from "../canvas/PropManager";
+import type { DpNotice } from "../types/dp";
 import { restoreFocus, snapshotFocus } from "./focus-restore";
+
+const log = logger("presets");
 
 let StudioClass: any = null;
 let instance: any = null;
@@ -147,6 +156,12 @@ export const GROUPS: {
     inUse: (p) => p.tint.amount > 0 || p.surface.opacity > 0 || p.noise.amount > 0,
   },
   {
+    id: "type",
+    key: "DP.presets.group.type",
+    paths: ["type.family"],
+    inUse: (p) => p.type.family !== null,
+  },
+  {
     id: "edges",
     key: "DP.presets.group.edges",
     paths: [
@@ -202,6 +217,21 @@ export interface PresetStudioContext {
   isOpen?: (groupId: string) => boolean | undefined;
   /** The pin the studio was opened from, so a preset can be put on it from here. */
   target?: { name: string; effectId: string } | null;
+  /** The world's own font families, resolved by the window so this markup stays pure. */
+  fonts?: string[];
+  /** Whether this core has a file browser to choose a sound with. No browser, no button. */
+  canBrowse?: boolean;
+}
+
+export type RevealField = keyof DpPreset["reveal"];
+
+/** PURE. Write one field of a preset's reveal, returning a new preset. */
+export function writeReveal(
+  preset: DpPreset,
+  field: RevealField,
+  value: string | number | null
+): DpPreset {
+  return { ...preset, reveal: { ...preset.reveal, [field]: value } };
 }
 
 /** PURE. Read a dotted path out of a preset's parameters. */
@@ -221,7 +251,11 @@ function readParamText(preset: DpPreset, path: string): string {
 }
 
 /** PURE. Write a dotted path, returning a new preset. */
-export function writeParam(preset: DpPreset, path: string, value: number | string): DpPreset {
+export function writeParam(
+  preset: DpPreset,
+  path: string,
+  value: number | string | null
+): DpPreset {
   const keys = path.split(".");
   const params: any = structuredClone(preset.params);
 
@@ -268,10 +302,14 @@ function previewMarkup(preset: DpPreset, backdrop: Backdrop, frozen: boolean): s
   const attrs = Object.entries(dressed.attrs)
     .map(([key, value]) => ` ${escapeAttr(key)}="${escapeAttr(value)}"`)
     .join("");
+  // The face goes on the card by hand, as the resolver puts it on a pin's: it is not in
+  // the dressing, so a preview built from the dressing alone would show the house face.
+  const font = fontStack(preset.params.type.family);
+  const style = font ? `${dressed.style};--dp-font:${font}` : dressed.style;
 
   return (
     `<div class="dp-presets__preview" data-dp-bg="${backdrop}">` +
-    `<div class="dp-card"${attrs} style="${escapeAttr(dressed.style)}">` +
+    `<div class="dp-card"${attrs} style="${escapeAttr(style)}">` +
     `<div class="dp-card__sheet">` +
     `<h1 class="dp-card__title">${escapeHtml(t(preset.label))}</h1>` +
     `<div class="dp-card__body"><p>${escapeHtml(t("DP.presets.sample"))}</p></div>` +
@@ -331,10 +369,88 @@ function choiceMarkup(preset: DpPreset, path: string, editable: boolean): string
   );
 }
 
-function controlMarkup(preset: DpPreset, path: string, editable: boolean): string {
+/**
+ * The typeface, from the same list the Pin Studio offers. The empty choice is the card's
+ * own face, which is what a preset without one has always drawn in.
+ */
+function fontMarkup(preset: DpPreset, editable: boolean, fonts: readonly string[]): string {
+  const items = fontOptionsMarkup(
+    fontChoices(fonts),
+    preset.params.type.family,
+    t("DP.presets.typeDefault"),
+    (name) => fontLabel(name, t)
+  );
+  return (
+    `<label class="dp-presets__param">` +
+    `<span>${escapeHtml(t("DP.presets.typeFamily"))}</span>` +
+    `<select name="type.family"${editable ? "" : " disabled"}>${items}</select>` +
+    `</label>`
+  );
+}
+
+function controlMarkup(
+  preset: DpPreset,
+  path: string,
+  editable: boolean,
+  context: PresetStudioContext
+): string {
+  if (path === "type.family") return fontMarkup(preset, editable, context.fonts ?? []);
   if (COLOURS.some((entry) => entry.path === path)) return colourMarkup(preset, path, editable);
   if (CHOICES.some((entry) => entry.path === path)) return choiceMarkup(preset, path, editable);
   return sliderMarkup(preset, path, editable);
+}
+
+/**
+ * How the effect arrives: the animation, its length, and a sound.
+ *
+ * All three were in the schema and played by the runtime, and none had a control, so
+ * every preset a GM authored arrived with the fade and the silence of the one it was
+ * duplicated from. Its own group rather than three of `GROUPS`' paths: these are not
+ * parameters, and `writeParam` writes under `params` only.
+ *
+ * On a shipped preset everything is locked except ▶, which only listens.
+ */
+function revealMarkup(preset: DpPreset, editable: boolean, context: PresetStudioContext): string {
+  const { animation, durationMs, sound } = preset.reveal;
+  const locked = editable ? "" : " disabled";
+  const open = context.isOpen?.("reveal") ?? sound !== null;
+  const options = REVEAL_ANIMATIONS.map(
+    (value) =>
+      `<option value="${value}"${value === animation ? " selected" : ""}>` +
+      `${escapeHtml(t(`DP.revealAnimation.${value}`))}</option>`
+  ).join("");
+  const button = (action: string, key: string, icon: string, disabled: boolean) =>
+    `<button type="button" data-action="${action}"${disabled ? " disabled" : ""}` +
+    ` data-tooltip-text="${escapeAttr(t(key))}" aria-label="${escapeAttr(t(key))}">` +
+    `<i class="fa-solid ${icon}" aria-hidden="true"></i></button>`;
+
+  return (
+    `<details class="dp-presets__group" data-dp-group="reveal"${open ? " open" : ""}>` +
+    `<summary data-dp-focus-key="group-reveal">${escapeHtml(t("DP.presets.group.reveal"))}</summary>` +
+    `<label class="dp-presets__param">` +
+    `<span>${escapeHtml(t("DP.presets.revealAnimation"))}</span>` +
+    `<select name="reveal.animation"${locked}>${options}</select>` +
+    `</label>` +
+    `<label class="dp-presets__param">` +
+    `<span>${escapeHtml(t("DP.presets.revealDuration"))}</span>` +
+    `<input type="range" name="reveal.durationMs" min="0" max="3000" step="50"` +
+    ` value="${durationMs}"${locked}>` +
+    `<output>${durationMs}</output>` +
+    `</label>` +
+    `<div class="dp-presets__param dp-presets__sound">` +
+    `<span>${escapeHtml(t("DP.presets.revealSound"))}</span>` +
+    `<input type="text" name="reveal.sound" value="${escapeAttr(sound ?? "")}"` +
+    ` placeholder="${escapeAttr(t("DP.presets.revealSoundNone"))}"` +
+    ` aria-label="${escapeAttr(t("DP.presets.revealSound"))}"${locked}>` +
+    (context.canBrowse
+      ? button("browseRevealSound", "DP.presets.revealSoundBrowse", "fa-folder-open", !editable)
+      : "") +
+    button("previewRevealSound", "DP.presets.revealSoundPreview", "fa-play", !sound) +
+    button("clearRevealSound", "DP.presets.revealSoundClear", "fa-xmark", !editable || !sound) +
+    `</div>` +
+    `<p class="dp-presets__hint">${escapeHtml(t("DP.presets.revealSoundHint"))}</p>` +
+    `</details>`
+  );
 }
 
 function paramsMarkup(
@@ -354,7 +470,7 @@ function paramsMarkup(
         ? ""
         : ` <span class="dp-presets__unused">${escapeHtml(t("DP.presets.unused"))}</span>`) +
       `</summary>` +
-      group.paths.map((path) => controlMarkup(preset, path, editable)).join("") +
+      group.paths.map((path) => controlMarkup(preset, path, editable, context)).join("") +
       `</details>`
     );
   }).join("");
@@ -375,6 +491,7 @@ function paramsMarkup(
       : `<p class="dp-presets__locked">${escapeHtml(t("DP.presets.readOnlyHint"))}</p>`) +
     name +
     groups +
+    revealMarkup(preset, editable, context) +
     `<p class="dp-presets__cost" data-dp-cost="${escapeAttr(cost.tier)}">` +
     escapeHtml(t("DP.presets.cost", { tier: t(`DP.cost.${cost.tier}`), score: cost.score })) +
     `</p></div>`
@@ -459,6 +576,9 @@ export function definePresetStudio(): any {
         import: onImport,
         export: onExport,
         useOnPin: onUseOnPin,
+        browseRevealSound: onBrowseRevealSound,
+        previewRevealSound: onPreviewRevealSound,
+        clearRevealSound: onClearRevealSound,
       },
     };
 
@@ -486,6 +606,8 @@ export function definePresetStudio(): any {
         {
           isOpen: (group) => this.groupState.get(`${selected.id}:${group}`),
           target: pin ? { name: api.labelFor(pin), effectId: pin.effect.id } : null,
+          fonts: registeredFontFamilies(),
+          canBrowse: !!ns("applications.apps.FilePicker.implementation"),
         }
       );
       return wrapper.firstElementChild ?? wrapper;
@@ -527,8 +649,21 @@ export function definePresetStudio(): any {
           return;
         }
         if (input.disabled || !input.name) return;
+        // The reveal is not a parameter: its own writer, and a typed sound path checked
+        // before it is stored rather than dropped silently on the next read.
+        if (input.name.startsWith("reveal.")) {
+          const field = input.name.slice("reveal.".length) as RevealField;
+          const value = input.type === "range" ? Number(input.value) : input.value;
+          void setReveal(this, this.selectedId, field, value);
+          return;
+        }
         if (input.type === "range") {
           void this.#setParam(input.name, Number(input.value));
+          return;
+        }
+        // The typeface's empty choice is "none", which the schema stores as null.
+        if (input.name === "type.family") {
+          void this.#setParam(input.name, input.value || null);
           return;
         }
         // A colour and an enum both arrive as strings; `validatePreset` decides whether
@@ -547,7 +682,7 @@ export function definePresetStudio(): any {
       this.render();
     }
 
-    async #setParam(path: string, value: number | string) {
+    async #setParam(path: string, value: number | string | null) {
       const preset = this.selected;
       if (preset.author === "core") return;
       await library.savePreset(writeParam(preset, path, value));
@@ -631,6 +766,67 @@ async function onExport(this: any) {
       content: `<textarea rows="12" style="width:100%">${escapeHtml(json)}</textarea>`,
     });
   }
+}
+
+/**
+ * Store one field of a user preset's reveal, then show the window again.
+ *
+ * A sound passes the same rule `validatePreset` applies BEFORE it is stored, and a refused
+ * one is said and not stored: the setting holds presets raw, so a bad path would otherwise
+ * be saved, dropped silently on the next read, and look to the GM like a field that does
+ * not keep what it is given. The re-render puts the stored value back in the field either
+ * way. Takes the preset by id, captured when the gesture began: the file browser outlives
+ * a change of selection, and must not write its pick onto the preset shown now.
+ */
+async function setReveal(
+  app: any,
+  id: string,
+  field: RevealField,
+  value: string | number | null
+): Promise<void> {
+  try {
+    const preset = library.findPreset(id);
+    if (preset && preset.author !== "core") {
+      const warnings: DpNotice[] = [];
+      const next =
+        field === "sound"
+          ? soundPath(value, warnings, "reveal.sound", "DP.preset.warn.badSound")
+          : value;
+      for (const warning of warnings) notify(warning, "warn");
+      if (!warnings.length) await library.savePreset(writeReveal(preset, field, next));
+    }
+    if (app?.rendered) await app.render();
+  } catch (error) {
+    log.warn(`the preset's reveal could not be saved`, error);
+  }
+}
+
+/** Choose a preset's reveal sound from the file browser, audio files only. */
+function onBrowseRevealSound(this: any) {
+  const FilePicker = ns("applications.apps.FilePicker.implementation");
+  if (!FilePicker || this.selected.author === "core") return;
+  const id = this.selectedId;
+  try {
+    const picker = new FilePicker({
+      type: "audio",
+      current: this.selected.reveal.sound ?? "",
+      callback: (path: string) => void setReveal(this, id, "sound", path),
+    });
+    void Promise.resolve(picker.render({ force: true })).catch((error: unknown) =>
+      log.warn(`the file browser could not open`, error)
+    );
+  } catch (error) {
+    log.warn(`the file browser could not open`, error);
+  }
+}
+
+/** Hear it: the GM's own client never sees a prop arrive, so this is how they know. */
+function onPreviewRevealSound(this: any) {
+  playRevealSound(this.selected.reveal.sound, { preview: true });
+}
+
+function onClearRevealSound(this: any) {
+  void setReveal(this, this.selectedId, "sound", null);
 }
 
 /** Put the preset that is showing on the pin the studio was opened from. */

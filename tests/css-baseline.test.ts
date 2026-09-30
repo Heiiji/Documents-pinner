@@ -300,3 +300,54 @@ describe("what the effect system emits", () => {
     ).toEqual([]);
   });
 });
+
+/**
+ * The scene's darkness on a DOM prop, and on nothing else.
+ *
+ * Where the dim is applied decides whether it survives at all. `.dp-prop`'s own `filter`
+ * is animated by the arrival and set to `none` under reduced motion, so a brightness
+ * there would be erased; the reader is for reading and must never be dimmed; and
+ * `card.css` is inlined into the rasteriser, where core already lights the texture.
+ */
+describe("the scene dim", () => {
+  const rules = [...CSS.matchAll(/([^{};]+)\{([^{}]*)\}/g)].map((m) => ({
+    selector: m[1].trim(),
+    body: m[2],
+  }));
+  const filterOf = (selector: string) =>
+    rules
+      .filter((rule) => rule.selector === selector && /(^|;)\s*filter\s*:/.test(rule.body))
+      .map((rule) => /(?:^|;)\s*filter\s*:([^;]*)/.exec(rule.body)![1].replace(/\s+/g, " ").trim());
+
+  it("is handed to the card by a `.dp-prop` rule, and taken back only for projected light", () => {
+    const setters = rules
+      .filter((rule) => /--dp-card-dim\s*:/.test(rule.body))
+      .map((rule) => ({
+        selector: rule.selector,
+        value: /--dp-card-dim\s*:([^;]*)/.exec(rule.body)![1].replace(/\s+/g, " ").trim(),
+      }));
+    // Exactly these two. A third setter is a card dimmed, or spared, by something other
+    // than the scene — say where it is and why before adding it here.
+    expect(setters).toEqual([
+      { selector: ".dp-prop", value: "var(--dp-scene-dim, 1)" },
+      { selector: '.dp-prop .dp-card[data-dp-paper="projection"]', value: "1" },
+    ]);
+  });
+
+  it("ends the card's own filter chain", () => {
+    const chains = filterOf(".dp-card");
+    expect(chains).toHaveLength(1);
+    expect(chains[0]).toMatch(/brightness\(var\(--dp-card-dim, 1\)\)$/);
+  });
+
+  it("never reaches the reader", () => {
+    const chains = filterOf(".dp-reader .dp-card");
+    expect(chains.length).toBeGreaterThan(0);
+    for (const chain of chains) expect(chain).not.toContain("--dp-card-dim");
+  });
+
+  it("is not in the stylesheet the rasteriser inlines", () => {
+    const card = decomment(readFileSync(join(ROOT, "styles", "card.css"), "utf8"));
+    expect(card).not.toMatch(/--dp-(card|scene)-dim/);
+  });
+});

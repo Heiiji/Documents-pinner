@@ -313,3 +313,28 @@
   text-decoration: underline;
   text-underline-offset: 0.15em;
 }
+
+/* A prop's reveal sound: the path it shows, then browse, play and clear on one line. */
+.dp-studio__sound {
+  grid-column: 2 / -1;
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  min-inline-size: 0;
+
+  & > input {
+    flex: 1;
+    min-inline-size: 0;
+  }
+
+  & > button {
+    flex: none;
+    inline-size: 2rem;
+    padding: 0;
+  }
+}
+
+/* An icon has no reveal: the whole row is dimmed with its reason beneath it. */
+.dp-studio__field:has(.dp-studio__sound :disabled) {
+  opacity: 0.55;
+}

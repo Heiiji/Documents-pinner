@@ -16,6 +16,7 @@
 
 import { escapeAttr, escapeHtml } from "../html";
 import { transparentForm } from "../effects/preset-css";
+import { fontStack } from "../effects/typeface";
 
 /** The paper stocks a pin can be printed on. Ids are stored in `display.paper`. */
 export const PAPERS: Record<string, { base: string; ink: string; edge: string; bloom?: string }> = {
@@ -67,6 +68,12 @@ export interface CardOptions {
   effectStyle?: string;
   /** The effect's data attributes, which the stylesheet selects on. */
   effectAttrs?: Record<string, string>;
+  /**
+   * The typeface, already resolved — the pin's own, else its preset's — or null for the
+   * house face. On the card's own style rather than in the dressing, so it survives the
+   * rungs and levels at which the dressing drops every effect variable.
+   */
+  font?: string | null;
   /** Placeholder mode: the source is gone, so say so instead of drawing a blank sheet. */
   missing?: boolean;
   /** The content does not fit the box, so the stylesheet fades its tail. */
@@ -75,6 +82,7 @@ export interface CardOptions {
 
 export function cardHtml(options: CardOptions): string {
   const paper = paperOf(options.paper);
+  const font = fontStack(options.font);
 
   const style = [
     `--dp-paper-base:${paper.base}`,
@@ -88,9 +96,12 @@ export function cardHtml(options: CardOptions): string {
     `--dp-paper-bloom:${paper.bloom ?? "transparent"}`,
     `--dp-card-pad:${options.padPx}px`,
     `font-size:${options.fontPx}px`,
-    // The effect's own properties last, so a preset can override a paper default
+    // The effect's own properties next, so a preset can override a paper default
     // rather than the other way round.
     options.effectStyle ?? "",
+    // After the effect, and only ever through `fontStack`: the one formatter that turns a
+    // stored name into CSS, re-checking it and quoting it on the way.
+    font ? `--dp-font:${font}` : "",
   ]
     .filter(Boolean)
     .join(";");

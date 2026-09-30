@@ -91,6 +91,17 @@ page shows at the current width. *Text size* and *Margins* are in Pin Studio, wi
 width and height in grid squares and a ratio lock. So is a pin's **icon** — one of core's
 map-note icons or any image — and hovering a pin names it.
 
+**A prop's lettering and its arrival are yours to choose.** Pin Studio's Appearance tab
+sets a typeface — serif, sans serif, typewriter, handwriting, or any font your world has,
+including one added in Foundry's Font Config — and a reveal sound. Otherwise the effect
+decides: CRT Scanlines, Projected Readout, Tagged and Signal Loss type in monospace, Aged
+Parchment and Sealed & Wax in a serif, and the Preset Studio's *Type* and *Reveal* groups
+set an effect's own face, arrival, duration and sound. *Fit to content* measures in the
+chosen face. A reveal sound plays for each player as the prop appears on their screen, at
+their Environment volume — you hear it through ▶, since your own screen never sees it
+arrive — and must be a file on your own server: a shared preset naming a web address is
+refused on import.
+
 Also: a journal sheet header button, the Notes scene controls, sidebar context menus, a
 checkbox on any tile's config sheet to adopt it, and a button on a map note to convert it.
 
@@ -141,13 +152,17 @@ If you need real secrecy, keep the document out of the world until you want it s
    the page explicitly in Pin Studio and it is drawn.
 4. Images referenced by a journal page are inlined; anything the module cannot fetch is
    dropped rather than left broken.
-5. **Props are not lit, fogged, occluded, or sorted behind tokens.** Drawing them into the
-   scene needs an HTML-to-texture step: an SVG with a `foreignObject`, which tainted the
-   canvas in every browser measured, so the WebGL upload threw. The module probes for this
-   at startup and draws props as an HTML layer over the canvas instead. *That probe now
-   passes on current Chrome and Firefox* — see [`docs/DESIGN.md`](docs/DESIGN.md) A21 — so
-   the tier may be reachable again; nothing has been changed on that until the whole
-   pipeline is measured in a real world, not just the probe.
+5. **Text props darken with the scene, but are not lit by its lights, fogged, occluded,
+   or sorted behind tokens.** Drawing them into the scene needs an HTML-to-texture step:
+   an SVG with a `foreignObject`, which tainted the canvas in every browser measured, so
+   the WebGL upload threw. The module probes for this at startup and draws props as an
+   HTML layer over the canvas instead, dimmed by the scene's global darkness level and by
+   nothing else — except on the Projection stock, which is light and stays bright. So a
+   revealed text prop shows through fog a player has not explored: reveal it when they
+   reach it — Pin Studio's Audience tab says so. *That probe now passes on current Chrome
+   and Firefox* — see [`docs/DESIGN.md`](docs/DESIGN.md) A21 — so the tier may be
+   reachable again; nothing has been changed on that until the whole pipeline is measured
+   in a real world, not just the probe.
 6. Deleting a pinned document leaves the pin showing a placeholder — never auto-deleted.
 7. Compendium ownership is pack-wide, so there is no per-user grant for a compendium
    source. The pin still reveals its content.
@@ -274,6 +289,19 @@ du texte* et *Marges* sont dans Pin Studio, avec la largeur et la hauteur en cas
 verrou de ratio. L'**icône** d'une épingle aussi — une icône de note de carte de Foundry
 ou n'importe quelle image — et survoler une épingle affiche son nom.
 
+**L'écriture d'un accessoire et son apparition se choisissent.** L'onglet Apparence du
+Studio règle une police — avec empattements, sans empattements, machine à écrire,
+manuscrite, ou toute police de votre monde, y compris une police ajoutée dans la
+configuration des polices de Foundry — et un son de révélation. Sinon, l'effet décide :
+Balayage cathodique, Relevé projeté, Balisé et Perte de signal écrivent en chasse fixe,
+Parchemin vieilli et Sceau de cire avec empattements, et les groupes *Typographie* et
+*Révélation* du Studio de préréglages règlent la police, l'apparition, la durée et le son
+d'un effet. *Ajuster au contenu* mesure dans la police choisie. Un son de révélation est
+joué pour chaque joueur quand l'accessoire apparaît sur son écran, au volume Environnement
+— vous l'entendez avec ▶, votre écran ne le voyant jamais apparaître — et doit être un
+fichier de votre propre serveur : un préréglage partagé qui nomme une adresse web est
+refusé à l'import.
+
 Également : un bouton dans l'en-tête d'une fiche de journal, les contrôles de scène Notes,
 les menus contextuels de la barre latérale, une case sur la fiche de n'importe quelle tuile
 pour l'adopter, et un bouton sur une note de carte pour la convertir.
@@ -328,14 +356,19 @@ voulu.
    c'est le journal. Choisissez la page explicitement dans le Studio et elle est dessinée.
 4. Les images référencées par une page de journal sont intégrées ; ce que le module ne peut
    pas récupérer est retiré plutôt que laissé cassé.
-5. **Les accessoires ne sont ni éclairés, ni embrumés, ni occultés, ni placés derrière les
-   pions.** Les dessiner dans la scène exige une conversion HTML → texture : un SVG avec
-   `foreignObject`, qui contaminait le canevas dans tous les navigateurs mesurés, si bien
-   que l'envoi WebGL échouait. Le module teste cela au démarrage et dessine les accessoires
-   en HTML par-dessus le canevas. *Ce test réussit désormais sur Chrome et Firefox
-   actuels* — voir [`docs/DESIGN.md`](docs/DESIGN.md) A21 — la voie est donc peut-être
-   rouverte ; rien n'a été changé tant que toute la chaîne n'aura pas été mesurée dans un
-   vrai monde, et pas seulement le test.
+5. **Les accessoires de texte s'assombrissent avec la scène, mais ne sont ni éclairés par
+   ses lumières, ni embrumés, ni occultés, ni placés derrière les pions.** Les dessiner
+   dans la scène exige une conversion HTML → texture : un SVG avec `foreignObject`, qui
+   contaminait le canevas dans tous les navigateurs mesurés, si bien que l'envoi WebGL
+   échouait. Le module teste cela au démarrage et dessine les accessoires en HTML
+   par-dessus le canevas, assombris par le niveau d'obscurité global de la scène et par
+   rien d'autre — sauf sur le support Projection, qui est de la lumière et reste vif. Un
+   accessoire de texte révélé se voit donc à travers un brouillard que le joueur n'a pas
+   exploré : révélez-le quand ils l'atteignent — l'onglet Audience du Studio le rappelle.
+   *Ce test réussit désormais sur Chrome et Firefox actuels* — voir
+   [`docs/DESIGN.md`](docs/DESIGN.md) A21 — la voie est donc peut-être rouverte ; rien
+   n'a été changé tant que toute la chaîne n'aura pas été mesurée dans un vrai monde, et
+   pas seulement le test.
 6. Supprimer un document épinglé laisse l'épingle sur un substitut — jamais supprimée
    automatiquement.
 7. Les permissions d'un compendium valent pour tout le pack : pas d'octroi par joueur. Le

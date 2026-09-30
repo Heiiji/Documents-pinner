@@ -153,6 +153,17 @@ describe("the texture cache key and the type size", () => {
     expect(vi.mocked(resolveCard).mock.calls.length).toBeGreaterThan(before);
   });
 
+  it("is a cache miss when the pin's own typeface changes, which is drawn into the pixels", async () => {
+    const { resolveCard } = await import("../src/render/ContentResolver");
+    const before = vi.mocked(resolveCard).mock.calls.length;
+
+    tiles[0].flags["documents-pinner"].pin.display.font = "monospace";
+    manager.refresh();
+    await settle();
+
+    expect(vi.mocked(resolveCard).mock.calls.length).toBeGreaterThan(before);
+  });
+
   it("is a cache miss when a prop with stored metrics is resized", async () => {
     const { resolveCard } = await import("../src/render/ContentResolver");
     const pin = tiles[0].flags["documents-pinner"].pin;

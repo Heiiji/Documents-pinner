@@ -96,6 +96,46 @@ export function warnUnknownKeys(
   }
 }
 
+/** Longer than any real path; a value past it is dropped rather than truncated. */
+const MAX_SOUND_PATH = 1024;
+
+/** A URL scheme: `https:`, `data:`, `javascript:`, anything at all. */
+const HAS_SCHEME = /^[a-z][a-z0-9+.-]*:/i;
+
+/**
+ * A sound's path, or `null`: the ONE same-origin rule for every sound this module plays.
+ *
+ * A path relative to the server — `worlds/keep/sounds/seal.ogg`, core's `sounds/lock.wav`
+ * — and nothing that could leave it. No scheme at all, `https:` included: a preset is
+ * pasted in from a stranger (DESIGN §7), and a sound that fetched from their server on
+ * every reveal would be a beacon reporting the table's play to them. No leading pair of
+ * slashes either way round: `//host` is protocol-relative, and a browser reads `\\host`
+ * the same, backslashes being slashes to its URL parser. Controls are stripped BEFORE the
+ * test, as that parser strips tabs and newlines, so `/\n/host` cannot slip past as a path.
+ *
+ * Used by the preset and pin normalisers and again by the player at the moment of play.
+ */
+export function soundPath(
+  value: unknown,
+  warnings: DpNotice[],
+  path: string,
+  warnKey: string
+): string | null {
+  if (value === null || value === undefined || value === "") return null;
+  const clean = typeof value === "string" ? value.replace(CONTROL_CHARS, "").trim() : "";
+  if (typeof value === "string" && !clean) return null;
+  if (
+    !clean ||
+    clean.length > MAX_SOUND_PATH ||
+    HAS_SCHEME.test(clean) ||
+    /^[\\/]{2}/.test(clean)
+  ) {
+    warnings.push({ key: warnKey, data: { path, value: String(value).slice(0, 64) } });
+    return null;
+  }
+  return clean;
+}
+
 /** A plain object, or an empty one — so a caller can index it without a guard. */
 export function obj(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)

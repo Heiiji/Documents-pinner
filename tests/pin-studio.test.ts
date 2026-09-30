@@ -339,6 +339,11 @@ describe("the appearance tab for a PDF prop", () => {
     }
   });
 
+  it("disables the typeface too: a PDF has no card and no text of the module's to set", () => {
+    expect(pdfMarkup()).toMatch(/<select name="display\.font" disabled>/);
+    expect(studioMarkup(doc, pin(), "appearance")).toMatch(/<select name="display\.font">/);
+  });
+
   it("leaves the controls a PDF DOES honour alone", () => {
     const markup = pdfMarkup();
     expect(markup).toMatch(/name="effect\.intensity"[^>]*>/);
@@ -347,5 +352,55 @@ describe("the appearance tab for a PDF prop", () => {
 
   it("disables nothing on a card prop", () => {
     expect(studioMarkup(doc, pin(), "appearance")).not.toContain("disabled");
+  });
+});
+
+/**
+ * A card is drawn over the canvas, so it shows through fog nobody has explored — on
+ * every player's client, whatever the GM's own rendering setting. The one place that
+ * decides when a prop appears says so, before the reveal rather than after it (K8).
+ */
+describe("the audience tab and the fog", () => {
+  const withPdf = (markup: () => string) => {
+    (globalThis as any).fromUuidSync = () => ({
+      documentName: "JournalEntryPage",
+      type: "pdf",
+      src: "worlds/handout.pdf",
+    });
+    try {
+      return markup();
+    } finally {
+      delete (globalThis as any).fromUuidSync;
+    }
+  };
+
+  it("warns for a text prop, hidden or not", () => {
+    for (const kind of ["hidden", "everyone", "selected"]) {
+      const markup = studioMarkup(
+        doc,
+        pin({ mode: "prop", audience: { ...defaultPin().audience, kind } }),
+        "audience"
+      );
+      expect(markup, kind).toContain('data-dp-fog="true"');
+      expect(markup, kind).toContain("DP.studio.fogNote");
+    }
+  });
+
+  it("says nothing for a PDF, which is drawn into the scene and fogged like the map", () => {
+    const markup = withPdf(() =>
+      studioMarkup(
+        doc,
+        pin({
+          mode: "prop",
+          source: { ...pin().source, uuid: "JournalEntry.j.JournalEntryPage.p" },
+        }),
+        "audience"
+      )
+    );
+    expect(markup).not.toContain("DP.studio.fogNote");
+  });
+
+  it("says nothing for an icon, which core draws and fogs", () => {
+    expect(studioMarkup(doc, pin({ mode: "pin" }), "audience")).not.toContain("DP.studio.fogNote");
   });
 });

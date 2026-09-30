@@ -40,6 +40,9 @@ const presets: DpPreset[] = [
       edge: { style: "deckled", amount: 0.5 },
       frame: { style: "none", thickness: 0, radius: 2, color: "#8a6a3a" },
       shadow: { x: 0, y: 3, blur: 10, opacity: 0.45 },
+      // A generic family, never a named face, for every shipped preset: a world need not
+      // have any font installed, and the harness draws these at `file://`.
+      type: { family: "serif" },
     },
   }),
 
@@ -65,6 +68,7 @@ const presets: DpPreset[] = [
       edge: { style: "deckled", amount: 0.3 },
       frame: { style: "plain", thickness: 1, radius: 2, color: "#6b2f2f" },
       shadow: { x: 1, y: 4, blur: 12, opacity: 0.5 },
+      type: { family: "serif" },
     },
   }),
 
@@ -143,6 +147,9 @@ const presets: DpPreset[] = [
       flicker: { amount: 0.14, hz: 3 },
       frame: { style: "plain", thickness: 2, radius: 8, color: "#2a4a3a" },
       shadow: { x: 0, y: 0, blur: 14, opacity: 0.35 },
+      // A terminal is monospaced; set in the house serif it read as a letter held up
+      // to a green lamp.
+      type: { family: "monospace" },
     },
   }),
 
@@ -214,6 +221,7 @@ const presets: DpPreset[] = [
       frame: { style: "none", thickness: 0, radius: 3, color: "#7fe8ff" },
       // No offset at all: it hovers, it does not lie on the map.
       shadow: { x: 0, y: 0, blur: 20, opacity: 0.3 },
+      type: { family: "monospace" },
     },
   }),
 
@@ -249,6 +257,7 @@ const presets: DpPreset[] = [
       // Kept from the paper presets, and that is what distinguishes this from the one
       // above: the object is still a physical thing lying on the map.
       shadow: { x: 0, y: 3, blur: 10, opacity: 0.42 },
+      type: { family: "monospace" },
     },
   }),
 
@@ -284,6 +293,7 @@ const presets: DpPreset[] = [
       },
       frame: { style: "none", thickness: 0, radius: 2, color: "#4b7c8c" },
       shadow: { x: 0, y: 0, blur: 8, opacity: 0.28 },
+      type: { family: "monospace" },
     },
   }),
 ];

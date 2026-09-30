@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **A letter no longer glows in a pitch-black crypt.** Text props are drawn over the map
+  rather than into it, so core's darkness never reached them: bright paper floated over
+  every night scene. They now darken with the scene's darkness level, and follow it when
+  it changes — except on the Projection stock, which is light rather than paper and stays
+  as bright in a dark room as in a lit one. Lights and fog still do not reach them, so
+  Pin Studio's Audience tab now says, on every text prop, that it shows through
+  unexplored fog — reveal it when the party gets there.
+- **A ransom note no longer looks like the settings dialog.** Every card was set in
+  Foundry's interface font. A prop can now have its own typeface — serif, sans serif,
+  typewriter, handwriting, or any font the world has, including one added in Font Config —
+  from Pin Studio's Appearance tab, and a preset can carry one in the Preset Studio's new
+  *Type* group. It holds with effects switched off, and *Fit to content* measures in it.
+  A shared preset can only name a face this way; anything else is refused with a warning.
+- **The wax seal can crack as the letter appears.** Every preset was silent and nothing
+  could change it, and every duplicated preset arrived with its ancestor's fade. The
+  Preset Studio's new *Reveal* group sets an effect's arrival — none, fade or materialise
+  — its duration and its sound, with a file browser and ▶ to hear it; Pin Studio can give
+  one prop a sound of its own. Each player hears it as the prop appears on their screen, at
+  their Environment volume, once however many props arrive together. A sound must be a
+  file on your own server: a shared preset naming a web address is refused on import, so
+  it cannot report your table's reveals to anyone.
+
 ### Changed
 
 - **The small shape is called an icon.** *Pin* named both the thing you place and one of
@@ -16,6 +40,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   placement legend, Pin Studio, the *Default shape* setting, Configure Controls and the
   README, and *icône* in French. A pin is still the thing itself, whichever shape it takes.
   Nothing stored changes, so every pin and the setting keep their shape.
+- **CRT Scanlines, Projected Readout, Tagged and Signal Loss now type in monospace, and
+  Aged Parchment and Sealed & Wax in a serif.** A terminal set in the interface font read
+  as a letter held up to a lamp. Generic faces only, so they look right in every world
+  with no font installed; a pin that should keep the old face can choose it in Pin Studio.
+- **Pins are stored in format 5 and presets in format 3, for the typeface and the reveal
+  sound.** Opening a scene updates its pins silently and the rest of the world is offered
+  once, as before; nothing changes on any map. A preset exported from this version and
+  imported into an older one is reported there as newer, and loses only its typeface.
 
 ### Fixed
 

@@ -259,3 +259,27 @@
 .dp-presets__name-field input {
   inline-size: 100%;
 }
+
+/* The reveal's sound: a path, then browse, play and clear, under its label. */
+.dp-presets__sound {
+  grid-template-columns: 1fr repeat(3, auto);
+  grid-template-areas:
+    "name name name name"
+    "path . . .";
+
+  & > input {
+    grid-area: path;
+  }
+
+  & > button {
+    inline-size: 1.8rem;
+    padding: 0;
+  }
+}
+
+.dp-presets__hint {
+  margin: 0.2rem 0 0;
+  font-size: 0.75em;
+  line-height: 1.35;
+  opacity: 0.65;
+}

@@ -11,9 +11,54 @@
  * The probe is deliberately NOT `content-visibility: auto`. That is what `.dp-prop`
  * carries so an off-screen card costs no layout, and it is exactly what makes a mounted
  * prop unreliable to measure. Here the card has to be laid out, just not painted.
+ *
+ * It measures in the card's OWN face, which has to be loaded first. `document.fonts.ready`
+ * only waits for loads already in flight, and nothing starts one for a face no element on
+ * the page has used yet — a typewriter face chosen a moment ago measured in the fallback,
+ * and "fit to content" fitted a different letter.
  */
 
+import { HOUSE_STACK } from "../effects/typeface";
+
 const PROBE_ID = "dp-measure";
+
+/**
+ * How long a face may take to arrive before the card is measured without it.
+ *
+ * Bounded because this runs inside `resolveCard`, which the DOM tier and fit-to-content
+ * both wait on: a face that never loads must cost one mis-measure, not a stuck queue —
+ * the lesson of A16's image decode.
+ */
+export const FONT_LOAD_TIMEOUT_MS = 1500;
+
+/** Load the face the card asks for, or give up on it after the timeout. Never rejects. */
+async function faceReady(card: HTMLElement): Promise<void> {
+  const fonts: any = (document as any).fonts;
+  if (!fonts) return;
+  const family = card.style.getPropertyValue("--dp-font").trim() || HOUSE_STACK;
+  const size = card.style.fontSize || "16px";
+
+  let timer = 0;
+  const timeout = new Promise<void>((resolve) => {
+    timer = window.setTimeout(resolve, FONT_LOAD_TIMEOUT_MS);
+  });
+  // `ready` as well, which is what this used to wait for alone: the body can name faces of
+  // its own through the journal editor, and those load as the probe lays them out. A face
+  // that fails to load is measured without, the same as one that times out.
+  const loaded = Promise.resolve()
+    .then(() =>
+      Promise.all([
+        typeof fonts.load === "function" ? fonts.load(`${size} ${family}`) : null,
+        fonts.ready,
+      ])
+    )
+    .catch(() => undefined);
+  try {
+    await Promise.race([loaded, timeout]);
+  } finally {
+    window.clearTimeout(timer);
+  }
+}
 
 let probe: HTMLElement | null = null;
 
@@ -49,12 +94,12 @@ export async function measureCardHeight(cardHtml: string, width: number): Promis
   root.appendChild(slot);
 
   try {
-    // A late-loading face lays out at the fallback's metrics and mis-measures by a
-    // line or two; the fonts are inlined and cached, so this is normally instant.
-    await document.fonts?.ready;
+    const card = (slot.firstElementChild as HTMLElement | null) ?? slot;
+    // A face that has not arrived lays out at the fallback's metrics and mis-measures by
+    // a line or two. Once loaded it is cached, so every later measure is instant.
+    await faceReady(card);
     // The card is `block-size: 100%` of an auto-height parent, which is `auto`: the
     // sheet, the title and the body stack to their content height.
-    const card = (slot.firstElementChild as HTMLElement | null) ?? slot;
     const height = card.getBoundingClientRect().height;
     return height > 0 ? height : null;
   } finally {

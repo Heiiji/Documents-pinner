@@ -24,6 +24,7 @@ import { DEFAULTS, MODULE_ID } from "../const";
 import { MOTION } from "../motion";
 import { logger } from "../log";
 import { cancelIdle, cv, g, notify, ns, nsAny, onIdle, rendererResolution } from "../fvtt";
+import { soundPath } from "../normalise";
 import * as settings from "../settings";
 import { readPin } from "../data/PinData";
 import { cardMetrics } from "../data/pin-schema";
@@ -563,6 +564,8 @@ class Manager {
     const tokens = anyDom ? visibleTokens() : [];
     /** Props bound from the cache this pass, whose arrival is decided after the alpha. */
     const arrivals: [PropRecord, any][] = [];
+    /** The sounds this pass's reveals ask for, each played once however many ask. */
+    const sounds = new Set<string>();
 
     for (const record of this.#records.values()) {
       const tile = canvas.tiles?.get(record.id);
@@ -592,7 +595,7 @@ class Manager {
       const visible = tile.isVisible === true;
       const revealing = visible && !record.wasVisible;
       record.wasVisible = visible;
-      if (revealing) this.#onReveal(record, pin, dom);
+      if (revealing) this.#onReveal(record, pin, dom, sounds);
 
       record.tier = tier;
       record.lastSeen = ++this.#clock;
@@ -646,6 +649,8 @@ class Manager {
     this.#queue = queue.sort((a, b) => a.priority - b.priority);
     this.applyAlpha();
     for (const [record, tile] of arrivals) this.#arrive(record, tile, false);
+    // After the loop: a bulk reveal of seven sealed letters is one seal cracking.
+    for (const src of sounds) playRevealSound(src);
     this.#trim();
     this.#pump();
   }
@@ -659,8 +664,9 @@ class Manager {
    * has by definition not been drawn, and animating the mesh here put the placeholder
    * icon on screen stretched across a letter.
    */
-  #onReveal(record: PropRecord, pin: any, dom: boolean): void {
-    playRevealSound(findPreset(pin.effect.id)?.reveal.sound ?? null);
+  #onReveal(record: PropRecord, pin: DpPinFlags, dom: boolean, sounds: Set<string>): void {
+    const sound = revealSoundOf(pin);
+    if (sound) sounds.add(sound);
     if (!dom) record.pendingReveal = true;
   }
 
@@ -747,7 +753,11 @@ class Manager {
       // Removing this would let a GM's texture be served to a player.
       userId: g()?.user?.id ?? "",
       resTier: longEdge,
-      presetBake: `${pin.effect.id}:${pin.effect.intensity}:${pin.effect.seed}:${pin.display.paper}:${this.#level}`,
+      // The pin's own typeface is drawn into the pixels like the paper; a preset's own is
+      // covered by its id.
+      presetBake:
+        `${pin.effect.id}:${pin.effect.intensity}:${pin.effect.seed}:${pin.display.paper}` +
+        `:${pin.display.font ?? ""}:${this.#level}`,
       // The chosen page goes in the docHash and NEVER in `uuid`: `TextureCache.keysFor`
       // prefix-matches `${uuid}|`, so folding it into the uuid would break `invalidate`
       // for every prop on the scene. It has to be here, though — the provisional key
@@ -1111,24 +1121,50 @@ function revealOf(pin: any): { animation: string; durationMs: number } {
 }
 
 /**
- * Play a preset's reveal sound, locally.
- *
- * `reveal.sound` was validated and stored and never read by anything. It is played on
- * THIS client only — the module has no socket, and a reveal is already seen by everyone
- * in the audience because every client runs this for itself.
- *
- * The path is checked before it reaches the audio helper: a preset is meant to be
- * exported and pasted in from a stranger, so the same rule `safeUrl` applies to a texture
- * path applies here — same-origin relative paths only, nothing that could reach out.
+ * The sound a prop arrives with: its own, else its preset's. The one definition, shared
+ * with the Pin Studio's ▶ so the GM hears what the players will.
  */
-function playRevealSound(src: string | null): void {
-  if (!src || /^[a-z][a-z0-9+.-]*:/i.test(src) || src.startsWith("//")) return;
+export function revealSoundOf(pin: DpPinFlags): string | null {
+  return pin.effect.revealSound ?? findPreset(pin.effect.id)?.reveal.sound ?? null;
+}
 
-  const AudioHelper = nsAny("audio.AudioHelper", "helpers.AudioHelper");
+/**
+ * Play a reveal sound, on THIS client only.
+ *
+ * Every client in the audience hears its own copy when its own prop arrives — the module
+ * has no socket and needs none — which is also why the GM, whose client never sees a
+ * prop "appear", hears one only through the Studios' ▶, the `preview` path.
+ *
+ * On the `environment` channel with no volume of its own, so it follows each player's
+ * Environment slider rather than a level this module guessed; skipped while the browser
+ * has not yet had the gesture that unlocks audio, where core queues it to burst out on the
+ * first click, long after the reveal. The path is re-checked by the one same-origin rule
+ * the normalisers apply: this is the last step before the audio stack fetches it. Never
+ * throws — a reveal is a LOD pass, and a failed sound must not cost the prop its arrival.
+ */
+export function playRevealSound(
+  src: string | null,
+  { preview = false }: { preview?: boolean } = {}
+): boolean {
+  const path = soundPath(src, [], "", "");
+  if (!path) return false;
   try {
-    AudioHelper?.play?.({ src, volume: 0.6, autoplay: true, loop: false }, false);
+    if (!preview && g()?.audio?.locked === true) return false;
+    const AudioHelper = nsAny("audio.AudioHelper", "helpers.AudioHelper");
+    if (typeof AudioHelper?.play !== "function") {
+      log.debug(`no audio helper; reveal sound ${path} not played`);
+      return false;
+    }
+    const channels = ns("CONST.AUDIO_CHANNELS") ?? (globalThis as any).CONST?.AUDIO_CHANNELS;
+    const data =
+      channels && "environment" in channels ? { src: path, channel: "environment" } : { src: path };
+    void Promise.resolve(AudioHelper.play(data, false)).catch((error: unknown) =>
+      log.warn(`could not play reveal sound ${path}`, error)
+    );
+    return true;
   } catch (error) {
-    log.warn(`could not play reveal sound ${src}`, error);
+    log.warn(`could not play reveal sound ${path}`, error);
+    return false;
   }
 }
 

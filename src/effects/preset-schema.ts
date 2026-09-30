@@ -14,10 +14,19 @@
  * rejected, so a preset authored in a future version degrades instead of failing.
  */
 
-import { num, oneOf, warnUnknownKeys } from "../normalise";
+import { num, oneOf, soundPath, warnUnknownKeys } from "../normalise";
 import type { DpMode, DpNotice } from "../types/dp";
+import { fontFamily } from "./typeface";
 
-export const PRESET_SCHEMA_VERSION = 2;
+/**
+ * Bump when the shape of a preset changes.
+ *
+ * 2: the projected overlay, `params.hud`.
+ * 3: the typeface, `params.type.family`. Its null — the card's own face — is supplied by
+ *    the normaliser, so a version 2 preset reads exactly as it drew before, and a version
+ *    3 one imported into an older install is reported as newer and loses only its face.
+ */
+export const PRESET_SCHEMA_VERSION = 3;
 
 export type DpMotion = "none" | "loop" | "onReveal";
 export type DpCost = "low" | "medium" | "high";
@@ -27,6 +36,8 @@ export type DpFrameStyle = "none" | "holo" | "gilt" | "rune" | "plain";
 export const EDGE_STYLES = ["none", "torn", "burnt", "deckled", "singed"] as const;
 export const FRAME_STYLES = ["none", "holo", "gilt", "rune", "plain"] as const;
 export type DpRevealAnimation = "none" | "fade" | "materialise";
+/** The arrivals the renderer implements, in the order the Preset Studio offers them. */
+export const REVEAL_ANIMATIONS = ["none", "fade", "materialise"] as const;
 
 /**
  * The overlay's corner geometry, and its projected grid.
@@ -100,6 +111,14 @@ export interface DpPresetParams {
     /** Seconds per sweep pass. Zero is still — the sweep is the only motion here. */
     sweepSec: number;
   };
+  /**
+   * The typeface, as `typeface.fontFamily` accepts it; `null` is the house face.
+   *
+   * Deliberately NOT a variable in the dressing, which drops every effect variable at
+   * `off` and at the silhouette rung: a ransom note does not change its lettering when a
+   * player switches effects off. `ContentResolver` hands it to the card directly.
+   */
+  type: { family: string | null };
 }
 
 export interface DpPreset {
@@ -181,6 +200,7 @@ export function defaultParams(): DpPresetParams {
       weight: 1,
       sweepSec: 0,
     },
+    type: { family: null },
   };
 }
 
@@ -325,6 +345,14 @@ function normaliseParams(raw: unknown, warnings: DpNotice[]): DpPresetParams {
       weight: num(grp("hud").weight, d.hud.weight, 0, 8),
       sweepSec: num(grp("hud").sweepSec, d.hud.sweepSec, 0, 60),
     },
+    type: {
+      family: fontFamily(
+        grp("type").family,
+        warnings,
+        "params.type.family",
+        "DP.preset.warn.badFont"
+      ),
+    },
   };
 }
 
@@ -371,13 +399,15 @@ export function validatePreset(input: unknown): ValidationResult {
     reveal: {
       animation: oneOf(
         raw.reveal?.animation,
-        ["none", "fade", "materialise"] as const,
+        REVEAL_ANIMATIONS,
         "fade",
         warnings,
         "reveal.animation"
       ),
       durationMs: num(raw.reveal?.durationMs, 400, 0, 10_000),
-      sound: typeof raw.reveal?.sound === "string" ? raw.reveal.sound : null,
+      // Any string used to pass, a `https:` beacon included; the one same-origin rule
+      // now applies here as well as at the moment of play.
+      sound: soundPath(raw.reveal?.sound, warnings, "reveal.sound", "DP.preset.warn.badSound"),
     },
     paper: paperStock(raw.paper, warnings),
     params: normaliseParams(raw.params, warnings),

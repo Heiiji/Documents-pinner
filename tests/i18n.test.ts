@@ -89,6 +89,10 @@ describe("localisation files", () => {
       ["DP.hudMarks.", ["none", "brackets", "corners", "callout"]],
       ["DP.hudGrid.", ["none", "square", "hatch", "dot"]],
       ["DP.paper.", ["parchment", "vellum", "paper", "linen", "slate", "bloodied", "projection"]],
+      // `typeface.fontLabel`: the generic families, camel-cased because a key has no hyphen.
+      ["DP.font.", ["serif", "sansSerif", "monospace", "cursive"]],
+      // The Preset Studio's Reveal group, one per animation the renderer implements.
+      ["DP.revealAnimation.", ["none", "fade", "materialise"]],
       [
         "DP.settings.",
         [
