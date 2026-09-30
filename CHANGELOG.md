@@ -12,9 +12,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **A letter no longer glows in a pitch-black crypt.** Text props are drawn over the map
   rather than into it, so core's darkness never reached them: bright paper floated over
   every night scene. They now darken with the scene's darkness level, and follow it when
-  it changes. Lights and fog still do not reach them, so Pin Studio's Audience tab now
-  says, on every text prop, that it shows through unexplored fog — reveal it when the
-  party gets there.
+  it changes — except on the Projection stock, which is light rather than paper and stays
+  as bright in a dark room as in a lit one. Lights and fog still do not reach them, so
+  Pin Studio's Audience tab now says, on every text prop, that it shows through
+  unexplored fog — reveal it when the party gets there.
 - **A ransom note no longer looks like the settings dialog.** Every card was set in
   Foundry's interface font. A prop can now have its own typeface — serif, sans serif,
   typewriter, handwriting, or any font the world has, including one added in Font Config —

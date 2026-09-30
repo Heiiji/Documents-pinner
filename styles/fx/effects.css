@@ -35,8 +35,9 @@
   mask-repeat: no-repeat;
 
   /* Last in the chain, the scene's darkness: 1 everywhere but a `.dp-prop`, which sets
-     it (ui/prop.css). A light level rather than an effect, so it survives `reduced` and
-     `off` — the effect variables are dropped there, and this is not one of them. */
+     it — and 1 again for projected light inside one (ui/prop.css). A light level rather
+     than an effect, so it survives `reduced` and `off` — the effect variables are dropped
+     there, and this is not one of them. */
   filter: blur(calc(var(--dp-blur, 0px) * var(--dp-i, 1)))
     drop-shadow(
       var(--dp-shadow-x, 0px) var(--dp-shadow-y, 0px) var(--dp-shadow-blur, 0px)

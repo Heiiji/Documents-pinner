@@ -7,8 +7,11 @@
  * that cheap and correct — the mapping, the write discipline, and that darkness is in no
  * content key, so a dusk transition never re-resolves a single card.
  */
+import { readFileSync, readdirSync, statSync } from "node:fs";
+import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { makeAudience } from "../src/data/audience";
+import { cardHtml } from "../src/render/CardTemplate";
 import { defaultPin } from "../src/data/pin-schema";
 import { dressing } from "../src/effects/EffectRegistry";
 import { getCorePreset } from "../src/effects/presets/core-presets";
@@ -256,6 +259,66 @@ describe("darkness and the cards", () => {
       await settle();
       expect(root()?.querySelector(".dp-prop")).not.toBeNull();
       expect(root()?.style.getPropertyValue("--dp-scene-dim")).toBe("0.35");
+    }
+  });
+});
+
+/**
+ * Projected light is emitted, not lit: a readout in a dark room is as bright as in a lit
+ * one. So the `projection` stock keeps its brightness while every other stock darkens.
+ *
+ * jsdom does not cascade custom properties, so the cascade is taken by hand over the real
+ * stylesheets, for the card the real template emits: a value declared on the card itself
+ * beats any it would inherit, and a card with none inherits its prop's.
+ */
+describe("the projection stock in the dark", () => {
+  const css = (() => {
+    const out: string[] = [];
+    const walk = (dir: string) => {
+      for (const entry of readdirSync(dir)) {
+        const full = join(dir, entry);
+        if (statSync(full).isDirectory()) walk(full);
+        else if (entry.endsWith(".css")) out.push(readFileSync(full, "utf8"));
+      }
+    };
+    walk(join(import.meta.dirname, "..", "styles"));
+    return out.join("\n").replace(/\/\*[\s\S]*?\*\//g, "");
+  })();
+  const setters = [...css.matchAll(/([^{};]+)\{([^{}]*)\}/g)]
+    .map((m) => ({ selector: m[1].trim(), body: m[2] }))
+    .filter((rule) => /--dp-card-dim\s*:/.test(rule.body))
+    .map((rule) => ({
+      selector: rule.selector,
+      value: /--dp-card-dim\s*:([^;]*)/.exec(rule.body)![1].trim(),
+    }));
+
+  /** The `--dp-card-dim` a mounted card of this stock ends up with. */
+  function cardDim(paper: string): string | null {
+    const prop = document.createElement("div");
+    prop.className = "dp-prop";
+    prop.innerHTML = cardHtml({
+      title: "Readout",
+      bodyHtml: "<p>SIGNAL</p>",
+      showTitle: true,
+      paper,
+      fontPx: 14,
+      padPx: 20,
+      effectId: "projected-readout",
+    });
+    const card = prop.querySelector<HTMLElement>(".dp-card")!;
+    const own = setters.filter((rule) => card.matches(rule.selector));
+    expect(own.length).toBeLessThanOrEqual(1);
+    if (own.length) return own[0].value;
+    return setters.find((rule) => prop.matches(rule.selector))?.value ?? null;
+  }
+
+  it("keeps a projected readout at full brightness in a dark scene", () => {
+    expect(cardDim("projection")).toBe("1");
+  });
+
+  it("still darkens every stock that is paper", () => {
+    for (const paper of ["parchment", "vellum", "paper", "linen", "slate", "bloodied"]) {
+      expect(cardDim(paper), paper).toBe("var(--dp-scene-dim, 1)");
     }
   });
 });

@@ -157,11 +157,12 @@ If you need real secrecy, keep the document out of the world until you want it s
    an SVG with a `foreignObject`, which tainted the canvas in every browser measured, so
    the WebGL upload threw. The module probes for this at startup and draws props as an
    HTML layer over the canvas instead, dimmed by the scene's global darkness level and by
-   nothing else. So a revealed text prop shows through fog a player has not explored:
-   reveal it when they reach it — Pin Studio's Audience tab says so. *That probe now
-   passes on current Chrome and Firefox* — see [`docs/DESIGN.md`](docs/DESIGN.md) A21 — so
-   the tier may be reachable again; nothing has been changed on that until the whole
-   pipeline is measured in a real world, not just the probe.
+   nothing else — except on the Projection stock, which is light and stays bright. So a
+   revealed text prop shows through fog a player has not explored: reveal it when they
+   reach it — Pin Studio's Audience tab says so. *That probe now passes on current Chrome
+   and Firefox* — see [`docs/DESIGN.md`](docs/DESIGN.md) A21 — so the tier may be
+   reachable again; nothing has been changed on that until the whole pipeline is measured
+   in a real world, not just the probe.
 6. Deleting a pinned document leaves the pin showing a placeholder — never auto-deleted.
 7. Compendium ownership is pack-wide, so there is no per-user grant for a compendium
    source. The pin still reveals its content.
@@ -360,12 +361,13 @@ voulu.
    contaminait le canevas dans tous les navigateurs mesurés, si bien que l'envoi WebGL
    échouait. Le module teste cela au démarrage et dessine les accessoires en HTML
    par-dessus le canevas, assombris par le niveau d'obscurité global de la scène et par
-   rien d'autre. Un accessoire de texte révélé se voit donc à travers un brouillard que le
-   joueur n'a pas exploré : révélez-le quand ils l'atteignent — l'onglet Audience du Studio
-   le rappelle. *Ce test réussit désormais sur Chrome et Firefox
-   actuels* — voir [`docs/DESIGN.md`](docs/DESIGN.md) A21 — la voie est donc peut-être
-   rouverte ; rien n'a été changé tant que toute la chaîne n'aura pas été mesurée dans un
-   vrai monde, et pas seulement le test.
+   rien d'autre — sauf sur le support Projection, qui est de la lumière et reste vif. Un
+   accessoire de texte révélé se voit donc à travers un brouillard que le joueur n'a pas
+   exploré : révélez-le quand ils l'atteignent — l'onglet Audience du Studio le rappelle.
+   *Ce test réussit désormais sur Chrome et Firefox actuels* — voir
+   [`docs/DESIGN.md`](docs/DESIGN.md) A21 — la voie est donc peut-être rouverte ; rien
+   n'a été changé tant que toute la chaîne n'aura pas été mesurée dans un vrai monde, et
+   pas seulement le test.
 6. Supprimer un document épinglé laisse l'épingle sur un substitut — jamais supprimée
    automatiquement.
 7. Les permissions d'un compendium valent pour tout le pack : pas d'octroi par joueur. Le

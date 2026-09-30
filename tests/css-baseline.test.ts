@@ -319,10 +319,19 @@ describe("the scene dim", () => {
       .filter((rule) => rule.selector === selector && /(^|;)\s*filter\s*:/.test(rule.body))
       .map((rule) => /(?:^|;)\s*filter\s*:([^;]*)/.exec(rule.body)![1].replace(/\s+/g, " ").trim());
 
-  it("is handed to the card by a `.dp-prop` rule and by nothing else", () => {
-    const setters = rules.filter((rule) => /--dp-card-dim\s*:/.test(rule.body));
-    expect(setters.map((rule) => rule.selector)).toEqual([".dp-prop"]);
-    expect(setters[0].body).toMatch(/--dp-card-dim\s*:\s*var\(--dp-scene-dim,\s*1\)/);
+  it("is handed to the card by a `.dp-prop` rule, and taken back only for projected light", () => {
+    const setters = rules
+      .filter((rule) => /--dp-card-dim\s*:/.test(rule.body))
+      .map((rule) => ({
+        selector: rule.selector,
+        value: /--dp-card-dim\s*:([^;]*)/.exec(rule.body)![1].replace(/\s+/g, " ").trim(),
+      }));
+    // Exactly these two. A third setter is a card dimmed, or spared, by something other
+    // than the scene — say where it is and why before adding it here.
+    expect(setters).toEqual([
+      { selector: ".dp-prop", value: "var(--dp-scene-dim, 1)" },
+      { selector: '.dp-prop .dp-card[data-dp-paper="projection"]', value: "1" },
+    ]);
   });
 
   it("ends the card's own filter chain", () => {

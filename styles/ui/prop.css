@@ -27,11 +27,16 @@
      at the state duration — the same clock the canvas tier's mesh uses for them. */
   transition: opacity var(--dp-dur-state, 120ms) linear;
   /* The scene's darkness, which the overlay carries, handed to the card inside and
-     applied by the card's own filter chain in fx/effects.css. Set HERE and on nothing
-     else, so only a prop on the map is dimmed: the reader is for reading, and the ghost
-     and the swatches are interface. Not a filter on this element, whose own `filter` is
-     animated by the arrival and cleared under reduced motion — either would erase it. */
+     applied by the card's own filter chain in fx/effects.css. Set HERE, so only a prop on
+     the map is dimmed: the reader is for reading, and the ghost and the swatches are
+     interface. Not a filter on this element, whose own `filter` is animated by the
+     arrival and cleared under reduced motion — either would erase it. */
   --dp-card-dim: var(--dp-scene-dim, 1);
+}
+
+/* Projected light is emitted, not lit: it keeps its brightness in a dark room. */
+.dp-prop .dp-card[data-dp-paper="projection"] {
+  --dp-card-dim: 1;
 }
 
 /*
