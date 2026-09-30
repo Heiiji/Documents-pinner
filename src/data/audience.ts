@@ -146,22 +146,66 @@ export function someAudience(audience: DpAudience): DpAudience | null {
 }
 
 /**
+ * What a reveal writes: the audience the pin remembers from before it was hidden.
+ *
+ * The one reveal rule. The eye, the Pinboard's bulk bar and "Reveal all" each used to
+ * decide for themselves, and the bulk paths wrote `everyone` — so a note narrowed to the
+ * rogue, hidden for a beat and caught by "Reveal all", appeared to the whole table.
+ *
+ * Idempotent: an audience that is not hidden comes back equal, so a second reveal, or a
+ * reveal of a pin whose core `hidden` flag merely lags its kind, never toggles anything.
+ */
+export function revealed(audience: DpAudience): DpAudience {
+  if (audience.kind !== "hidden") return { ...audience };
+  const restore = audience.restore;
+  // A remembered "selected" with an empty list means nobody, which is just hidden
+  // again. Fall back to everyone so a reveal always actually reveals something.
+  const usable = restore && (restore.kind !== "selected" || restore.users.length > 0);
+  return {
+    ...audience,
+    kind: usable ? restore.kind : "everyone",
+    users: usable ? [...restore.users] : [],
+    restore: null,
+  };
+}
+
+/**
+ * Whether revealing this pin would put it in front of at least one player.
+ *
+ * What "Reveal all" counts before it asks: a pin already showing is not revealed again,
+ * and one whose remembered audience names only players who have left reaches nobody.
+ */
+export function wouldReveal(
+  audience: DpAudience,
+  anchorHidden: boolean,
+  allPlayerIds: readonly string[]
+): boolean {
+  return (
+    (anchorHidden || audience.kind === "hidden") && reachesAnyone(revealed(audience), allPlayerIds)
+  );
+}
+
+/** The same people, the same way: kind, list and memory. The order of a list is not news. */
+export function sameAudience(a: DpAudience, b: DpAudience): boolean {
+  return a.kind === b.kind && sameUsers(a.users, b.users) && sameRestore(a.restore, b.restore);
+}
+
+function sameRestore(a: DpAudience["restore"], b: DpAudience["restore"]): boolean {
+  if (!a || !b) return !a && !b;
+  return a.kind === b.kind && sameUsers(a.users, b.users);
+}
+
+function sameUsers(a: readonly string[], b: readonly string[]): boolean {
+  const set = new Set(a);
+  return set.size === new Set(b).size && b.every((id) => set.has(id));
+}
+
+/**
  * The eye toggle. Hiding remembers the current state; un-hiding restores it, so the
  * control behaves as a true on/off rather than resetting the GM's per-player work.
  */
 export function toggleVisibility(audience: DpAudience): DpAudience {
-  if (audience.kind === "hidden") {
-    const restore = audience.restore;
-    // A remembered "selected" with an empty list means nobody, which is just hidden
-    // again. Fall back to everyone so the toggle always actually reveals something.
-    const usable = restore && (restore.kind !== "selected" || restore.users.length > 0);
-    return {
-      ...audience,
-      kind: usable ? restore.kind : "everyone",
-      users: usable ? [...restore.users] : [],
-      restore: null,
-    };
-  }
+  if (audience.kind === "hidden") return revealed(audience);
   return {
     ...audience,
     kind: "hidden",

@@ -303,6 +303,11 @@
   font-weight: 600;
 }
 
+/* The scene's reveal, set apart from the selection's verbs it sits beside. */
+.dp-board__reveal-all {
+  margin-inline-start: auto;
+}
+
 .dp-board__totals {
   margin-inline-start: auto;
   font-size: 0.85em;

@@ -187,7 +187,11 @@ describe("a scene change", () => {
     await board.render();
     expect(board.selected).toEqual([]);
     expect(root().querySelector(".dp-board__scene")!.textContent).toBe("Another");
-    for (const button of root().querySelectorAll<HTMLButtonElement>(".dp-board__bulk button")) {
+    // Every selection verb, that is. "Reveal all" sits in the bulk bar too, and acts on
+    // the scene being viewed, not on the selection.
+    for (const button of root().querySelectorAll<HTMLButtonElement>(
+      '.dp-board__bulk button:not([data-action="revealAll"])'
+    )) {
       expect(button.disabled).toBe(true);
     }
   });

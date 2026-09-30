@@ -76,6 +76,7 @@ sidebar — so if you prepare scenes while players are connected, change the def
 | `Alt+↑↓` | reorder — row order is reveal order |
 | `Enter` `L` `O` `Shift+S` `F` `M` | studio · locate · open · show to audience · flash · shape |
 | effect · `…` | choose an effect · every verb the row has, each in a menu |
+| bulk bar | reveal · hide · delete the selection — each pin to its own audience · *Reveal all* asks before showing more than one |
 | `/` `Esc` | search · clear |
 
 **Click a pin on the Notes layer to grab it.** Pins are Tiles, and Foundry only lets you
@@ -255,6 +256,7 @@ réglage.
 | `Alt+↑↓` | réordonner — l'ordre des lignes est l'ordre de révélation |
 | `Entrée` `L` `O` `Maj+S` `F` `M` | studio · localiser · ouvrir · montrer au public · faire clignoter · forme |
 | effet · `…` | choisir un effet · tous les verbes de la ligne, chacun dans un menu |
+| barre groupée | révéler · masquer · supprimer la sélection — chaque épingle à son propre public · *Tout révéler* demande confirmation avant d'en montrer plus d'une |
 | `/` `Échap` | rechercher · effacer |
 
 **Cliquez une épingle sur le calque Notes pour la saisir.** Les épingles sont des tuiles,

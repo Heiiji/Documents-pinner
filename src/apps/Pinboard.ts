@@ -10,9 +10,11 @@
  *
  * - **One-handed from the keyboard.** Arrow keys move, Space reveals, `/` searches.
  *   No pointer required for anything a GM does mid-scene.
- * - **No confirmation on reveal or hide.** Both are one keystroke to undo, and a
- *   dialog in the middle of a reveal is worse than the mistake it prevents. Delete —
- *   the only irreversible action — does confirm.
+ * - **No confirmation on a row's reveal or hide.** A dialog in the middle of a reveal
+ *   is worse than the mistake it prevents. Two actions do ask: Delete, and "Reveal
+ *   all" when it would show more than one pin. A reveal is not undone by hiding again —
+ *   the table has already read it — and "Reveal all" is the one reveal whose mistake is
+ *   a whole scene's worth of spoilers.
  * - **Bulk is first-class.** Shift-range-select then one action, because "as the
  *   ritual completes, all three glyphs light up" is one moment, not three.
  * - **Row order is reveal order**, hand-sortable and persisted, which quietly turns
@@ -20,11 +22,13 @@
  */
 
 import { MODULE_ID, PLACEHOLDER_TEXTURE } from "../const";
-import { cv, g, internal, ns } from "../fvtt";
+import { cv, g, internal, ns, playerIds } from "../fvtt";
 import { t, tn } from "../i18n";
 import { escapeAttr, escapeHtml } from "../html";
 import * as api from "../api";
 import * as store from "../data/PinStore";
+import { anchorHidden, revealed, sameAudience, wouldReveal } from "../data/audience";
+import type { DpAudience } from "../types/dp";
 import { readPin } from "../data/PinData";
 import { releaseAnchor, syncAnchor } from "../data/ownership-sync";
 import { allPresets, findPreset } from "../effects/preset-library";
@@ -387,6 +391,12 @@ export function boardMarkup(
     `<button type="button" data-action="bulkReveal"${none}>${escapeHtml(t("DP.board.revealSelected"))}</button>` +
     `<button type="button" data-action="bulkHide"${none}>${escapeHtml(t("DP.board.hideSelected"))}</button>` +
     `<button type="button" class="dp-danger" data-action="bulkDelete"${none}>${escapeHtml(t("DP.board.deleteSelected"))}</button>` +
+    // The scene's, not the selection's, so never disabled by an empty one. It sat in the
+    // footer one button from "Hide all", which is the one pair on this board where a
+    // slip cannot be taken back; here it is apart from both, and it asks first.
+    `<button type="button" class="dp-board__reveal-all" data-action="revealAll"` +
+    ` data-tooltip-text="${escapeAttr(t("DP.board.revealAllHint"))}">` +
+    `${escapeHtml(t("DP.board.revealAll"))}</button>` +
     `</div>`;
 
   const menuRow = menu ? rows.find((row) => row.id === menu.id) : null;
@@ -405,7 +415,6 @@ export function boardMarkup(
     bulk,
     `<footer class="dp-board__foot">`,
     `<button type="button" data-action="place">${escapeHtml(t("DP.board.place"))}</button>`,
-    `<button type="button" data-action="revealAll">${escapeHtml(t("DP.board.revealAll"))}</button>`,
     `<button type="button" data-action="hideAll">${escapeHtml(t("DP.board.hideAll"))}</button>`,
     `<span class="dp-board__totals" aria-live="polite">`,
     escapeHtml(t("DP.board.totals", { visible: counts.visible, total: counts.total })),
@@ -462,9 +471,7 @@ export function definePinboard(): any {
         },
         bulkDelete: onBulkDelete,
         place: onPlace,
-        revealAll(this: any) {
-          return allRows(this, true);
-        },
+        revealAll: onRevealAll,
         hideAll(this: any) {
           return allRows(this, false);
         },
@@ -1014,23 +1021,63 @@ async function allRows(app: any, reveal: boolean) {
   await applyVisibility(app, store.all(app.scene), reveal);
 }
 
+/**
+ * "Reveal all", which asks first when it would show more than one pin.
+ *
+ * Counted when the button is pressed, not on every render, and counted as what the
+ * reveal would actually do: a pin already showing is not news, and one whose remembered
+ * audience names only players who have left reaches nobody. One pin is what a row's
+ * Space does without asking, so one pin does not ask here either.
+ *
+ * `=== true`, because a dialog closed with its ✕ resolves `null`, and a build with no
+ * dialog to ask with refuses rather than acting unasked.
+ */
+async function onRevealAll(this: any) {
+  const docs = store.all(this.scene);
+  const players = playerIds();
+  const count = docs.filter((doc: any) => {
+    const pin = readPin(doc);
+    return !!pin && wouldReveal(pin.audience, doc.hidden === true, players);
+  }).length;
+
+  if (count > 1) {
+    const DialogV2 = ns("applications.api.DialogV2");
+    const confirmed = DialogV2?.confirm
+      ? await DialogV2.confirm({
+          window: { title: t("DP.board.revealAllTitle") },
+          content: `<p>${escapeHtml(t("DP.board.revealAllBody", { count }))}</p>`,
+        }).catch(() => false)
+      : false;
+    if (confirmed !== true) return;
+  }
+  await applyVisibility(this, docs, true);
+}
+
 async function applyVisibility(app: any, docs: any[], reveal: boolean) {
-  if (!docs.length) return;
-  await store.batchUpdate(
-    app.scene,
-    docs.map((doc) => {
-      const pin = readPin(doc)!;
-      return { doc, patch: { audience: audienceFor(pin.audience, reveal) } };
-    })
-  );
+  // Only the pins the gesture changes. "Reveal all" over a scene where most pins already
+  // show wrote every one of them anyway, and re-synced every one's ownership after.
+  const changes = docs.flatMap((doc) => {
+    const pin = readPin(doc);
+    if (!pin) return [];
+    const next = audienceFor(pin.audience, reveal);
+    const same = sameAudience(next, pin.audience) && (doc.hidden === true) === anchorHidden(next);
+    return same ? [] : [{ doc, patch: { audience: next } }];
+  });
+  if (!changes.length) return;
+
+  await store.batchUpdate(app.scene, changes);
   // Ownership follows the payload, one source at a time; the queue in ownership-sync
   // keeps two pins of the same journal from racing.
-  for (const doc of docs) await syncAnchor(doc);
+  for (const { doc } of changes) await syncAnchor(doc);
   app.render();
 }
 
 /**
  * The audience a bulk reveal or hide should write.
+ *
+ * A reveal is the eye's own rule, `revealed`: each pin goes back to the audience it
+ * remembers. This wrote `everyone` for every pin, so a note narrowed to one player and
+ * hidden for a beat was shown to the whole table by the bulk bar or "Reveal all".
  *
  * Hiding an ALREADY-hidden pin must leave `restore` alone. Writing it unconditionally
  * stored `{ kind: "hidden" }`, which `normaliseAudience` rewrites to "everyone" — so a
@@ -1038,8 +1085,8 @@ async function applyVisibility(app: any, docs: any[], reveal: boolean) {
  * revealed itself to the whole table. That is the exact failure the remembered audience
  * exists to prevent.
  */
-function audienceFor(current: any, reveal: boolean) {
-  if (reveal) return { ...current, kind: "everyone", users: [], restore: null };
+function audienceFor(current: DpAudience, reveal: boolean): DpAudience {
+  if (reveal) return revealed(current);
   if (current.kind === "hidden") return { ...current };
   return { ...current, kind: "hidden", restore: { kind: current.kind, users: [...current.users] } };
 }

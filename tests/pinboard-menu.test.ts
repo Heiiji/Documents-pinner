@@ -105,7 +105,14 @@ describe("the bulk bar", () => {
   it("is always there, with nothing selected as a disabled state", () => {
     const bar = root().querySelector<HTMLElement>(".dp-board__bulk")!;
     expect(bar).not.toBeNull();
-    for (const button of bar.querySelectorAll("button")) expect(button.disabled).toBe(true);
+    // "Reveal all" moved here from the footer, and acts on the scene rather than on the
+    // selection, so an empty selection is no reason to disable it.
+    for (const button of bar.querySelectorAll<HTMLButtonElement>(
+      'button:not([data-action="revealAll"])'
+    )) {
+      expect(button.disabled).toBe(true);
+    }
+    expect(bar.querySelector<HTMLButtonElement>('[data-action="revealAll"]')!.disabled).toBe(false);
   });
 });
 

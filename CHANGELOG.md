@@ -7,8 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **"Reveal all" asks first, and has left the footer.** It sat one button from "Hide all",
+  and it is the one reveal whose slip is a whole scene's worth of spoilers — hiding again
+  does not take back what the table has read. It is now in the bulk bar, apart from the
+  selection's own verbs, and asks before it shows more than one pin, naming how many. The
+  bulk bar's "Reveal to all" is now "Reveal".
+
 ### Fixed
 
+- **"Reveal all" showed a private note to the whole table.** A pin narrowed to one player
+  and hidden for a beat went back to that player when revealed with `Space` or the eye —
+  and to everyone when revealed from the Pinboard's bulk bar or "Reveal all". Every reveal
+  now restores the audience the pin remembers.
 - **Revealing one page handed over the whole journal.** Access was granted on the journal
   whatever page the pin showed, and every page that inherits its permissions — every page,
   by default — went with it, into the players' sidebars, for good. A pin showing one page

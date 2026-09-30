@@ -98,12 +98,14 @@ describe("Pinboard bulk actions", () => {
 });
 
 describe("Pinboard global actions", () => {
-  it("reveals every pin on the scene — silently a no-op before", async () => {
+  it("reveals every hidden pin on the scene — silently a no-op before", async () => {
     await board.dispatch("revealAll");
 
-    const written = writtenKinds(board.scene);
-    expect(Object.keys(written).sort()).toEqual(["t1", "t2", "t3"]);
-    expect(new Set(Object.values(written))).toEqual(new Set(["everyone"]));
+    // t3 is already showing to everyone, so it is left out of the write: this asserted
+    // that it was rewritten too, which is a write — and an ownership re-sync — for a pin
+    // the gesture does not change. The two hidden ones remember no narrower audience,
+    // so they reveal to everyone.
+    expect(writtenKinds(board.scene)).toEqual({ t1: "everyone", t2: "everyone" });
   });
 
   it("hides every pin on the scene", async () => {
