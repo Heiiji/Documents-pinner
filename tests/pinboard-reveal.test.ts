@@ -174,6 +174,27 @@ describe("Reveal all", () => {
     expect(stored(tiles[0]).kind).toBe("hidden");
   });
 
+  it.each([
+    ["enabled while a pin is hidden", [aliOnly(), { kind: "everyone" }], false],
+    ["disabled with nothing hidden", [{ kind: "everyone" }, { kind: "everyone" }], true],
+  ] as const)("is %s, and named in full", async (_state, audiences, disabled) => {
+    await setup(audiences.map((audience, i) => pinnedTile(`t${i + 1}`, audience, i * 10)));
+    const markup: HTMLElement = await board._renderHTML();
+    const button = markup.querySelector<HTMLButtonElement>('[data-action="revealAll"]')!;
+    expect(button.disabled).toBe(disabled);
+    // Its group is named for the selection it does not act on, so it names itself.
+    expect(button.getAttribute("aria-label")).toBe("DP.board.revealAllHint");
+  });
+
+  it("says so when the reveal fails, rather than rejecting into the console", async () => {
+    await setup([pinnedTile("t1", aliOnly())]);
+    world.canvas.scene.updateEmbeddedDocuments = async () => {
+      throw new Error("the server went away");
+    };
+    await expect(board.dispatch("revealAll")).resolves.toBeUndefined();
+    expect(world.notifications).toEqual([{ type: "error", message: "DP.board.revealAllFailed" }]);
+  });
+
   it("refuses, rather than acting unasked, on a build with no dialog to ask with", async () => {
     await setup([pinnedTile("t1", aliOnly()), pinnedTile("t2", aliOnly(), 10)]);
     delete (globalThis as any).foundry.applications.api.DialogV2;

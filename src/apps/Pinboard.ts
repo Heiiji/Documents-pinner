@@ -432,10 +432,14 @@ export function boardMarkup(
     `<button type="button" data-action="bulkReveal"${none}>${escapeHtml(t("DP.board.revealSelected"))}</button>` +
     `<button type="button" data-action="bulkHide"${none}>${escapeHtml(t("DP.board.hideSelected"))}</button>` +
     `<button type="button" class="dp-danger" data-action="bulkDelete"${none}>${escapeHtml(t("DP.board.deleteSelected"))}</button>` +
-    // The scene's, not the selection's, so never disabled by an empty one. It sat in the
-    // footer one button from "Hide all", which is the one pair on this board where a
-    // slip cannot be taken back; here it is apart from both, and it asks first.
+    // The scene's, not the selection's, so never disabled by an empty one — only by a
+    // scene with nothing hidden, where it has nothing to do. It sat in the footer one
+    // button from "Hide all", which is the one pair on this board where a slip cannot be
+    // taken back; here it is apart from both, and it asks first. Named in full, because
+    // the group around it is named for the selection it does not act on.
     `<button type="button" class="dp-board__reveal-all" data-action="revealAll"` +
+    `${rows.some((row) => row.hidden) ? "" : " disabled"}` +
+    ` aria-label="${escapeAttr(t("DP.board.revealAllHint"))}"` +
     ` data-tooltip-text="${escapeAttr(t("DP.board.revealAllHint"))}">` +
     `${escapeHtml(t("DP.board.revealAll"))}</button>` +
     `</div>`;
@@ -1139,26 +1143,34 @@ async function allRows(app: any, reveal: boolean) {
  *
  * `=== true`, because a dialog closed with its ✕ resolves `null`, and a build with no
  * dialog to ask with refuses rather than acting unasked.
+ *
+ * A reveal that fails is said: the GM pressed the scene's biggest button with the table
+ * watching, and a rejection in the console is not an answer.
  */
 async function onRevealAll(this: any) {
-  const docs = store.all(this.scene);
-  const players = playerIds();
-  const count = docs.filter((doc: any) => {
-    const pin = readPin(doc);
-    return !!pin && wouldReveal(pin.audience, doc.hidden === true, players);
-  }).length;
+  try {
+    const docs = store.all(this.scene);
+    const players = playerIds();
+    const count = docs.filter((doc: any) => {
+      const pin = readPin(doc);
+      return !!pin && wouldReveal(pin.audience, doc.hidden === true, players);
+    }).length;
 
-  if (count > 1) {
-    const DialogV2 = ns("applications.api.DialogV2");
-    const confirmed = DialogV2?.confirm
-      ? await DialogV2.confirm({
-          window: { title: t("DP.board.revealAllTitle") },
-          content: `<p>${escapeHtml(t("DP.board.revealAllBody", { count }))}</p>`,
-        }).catch(() => false)
-      : false;
-    if (confirmed !== true) return;
+    if (count > 1) {
+      const DialogV2 = ns("applications.api.DialogV2");
+      const confirmed = DialogV2?.confirm
+        ? await DialogV2.confirm({
+            window: { title: t("DP.board.revealAllTitle") },
+            content: `<p>${escapeHtml(t("DP.board.revealAllBody", { count }))}</p>`,
+          }).catch(() => false)
+        : false;
+      if (confirmed !== true) return;
+    }
+    await applyVisibility(this, docs, true);
+  } catch (error) {
+    log.warn("reveal all failed", error);
+    notify({ key: "DP.board.revealAllFailed" }, "error");
   }
-  await applyVisibility(this, docs, true);
 }
 
 async function applyVisibility(app: any, docs: any[], reveal: boolean) {

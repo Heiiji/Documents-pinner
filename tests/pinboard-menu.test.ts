@@ -116,13 +116,13 @@ describe("the bulk bar", () => {
     const bar = root().querySelector<HTMLElement>(".dp-board__bulk")!;
     expect(bar).not.toBeNull();
     // "Reveal all" moved here from the footer, and acts on the scene rather than on the
-    // selection, so an empty selection is no reason to disable it.
+    // selection, so an empty selection is no reason to disable it. (It is disabled here
+    // for another reason — nothing on this scene is hidden; tests/pinboard-reveal.test.ts.)
     for (const button of bar.querySelectorAll<HTMLButtonElement>(
       'button:not([data-action="revealAll"])'
     )) {
       expect(button.disabled).toBe(true);
     }
-    expect(bar.querySelector<HTMLButtonElement>('[data-action="revealAll"]')!.disabled).toBe(false);
   });
 });
 

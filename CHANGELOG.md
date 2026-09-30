@@ -33,8 +33,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **"Reveal all" asks first, and has left the footer.** It sat one button from "Hide all",
   and it is the one reveal whose slip is a whole scene's worth of spoilers — hiding again
   does not take back what the table has read. It is now in the bulk bar, apart from the
-  selection's own verbs, and asks before it shows more than one pin, naming how many. The
-  bulk bar's "Reveal to all" is now "Reveal".
+  selection's own verbs, asks before it shows more than one pin, naming how many, and is
+  greyed out when nothing on the scene is hidden. The bulk bar's "Reveal to all" is now
+  "Reveal".
 - **The HUD keeps to the verbs of the moment.** On the left: reveal, who can see it, and
   spotlight; on the right: effect, shape, open for me, flash and Pin Studio. Lock and *Fit
   to content* have left it for Pin Studio's strip, where both already were; Fit is still
