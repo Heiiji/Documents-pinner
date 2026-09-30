@@ -46,7 +46,13 @@ would be worse than saying nothing.
 ## Use
 
 **Alt-drag** a journal or page from the sidebar onto the map. A ghost of the real prop
-follows the cursor; click to place. It stays hidden from players until you reveal it.
+follows the cursor; click to place.
+
+**A new pin is visible to players the moment it lands.** That is the default of the
+*Default visibility* setting. Press `V` while placing to put this one down hidden, or set
+*Default visibility* to *Hidden until revealed* so every pin waits for you. With *Grant
+document access on reveal* on, a visible pin also puts its document in the players'
+sidebar — so if you prepare scenes while players are connected, change the default first.
 
 | Placing | |
 |---|---|
@@ -109,7 +115,7 @@ Anything about your machine is per-client; anything about how the table plays is
 | Reduce detail automatically | client | One step down if the frame rate will not hold |
 | Console detail | client | `Debug` is what a useful bug report needs |
 | Drag-to-pin modifier | client | Alt, Ctrl, Shift, none |
-| Default shape / visibility | world | What a newly placed document becomes |
+| Default shape / visibility | world | What a newly placed document becomes — a prop, visible to everyone, until you change it |
 | Grant document access on reveal | world | Whether revealing also raises ownership |
 
 ## Visibility and privacy — read this
@@ -217,8 +223,15 @@ serait pire que de ne rien dire.
 ## Utilisation
 
 **Alt-glissez** un journal ou une page depuis la barre latérale sur la carte. Un fantôme de
-l'accessoire réel suit le curseur ; cliquez pour poser. Il reste masqué aux joueurs jusqu'à
-ce que vous le révéliez.
+l'accessoire réel suit le curseur ; cliquez pour poser.
+
+**Une nouvelle épingle est visible des joueurs dès qu'elle est posée.** C'est la valeur par
+défaut du réglage *Visibilité par défaut*. Appuyez sur `V` pendant le placement pour poser
+celle-ci masquée, ou réglez *Visibilité par défaut* sur *Masquée jusqu'à révélation* pour
+que chaque épingle vous attende. Avec *Accorder l'accès au document lors de la révélation*
+activé, une épingle visible place aussi son document dans la barre latérale des joueurs :
+si vous préparez vos scènes pendant que des joueurs sont connectés, changez d'abord ce
+réglage.
 
 | Placement | |
 |---|---|
@@ -286,7 +299,7 @@ monde.
 | Réduire le détail automatiquement | client | Un cran plus bas si la fluidité ne tient pas |
 | Détail de la console | client | `Débogage` est ce dont un rapport de bogue a besoin |
 | Modificateur de glisser-épingler | client | Alt, Ctrl, Maj, aucun |
-| Forme / visibilité par défaut | monde | Ce que devient un document nouvellement posé |
+| Forme / visibilité par défaut | monde | Ce que devient un document nouvellement posé — un accessoire visible de tous, tant que vous ne le changez pas |
 | Accorder l'accès au document à la révélation | monde | Si révéler élève aussi les permissions |
 
 ## Visibilité et confidentialité — à lire
