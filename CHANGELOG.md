@@ -36,6 +36,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Aged Parchment and Sealed & Wax in a serif.** A terminal set in the interface font read
   as a letter held up to a lamp. Generic faces only, so they look right in every world
   with no font installed; a pin that should keep the old face can choose it in Pin Studio.
+- **Pins are stored in format 5 and presets in format 3, for the typeface and the reveal
+  sound.** Opening a scene updates its pins silently and the rest of the world is offered
+  once, as before; nothing changes on any map. A preset exported from this version and
+  imported into an older one is reported there as newer, and loses only its typeface.
 
 ### Fixed
 
