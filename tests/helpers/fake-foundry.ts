@@ -728,10 +728,12 @@ export function installWorld(world: FakeWorld = {}): InstalledWorld {
     // `ControlsLayer#handlePing` (TYPES `controls.d.mts:197-210`, body RECALLED): draws
     // nothing and resolves false unless `data.scene` is the viewed scene's id — "an
     // object containing a valid scene property must be passed" — and, for a pull from a
-    // GM or from this client, pans this client's view to the spot first.
+    // GM or from this client, pans this client's view to the spot first. A missing id is
+    // refused even here, where the test scene may have none: a real scene always has one,
+    // and letting `{}` draw on an id-less scene passed the very call this exists to catch.
     controls: {
       handlePing(user: any, origin: { x: number; y: number }, data: any = {}) {
-        if (!canvas.ready || !origin || data?.scene !== canvas.scene?.id) {
+        if (!canvas.ready || !origin || !data?.scene || data.scene !== canvas.scene?.id) {
           return Promise.resolve(false);
         }
         if (data.pull && (user?.isGM || user?.id === game.user?.id)) {

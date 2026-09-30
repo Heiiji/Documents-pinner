@@ -180,6 +180,17 @@ describe("flash", () => {
     expect(recordedPings()[0].data).toEqual({ scene: "s1", style: "pulse" });
   });
 
+  // The fake this suite pings against must refuse the very call the flash used to make:
+  // `{}` drew nothing on a real canvas, whose scene always has an id, while a test scene
+  // with none let `undefined === undefined` draw it.
+  it("is checked against a canvas that draws nothing for a local ping with no scene", async () => {
+    await setup(HIDDEN);
+    delete world.canvas.scene.id;
+    const drawn = await world.canvas.controls.handlePing(world.game.user, { x: 1, y: 1 }, {});
+    expect(drawn).toBe(false);
+    expect(recordedPings()).toEqual([]);
+  });
+
   it("does not ping this map for a pin on another scene", async () => {
     await setup(EVERYONE);
     tile.parent = { id: "elsewhere" };
