@@ -35,6 +35,76 @@ export interface OwnershipPlan {
   notices: DpNotice[];
 }
 
+/**
+ * The ledger as stored, in any shape it has ever been stored in.
+ *
+ * Since 0.3.2 it is a JSON STRING, because a string is the one thing every core replaces
+ * whole. Before that it was a plain object, and v14 corrupted it on every write in two
+ * ways, both measured in `foundry.mjs` 14.367:
+ *
+ * 1. Its `holders` keys are anchor UUIDs, and v14 expands every dotted key anywhere
+ *    inside a flag into nested objects — so `{"Scene.s1.Tile.t1": 2}` was stored as
+ *    `{Scene: {s1: {Tile: {t1: 2}}}}`. A release then looked for its anchor, never found
+ *    it, and never gave the permission back.
+ * 2. The `-=grants` / `grants` pair meant to replace it was DIFFED in v14: a ledger that
+ *    only lost entries was deleted outright, and one that changed kept its stale ones.
+ *
+ * The first is repaired here: the nesting is walked back into the UUIDs it came from,
+ * which is lossless because a holder's value is always a number and a path segment never
+ * is. A ledger already in a world is read as it was meant, and written back as a string
+ * the first time it is touched. What the second deleted is gone; `reconcile` cannot see
+ * a grant with no ledger, which is why the changelog tells a GM to check.
+ */
+export function readLedger(raw: unknown): DpGrantLedger | null {
+  let value = raw;
+  if (typeof value === "string") {
+    try {
+      value = JSON.parse(value);
+    } catch {
+      return null;
+    }
+  }
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+
+  const stored = value as Record<string, any>;
+  return {
+    v: typeof stored.v === "number" ? stored.v : LEDGER_VERSION,
+    baseline: { ...(isRecord(stored.baseline) ? stored.baseline : {}) },
+    granted: { ...(isRecord(stored.granted) ? stored.granted : {}) },
+    holders: Object.fromEntries(
+      Object.entries(isRecord(stored.holders) ? stored.holders : {}).map(([key, held]) => [
+        key,
+        flattenHolders(held),
+      ])
+    ),
+    overridden: Array.isArray(stored.overridden) ? [...stored.overridden] : [],
+  };
+}
+
+/** The ledger in the form it is stored: a string, which no core merges into. */
+export function serialiseLedger(ledger: DpGrantLedger): string {
+  return JSON.stringify(ledger);
+}
+
+function isRecord(value: unknown): value is Record<string, any> {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
+/** `{Scene: {s1: {Tile: {t1: 2}}}}` back to `{"Scene.s1.Tile.t1": 2}`; flat keys pass through. */
+function flattenHolders(
+  node: unknown,
+  prefix = "",
+  out: Record<string, number> = {}
+): Record<string, number> {
+  if (!isRecord(node)) return out;
+  for (const [segment, value] of Object.entries(node)) {
+    const path = prefix ? `${prefix}.${segment}` : segment;
+    if (typeof value === "number") out[path] = value;
+    else flattenHolders(value, path, out);
+  }
+  return out;
+}
+
 export function emptyLedger(): DpGrantLedger {
   return { v: LEDGER_VERSION, baseline: {}, granted: {}, holders: {}, overridden: [] };
 }

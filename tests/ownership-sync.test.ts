@@ -16,6 +16,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { defaultPin } from "../src/data/pin-schema";
+import { readLedger } from "../src/data/ownership-plan";
 import { fakeDoc, fakeTile, installWorld, uninstallWorld } from "./helpers/fake-foundry";
 
 let journal: any;
@@ -49,8 +50,8 @@ function pinned(id: string, kind: string, users: string[]) {
   return tile;
 }
 
-/** The ledger as it is actually STORED, after the merge. */
-const ledger = () => journal.flags?.["documents-pinner"]?.grants;
+/** The ledger as it is actually STORED, after v14's expansion, diff and merge, read back. */
+const ledger = (): any => readLedger(journal.flags?.["documents-pinner"]?.grants) ?? undefined;
 
 beforeEach(() => {
   vi.resetModules();
@@ -294,5 +295,131 @@ describe("reconcile", () => {
 
     expect(await sync.reconcile()).toBe(1);
     expect(journal.flags["documents-pinner"]?.grants ?? null).toBeNull();
+  });
+});
+
+/**
+ * v14 corrupted every ledger it stored: the anchor-UUID keys under `holders` were expanded
+ * into nesting, so a release never found its anchor and the player kept the permission.
+ * A world upgraded to 0.3.2 already holds ledgers in that shape; they must still release.
+ */
+describe("a ledger v14 already stored nested", () => {
+  beforeEach(() => {
+    journal.ownership = { default: 0, ali: 2 };
+    journal.flags = {
+      "documents-pinner": {
+        grants: {
+          v: 1,
+          baseline: { ali: null },
+          granted: { ali: 2 },
+          holders: { ali: { Scene: { s1: { Tile: { a: 2 } } } } },
+          overridden: [],
+        },
+      },
+    };
+  });
+
+  it("is read back as the anchor it was keyed by", async () => {
+    expect(ledger().holders.ali).toEqual({ "Scene.s1.Tile.a": 2 });
+  });
+
+  it("releases the grant when the pin is hidden, and leaves no ledger behind", async () => {
+    const { syncAnchor } = await import("../src/data/ownership-sync");
+    setAudience(anchorA, "hidden", []);
+    await syncAnchor(anchorA);
+
+    expect(journal.ownership.ali).toBeUndefined();
+    expect(ledger()).toBeUndefined();
+  });
+
+  it("is not mistaken by the ready sweep for an orphan named `Scene`", async () => {
+    const sync = await import("../src/data/ownership-sync");
+    (globalThis as any).game.journal.contents = [journal];
+    expect(await sync.reconcile()).toBe(0);
+    expect(journal.ownership.ali).toBe(2);
+  });
+});
+
+/** The operator classes the world was installed with, which `vi.resetModules` would split. */
+const installed = () => (globalThis as any).foundry.data.operators;
+
+describe("the ledger's storage", () => {
+  it("is a string, which no core merges into or expands", async () => {
+    const { syncAnchor } = await import("../src/data/ownership-sync");
+    await syncAnchor(anchorA);
+    expect(typeof journal.flags["documents-pinner"].grants).toBe("string");
+  });
+
+  /**
+   * v14 validates an ownership change key by key before applying any of the update, and a
+   * deletion — `-=ali` or a `ForcedDeletion` — is not a permission level: core refuses the
+   * whole write, ledger included, and resolves as if it had worked. Measured by running
+   * 14.367's own update path. So every release of a player who had no entry before the pin
+   * failed on v14, and the player kept the permission.
+   */
+  it("writes a release that deletes a player's entry as the whole record, which v14 accepts", async () => {
+    const { syncAnchor } = await import("../src/data/ownership-sync");
+    const { ForcedReplacement } = installed();
+    await syncAnchor(anchorA);
+    setAudience(anchorA, "hidden", []);
+    await syncAnchor(anchorA);
+
+    const last = journal.updates[journal.updates.length - 1];
+    expect(last.ownership).toBeInstanceOf(ForcedReplacement);
+    expect(last.ownership.value).toEqual({ default: 0 });
+    expect(journal.rejected).toEqual([]);
+    expect(journal.ownership).toEqual({ default: 0 });
+  });
+
+  it("keeps a grant that only sets levels as a plain diff", async () => {
+    const { syncAnchor } = await import("../src/data/ownership-sync");
+    await syncAnchor(anchorA);
+    expect(journal.updates[0].ownership).toEqual({ ali: 2 });
+  });
+});
+
+/**
+ * Core's ownership dialog writes the whole record as a `ForcedReplacement`, in which a
+ * player the GM removed is simply absent. Read as a plain diff that was no change at all,
+ * and the ledger went on recording a grant the GM had taken away.
+ */
+describe("a GM's edit through core's ownership dialog", () => {
+  const stored = () => ({
+    v: 1,
+    baseline: { ali: null },
+    granted: { ali: 2 },
+    holders: { ali: { "Scene.s1.Tile.a": 2 } },
+    overridden: [],
+  });
+
+  it("reads a player missing from the replacement as removed", async () => {
+    const { ownershipChange } = await import("../src/data/ownership-sync");
+    const { ForcedReplacement } = installed();
+    const change = ownershipChange(ForcedReplacement.create({ default: 0, ben: 1 }), stored());
+    expect(change).toEqual({ default: 0, ben: 1, "-=ali": null });
+  });
+
+  it("reads a ForcedDeletion value as a removal, and passes a plain diff through", async () => {
+    const { ownershipChange } = await import("../src/data/ownership-sync");
+    const { ForcedDeletion } = installed();
+    expect(ownershipChange({ ali: new ForcedDeletion(), ben: 3 }, stored())).toEqual({
+      "-=ali": null,
+      ben: 3,
+    });
+  });
+
+  it("records the removal as the GM's own edit when it happens", async () => {
+    const sync = await import("../src/data/ownership-sync");
+    const { ForcedReplacement } = installed();
+    await sync.syncAnchor(anchorA);
+
+    journal.ownership = { default: 0 };
+    await sync.onSourceOwnershipEdited(
+      journal,
+      { ownership: ForcedReplacement.create({ default: 0 }) },
+      {},
+      "gm"
+    );
+    expect(ledger().overridden).toContain("ali");
   });
 });

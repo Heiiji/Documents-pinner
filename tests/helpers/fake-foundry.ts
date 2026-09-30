@@ -50,51 +50,150 @@ export function answerDialogs(answer: boolean): void {
 // ---------------------------------------------------------------------------
 
 /**
- * Foundry's `Document#update` merge semantics, which the ownership ledger depends on.
+ * `foundry.data.operators`, just enough to be told apart and applied.
  *
- * Two behaviours matter and both are load-bearing:
- *
- * - A dotted path writes into the nested object, creating intermediate levels.
- * - A nested PLAIN OBJECT is DEEP-MERGED, not replaced. That is the semantics the module
- *   relies on for `-=` deletions elsewhere, and it is exactly why writing a whole ledger
- *   object could never remove a key from it.
+ * v14 replaced the `-=key` / `==key` special keys with these values (foundry.mjs 14.367,
+ * lines 1369-1510). The old keys still work, each with a compatibility warning, and are
+ * removed in v16.
  */
-export function applyUpdate(target: any, changes: Record<string, unknown>): void {
-  for (const [path, value] of Object.entries(changes)) {
-    const segments = path.split(".");
-    let node = target;
-
-    for (let i = 0; i < segments.length - 1; i++) {
-      const segment = segments[i];
-      if (typeof node[segment] !== "object" || node[segment] === null) node[segment] = {};
-      node = node[segment];
-    }
-
-    const last = segments[segments.length - 1];
-    if (last.startsWith("-=")) {
-      delete node[last.slice(2)];
-      continue;
-    }
-    node[last] = mergeValue(node[last], value);
+export class DataFieldOperator {
+  constructor(readonly value?: unknown) {}
+  static get(value: unknown): unknown {
+    return value instanceof DataFieldOperator ? value.value : value;
+  }
+}
+export class ForcedDeletion extends DataFieldOperator {}
+export class ForcedReplacement extends DataFieldOperator {
+  static create(value: unknown): ForcedReplacement {
+    return new ForcedReplacement(value);
   }
 }
 
-function mergeValue(current: unknown, next: unknown): unknown {
-  if (!isPlainObject(current) || !isPlainObject(next)) return next;
+/**
+ * v14's `Document#update`, for the parts the module's writes depend on.
+ *
+ * The fake this replaces modelled v13 — apply `-=key`, then merge `key` beside it, in order
+ * — and so did the module's ownership ledger, which v14 corrupted on every write while this
+ * suite stayed green. What v14 actually does, traced in `foundry.mjs` 14.367:
+ *
+ * - **Dotted keys are expanded at EVERY depth inside a flag** (`ObjectField` cleaning,
+ *   `#reconstructOperators`, lines 10567-10578), not only in the update's own paths. A
+ *   flag value keyed by UUIDs is stored nested.
+ * - **The change is DIFFED against the stored value, then merged** (`_diffObject`, lines
+ *   1892-1913; `ObjectField#_updateDiff`, 10599-10625). A `-=key` becomes a deletion of
+ *   `key` — kept only if `key` exists — and a later plain `key` in the same object is
+ *   diffed and OVERWRITES that deletion. A plain object that only lost keys diffs to
+ *   nothing: its missing keys are never removed.
+ * - **`ForcedDeletion` and `ForcedReplacement`** delete a key and replace a value whole.
+ */
+export function applyUpdate(target: any, changes: Record<string, unknown>): void {
+  const change = expandPaths(changes);
+  if (isPlainObject(change.flags)) change.flags = expandDeep(change.flags);
+  const result = applyDiff(target, diffObject(target, change));
+  for (const key of Object.keys(target)) if (!(key in result)) delete target[key];
+  Object.assign(target, result);
+}
 
-  const out: Record<string, unknown> = { ...current };
-  for (const [key, value] of Object.entries(next)) {
-    if (key.startsWith("-=")) {
-      delete out[key.slice(2)];
-      continue;
+/**
+ * `DocumentOwnershipField` validation (foundry.mjs 14.367, ~12468), which runs on the
+ * change BEFORE it is applied (`ObjectField#_updateDiff`, 10604-10610). Every value must be
+ * a permission level, so a deletion — a `-=key`, or a `ForcedDeletion` value — is refused;
+ * a `ForcedReplacement` is checked as the record it replaces with. Measured by running
+ * 14.367's own update path. (Core also requires every key but `default` to be a 16-char
+ * id; the tests name players "ali" and "ben", so that half is not modelled.)
+ */
+function ownershipAccepts(ownership: unknown): boolean {
+  if (ownership === undefined) return true;
+  const record = ownership instanceof ForcedReplacement ? ownership.value : ownership;
+  if (!isPlainObject(record)) return false;
+  return Object.entries(record).every(
+    ([key, value]) =>
+      !key.startsWith("-=") && typeof value === "number" && value >= -1 && value <= 3
+  );
+}
+
+/** The update's own dotted paths, as nested objects. */
+function expandPaths(changes: Record<string, unknown>): Record<string, any> {
+  const out: Record<string, any> = {};
+  for (const [path, value] of Object.entries(changes)) {
+    const segments = path.split(".");
+    let node = out;
+    for (const segment of segments.slice(0, -1)) {
+      if (!isPlainObject(node[segment])) node[segment] = {};
+      node = node[segment];
     }
-    out[key] = mergeValue(out[key], value);
+    node[segments[segments.length - 1]] = value;
   }
   return out;
 }
 
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+/** Every dotted key at every depth, as v14 does inside a flag. Operators are left alone. */
+function expandDeep(value: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, any> = {};
+  for (const [key, inner] of Object.entries(value)) {
+    const expanded = isPlainObject(inner) ? expandDeep(inner) : inner;
+    const segments = key.split(".");
+    let node = out;
+    for (const segment of segments.slice(0, -1)) {
+      if (!isPlainObject(node[segment])) node[segment] = {};
+      node = node[segment];
+    }
+    const last = segments[segments.length - 1];
+    node[last] =
+      isPlainObject(node[last]) && isPlainObject(expanded)
+        ? { ...node[last], ...expanded }
+        : expanded;
+  }
+  return out;
+}
+
+function diffObject(original: any, other: Record<string, unknown>): Record<string, unknown> {
+  const diff: Record<string, unknown> = {};
+  const source = isPlainObject(original) ? original : {};
+  for (let [key, value] of Object.entries(other)) {
+    if (key.startsWith("-=")) {
+      key = key.slice(2);
+      value = new ForcedDeletion();
+    }
+    if (value instanceof DataFieldOperator) {
+      if (value instanceof ForcedReplacement || key in source) diff[key] = value;
+      continue;
+    }
+    const [different, difference] = diffValue(source[key], value);
+    if (different) diff[key] = difference;
+  }
+  return diff;
+}
+
+function diffValue(v0: unknown, v1: unknown): [boolean, unknown] {
+  if (v1 === undefined || v1 === null) return [v0 !== v1, v1];
+  if (isPlainObject(v0) && isPlainObject(v1)) {
+    if (!Object.keys(v1).length) return [false, undefined];
+    const d = diffObject(v0, v1);
+    return [Object.keys(d).length > 0, d];
+  }
+  return [v0 !== v1, v1];
+}
+
+/** `mergeObject(source, diff, {applyOperators: true})`. */
+function applyDiff(target: any, diff: Record<string, unknown>): Record<string, any> {
+  const out: Record<string, any> = isPlainObject(target) ? { ...target } : {};
+  for (const [key, value] of Object.entries(diff)) {
+    if (value instanceof ForcedDeletion) delete out[key];
+    else if (value instanceof ForcedReplacement) out[key] = value.value;
+    else if (isPlainObject(value)) out[key] = applyDiff(out[key], value);
+    else out[key] = value;
+  }
+  return out;
+}
+
+function isPlainObject(value: unknown): value is Record<string, any> {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value) &&
+    !(value instanceof DataFieldOperator)
+  );
 }
 
 export interface FakeDocOptions {
@@ -113,12 +212,20 @@ export function fakeDoc(options: FakeDocOptions = {}): any {
     flags: {},
     ownership: {},
     updates: [] as Record<string, unknown>[],
+    /** Updates core would have refused, and so never applied. */
+    rejected: [] as Record<string, unknown>[],
     ...options,
   };
 
   doc.update = async (changes: Record<string, unknown>, context?: unknown) => {
     doc.updates.push(changes);
     doc.lastContext = context;
+    // What core does with an update that fails validation: an error toast, the WHOLE
+    // update dropped, and a promise that resolves anyway. Nothing throws to the caller.
+    if (!ownershipAccepts(expandPaths(changes).ownership)) {
+      doc.rejected.push(changes);
+      return undefined;
+    }
     applyUpdate(doc, changes);
     return doc;
   };
@@ -631,7 +738,7 @@ export function installWorld(world: FakeWorld = {}): InstalledWorld {
       ux: {},
     },
     abstract: {},
-    data: {},
+    data: { operators: { DataFieldOperator, ForcedDeletion, ForcedReplacement } },
   };
 
   return { game, canvas, hooks, notifications };

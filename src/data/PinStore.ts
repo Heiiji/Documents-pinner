@@ -21,8 +21,8 @@
  * a whole scene and N round trips would show up as a visible stagger on every client.
  */
 
-import { DELETE_PREFIX, FLAGS, MODULE_ID } from "../const";
-import { g, internal } from "../fvtt";
+import { FLAGS, MODULE_ID } from "../const";
+import { deletionUpdate, g, internal } from "../fvtt";
 import { centreAfterResize } from "../canvas/transform";
 import type { DpMode, DpPinFlags } from "../types/dp";
 import { anchorHidden } from "./audience";
@@ -341,7 +341,7 @@ export function attach(doc: any, pin: DpPinFlags): Promise<any> {
 /** Remove the pin payload but keep the tile, turning an anchor back into a plain tile. */
 export function unpin(doc: any): Promise<any> {
   return enqueue(doc?.id ?? "", () =>
-    doc.update({ [`flags.${MODULE_ID}.${DELETE_PREFIX}${FLAGS.PIN}`]: null }, internal())
+    doc.update(deletionUpdate(`flags.${MODULE_ID}`, FLAGS.PIN), internal())
   );
 }
 

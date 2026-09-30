@@ -59,8 +59,9 @@ export const DEFAULT_KEY = "default";
  * Foundry's deletion operator for a record key.
  *
  * NOTE: v14.349 deprecated the special `-=` / `==` operation keys in favour of
- * `DataFieldOperator` values. `-=` still works in v14 but will be removed; it is
- * isolated here so the migration is a one-line change.
+ * `DataFieldOperator` values, and removes them in v16. The pure planners still speak
+ * `-=` because it is plain data; no WRITE uses it where core has the operators — see
+ * `deletionUpdate` and `forcedReplacement` in `fvtt.ts`, and `ownershipWrite`.
  */
 export const DELETE_PREFIX = "-=";
 

@@ -11,7 +11,7 @@
  * takes the whole module down with it.
  */
 
-import { INTERNAL_OPTION } from "./const";
+import { DELETE_PREFIX, INTERNAL_OPTION } from "./const";
 import { logger } from "./log";
 import { tn } from "./i18n";
 import type { DpNotice } from "./types/dp";
@@ -53,6 +53,36 @@ export function nsAny(...paths: string[]): any {
     if (found !== undefined) return found;
   }
   return undefined;
+}
+
+/**
+ * A value that deletes the field it is written to, in the syntax this core speaks.
+ *
+ * v14 replaced the `-=key` special keys with `DataFieldOperator` values. The old keys
+ * still work there, but each write that uses one logs a compatibility warning, and they
+ * are removed in v16. `null` when the operators are not there, for the caller to fall
+ * back to the old key.
+ */
+export function forcedDeletion(): unknown {
+  const ForcedDeletion = ns("data.operators.ForcedDeletion");
+  return typeof ForcedDeletion === "function" ? new ForcedDeletion() : null;
+}
+
+/** An update that deletes `parent.key`, as an operator where core has one. */
+export function deletionUpdate(parent: string, key: string): Record<string, unknown> {
+  const operator = forcedDeletion();
+  return operator
+    ? { [`${parent}.${key}`]: operator }
+    : { [`${parent}.${DELETE_PREFIX}${key}`]: null };
+}
+
+/**
+ * A value that replaces the field it is written to whole, rather than being merged into
+ * it — or `null` on a core without operators.
+ */
+export function forcedReplacement(value: unknown): unknown {
+  const ForcedReplacement = ns("data.operators.ForcedReplacement");
+  return typeof ForcedReplacement?.create === "function" ? ForcedReplacement.create(value) : null;
 }
 
 export function isGM(): boolean {

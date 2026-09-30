@@ -17,7 +17,19 @@
 
 import { DELETE_PREFIX, FLAGS, MODULE_ID } from "../const";
 import { logger } from "../log";
-import { g, internal, isGM, isOurs, isPrimaryGM, notify, playerIds, resolveUuid } from "../fvtt";
+import {
+  forcedDeletion,
+  forcedReplacement,
+  g,
+  internal,
+  isGM,
+  isOurs,
+  isPrimaryGM,
+  notify,
+  ns,
+  playerIds,
+  resolveUuid,
+} from "../fvtt";
 import type { DpGrantLedger } from "../types/dp";
 import { grantKeysFor } from "./audience";
 import {
@@ -25,6 +37,8 @@ import {
   planRebase,
   planRelease,
   planRetarget,
+  readLedger,
+  serialiseLedger,
   type OwnershipPlan,
 } from "./ownership-plan";
 import { enqueue } from "./PinStore";
@@ -33,7 +47,7 @@ import { readPin } from "./PinData";
 const log = logger("grants");
 
 function ledgerOf(doc: any): DpGrantLedger | null {
-  return (doc?.flags?.[MODULE_ID]?.[FLAGS.GRANTS] as DpGrantLedger) ?? null;
+  return readLedger(doc?.flags?.[MODULE_ID]?.[FLAGS.GRANTS]);
 }
 
 /**
@@ -46,7 +60,7 @@ function ledgerOf(doc: any): DpGrantLedger | null {
 async function applyPlan(doc: any, plan: OwnershipPlan): Promise<void> {
   const data: Record<string, unknown> = {};
 
-  if (plan.ownership) data.ownership = plan.ownership;
+  if (plan.ownership) data.ownership = ownershipWrite(doc?.ownership ?? {}, plan.ownership);
   writeLedger(data, doc, plan.ledger);
 
   if (Object.keys(data).length) {
@@ -69,23 +83,48 @@ async function applyPlan(doc: any, plan: OwnershipPlan): Promise<void> {
 }
 
 /**
+ * The ownership half of a plan, in a form v14 accepts.
+ *
+ * v14 validates an ownership change key by key BEFORE applying it: every key must be a
+ * user id and every value a permission level. A deletion — `-=id`, or a `ForcedDeletion`
+ * value — fails that, and core drops the WHOLE update, ledger included: an error toast,
+ * and a promise that resolves as if it had worked. Measured by running 14.367's own
+ * update path: `{ali: ForcedDeletion}` and `{"-=ali": null}` both rejected, a
+ * `ForcedReplacement` of the full record accepted. So on v14 no release that removed a
+ * player's entry ever landed, and that is the common case: a player with no entry of
+ * their own before the pin, whose grant has to be deleted, not lowered.
+ *
+ * Core's own permission dialog writes the full record for the same reason, and a plan
+ * that deletes does the same. One that only sets levels stays a plain diff, which merges.
+ */
+export function ownershipWrite(
+  current: Record<string, number>,
+  diff: Record<string, number | null>
+): unknown {
+  const deletes = Object.keys(diff).some((key) => key.startsWith(DELETE_PREFIX));
+  if (!deletes) return diff;
+
+  const next: Record<string, number> = { ...current };
+  for (const [key, value] of Object.entries(diff)) {
+    if (key.startsWith(DELETE_PREFIX)) delete next[key.slice(DELETE_PREFIX.length)];
+    else if (value !== null) next[key] = value;
+  }
+  // A core without operators is one that still takes the `-=` keys.
+  return forcedReplacement(next) ?? diff;
+}
+
+/**
  * Put the ledger on the document as a REPLACEMENT rather than a merge.
  *
- * `Document#update` deep-merges nested plain objects — the module depends on that
- * everywhere else — so writing the whole ledger object could never REMOVE a key from it.
- * `planRetarget` correctly emits `{ben: 2, "-=ali": null}` for the ownership half, but
- * the ledger half kept `holders: { ali: {...}, ben: {...} }` forever: a phantom holder
- * naming a user whose ownership entry no longer existed, which then made every later
- * release report a GM override that never happened, restore nothing, and grow
- * `overridden` — and which `reconcile` cannot repair, because the anchor is alive and so
- * the entry is not an orphan.
+ * `Document#update` merges nested objects, so writing the ledger as one could never
+ * REMOVE a key from it — a phantom holder then made every later release report a GM
+ * override that never happened and restore nothing. The 0.2 answer was to unset and
+ * re-set the flag in one update, reasoned from v13's merge and never traced against v14,
+ * where it was wrong twice over (see `readLedger`): the pair is diffed rather than
+ * applied in order, and every anchor-UUID key in the ledger is expanded into nesting.
  *
- * Deleted and re-set in ONE update rather than in two, because the ownership diff and the
- * ledger must land together: ownership without its ledger entry is a grant nothing will
- * ever release, and a ledger without its ownership change is a release that restores a
- * value that was never written. Dotted paths cannot express this — the `holders` sub-keys
- * are anchor UUIDs, which contain dots — and `{recursive: false}` cannot be used either,
- * because the ownership half in the same update is a diff that NEEDS the merge.
+ * So the ledger is stored as a string. A string is replaced whole by every core, carries
+ * no dotted keys to expand, and needs no operator that a core version might not have.
  */
 function writeLedger(
   data: Record<string, unknown>,
@@ -93,17 +132,11 @@ function writeLedger(
   ledger: OwnershipPlan["ledger"]
 ): void {
   const path = `flags.${MODULE_ID}.${FLAGS.GRANTS}`;
-  const unset = `flags.${MODULE_ID}.${DELETE_PREFIX}${FLAGS.GRANTS}`;
-  const stored = ledgerOf(doc);
-
-  if (!ledger) {
-    if (stored) data[unset] = null;
+  if (ledger) {
+    data[path] = serialiseLedger(ledger);
     return;
   }
-  // Insertion order is the contract: the deletion is expanded and merged before the
-  // value beside it, so the stored ledger is whatever the plan says and nothing older.
-  if (stored) data[unset] = null;
-  data[path] = ledger;
+  if (doc?.flags?.[MODULE_ID]?.[FLAGS.GRANTS] !== undefined) data[path] = forcedDeletion() ?? null;
 }
 
 /**
@@ -210,12 +243,56 @@ export async function onSourceOwnershipEdited(
     const stored = ledgerOf(doc);
     if (!stored) return;
 
-    const { ledger, notices } = planRebase(stored, changed.ownership);
+    const { ledger, notices } = planRebase(stored, ownershipChange(changed.ownership, stored));
     const data: Record<string, unknown> = {};
     writeLedger(data, doc, ledger);
     if (Object.keys(data).length) await doc.update(data, internal());
     for (const notice of notices) notify(notice, "warn");
   });
+}
+
+/**
+ * A core ownership change, in the `{key: level, "-=key": null}` form `planRebase` reads.
+ *
+ * v14 hands the update hook operators, not `-=` keys. A deleted key arrives as a
+ * `ForcedDeletion` value, and core's own ownership dialog writes the WHOLE record as a
+ * `ForcedReplacement` — in which a player the GM just removed is simply absent. Read as a
+ * plain diff that removal was no change at all: the ledger went on recording a grant the
+ * GM had taken away, and only noticed at the next release. Absence only means removal
+ * inside a replacement, and only for keys the ledger is tracking, which is all a rebase
+ * needs.
+ *
+ * What this does NOT change is the planner's rule for a re-sync: syncing a pin grants what
+ * its audience asks for, so a player the GM removed by hand and left in the pin's audience
+ * is granted again the next time that pin is synced.
+ */
+export function ownershipChange(
+  changed: any,
+  stored: DpGrantLedger
+): Record<string, number | null> {
+  const operators = ns("data.operators");
+  const Deletion = operators?.ForcedDeletion;
+  const Replacement = operators?.ForcedReplacement;
+
+  if (typeof Replacement === "function" && changed instanceof Replacement) {
+    const full: Record<string, number> = { ...(operators.DataFieldOperator?.get?.(changed) ?? {}) };
+    const out: Record<string, number | null> = { ...full };
+    const tracked = new Set([
+      ...Object.keys(stored.holders),
+      ...Object.keys(stored.granted),
+      ...Object.keys(stored.baseline),
+    ]);
+    for (const key of tracked) if (!(key in full)) out[`${DELETE_PREFIX}${key}`] = null;
+    return out;
+  }
+
+  const out: Record<string, number | null> = {};
+  for (const [key, value] of Object.entries(changed ?? {})) {
+    if (typeof Deletion === "function" && value instanceof Deletion)
+      out[`${DELETE_PREFIX}${key}`] = null;
+    else out[key] = value as number | null;
+  }
+  return out;
 }
 
 /**

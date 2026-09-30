@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  readLedger,
+  serialiseLedger,
   emptyLedger,
   keysHeldBy,
   planGrant,
@@ -297,5 +299,48 @@ describe("robustness", () => {
     planRelease({ default: 0, ali: OBSERVER }, g.ledger, A);
     planRebase(g.ledger, { ali: OWNER });
     expect(JSON.stringify(g.ledger)).toBe(snapshot);
+  });
+});
+
+describe("readLedger", () => {
+  const ledger = {
+    v: 1,
+    baseline: { ali: null },
+    granted: { ali: 2 },
+    holders: { ali: { "Scene.s1.Tile.a": 2, "Scene.s1.Tile.b": 1 } },
+    overridden: ["ben"],
+  };
+
+  it("round-trips the string it is stored as", () => {
+    expect(readLedger(serialiseLedger(ledger))).toEqual(ledger);
+  });
+
+  it("reads a flat object, as the fake and v13 stored it", () => {
+    expect(readLedger(ledger)).toEqual(ledger);
+  });
+
+  it("walks v14's nesting back into the anchor UUIDs it came from", () => {
+    const nested = {
+      ...ledger,
+      holders: { ali: { Scene: { s1: { Tile: { a: 2, b: 1 } } } } },
+    };
+    expect(readLedger(nested)).toEqual(ledger);
+  });
+
+  it("reads nothing from nothing, and from what is not a ledger", () => {
+    expect(readLedger(undefined)).toBeNull();
+    expect(readLedger(null)).toBeNull();
+    expect(readLedger("{not json")).toBeNull();
+    expect(readLedger([1, 2])).toBeNull();
+  });
+
+  it("fills the parts a damaged ledger is missing", () => {
+    expect(readLedger({ holders: { ali: { "Scene.s1.Tile.a": 2 } } })).toEqual({
+      v: 1,
+      baseline: {},
+      granted: {},
+      holders: { ali: { "Scene.s1.Tile.a": 2 } },
+      overridden: [],
+    });
   });
 });
