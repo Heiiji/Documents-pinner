@@ -146,6 +146,7 @@
   "DP.notice.noteNotSaved": "Create the note first, then convert it — this one does not exist yet.",
   "DP.notice.ownershipOverridden": "Permissions for \"{ownershipKey}\" were changed by hand; Documents Pinner left them alone.",
   "DP.notice.ownershipWriteFailed": "Could not update document permissions. The pin is visible, but players may not be able to open it.",
+  "DP.notice.placeFailed": "The pin could not be placed. Placement is still active; click again to retry.",
   "DP.notice.revealedNoAccess": "Revealed. It opens the document's sheet, which will refuse until you grant access.",
   "DP.notice.selectFirst": "Select a pin first — click one on the Notes layer, or focus a row in the Pinboard.",
   "DP.notice.showUnavailable": "This Foundry build has no Journal.show, so the document could not be pushed to players.",

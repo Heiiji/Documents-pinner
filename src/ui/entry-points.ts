@@ -16,7 +16,6 @@
  */
 
 import { MODULE_ID } from "../const";
-import { logger } from "../log";
 import { g, isGM, isOurs, notify, ns } from "../fvtt";
 import { visibleSceneRect } from "../canvas/transform";
 import { t } from "../i18n";
@@ -26,8 +25,6 @@ import * as settings from "../settings";
 import { armAt } from "../apps/PlacementGhost";
 import { openPicker } from "../apps/DocumentPicker";
 import { readPin } from "../data/PinData";
-
-const log = logger("entry");
 
 /** Whether the configured drag modifier is currently held. */
 export function modifierHeld(event?: DragEvent | MouseEvent): boolean {
@@ -61,36 +58,13 @@ export function onDropCanvasData(canvas: any, data: any, event?: DragEvent): boo
     x: data?.x ?? canvas?.mousePosition?.x ?? 0,
     y: data?.y ?? canvas?.mousePosition?.y ?? 0,
   };
-  placeFromDrop(canvas, source, point);
-  return false;
-}
-
-function placeFromDrop(canvas: any, source: any, point: { x: number; y: number }): void {
-  const before = noteIds(canvas);
+  // `false` is the whole of the suppression: core's `#onDrop` returns on it before it
+  // reaches the Notes layer, so no Note is ever made from this drop. There used to be a
+  // sweep here that deleted "whatever Note appeared" 250 ms later — which could only
+  // ever find someone else's, and after a scene change inside that window read the NEW
+  // scene against the old one's ids and deleted every Note on it.
   armAt(source, point);
-  // The ghost takes over from here; sweep away a Note core may have made anyway.
-  window.setTimeout(() => void removeStrayNotes(canvas, before), 250);
-}
-
-function noteIds(canvas: any): Set<string> {
-  return new Set((canvas?.scene?.notes?.contents ?? []).map((n: any) => n.id));
-}
-
-/**
- * Delete a Note that appeared from the drop we just cancelled.
- *
- * Only notes created since the drop began are considered, and only when the module is
- * the reason they would exist — so a GM who legitimately drops a second journal a
- * moment later never loses it.
- */
-async function removeStrayNotes(canvas: any, before: Set<string>): Promise<void> {
-  const strays = (canvas?.scene?.notes?.contents ?? [])
-    .filter((note: any) => !before.has(note.id))
-    .map((note: any) => note.id);
-  if (!strays.length) return;
-
-  await canvas.scene.deleteEmbeddedDocuments("Note", strays, { render: false });
-  log.info(`removed ${strays.length} note(s) core created from a pin drop`);
+  return false;
 }
 
 /**
@@ -118,11 +92,13 @@ export function onGetHeaderControls(app: any, controls: any[]): void {
 export function addContextOption(options: any[]): void {
   if (!isGM()) return;
 
+  // v14's entry shape. `name`, `condition` and `callback` still work, each with a
+  // compatibility warning, until v16 (foundry.mjs 14.367, 29368-29380 and 29616).
   options.push({
-    name: "DP.controls.pinThis",
+    label: "DP.controls.pinThis",
     icon: '<i class="fa-solid fa-thumbtack"></i>',
-    condition: () => isGM(),
-    callback: (target: any) => {
+    visible: () => isGM(),
+    onClick: (_event: Event, target: any) => {
       const uuid = uuidFromContextTarget(target);
       if (!uuid) return;
       armAt(

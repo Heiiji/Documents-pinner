@@ -17,6 +17,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { installWorld, uninstallWorld } from "./helpers/fake-foundry";
 import {
+  cachedPageCount,
   clearPdfCache,
   pdfPageCount,
   pdfSourceOf,
@@ -25,6 +26,7 @@ import {
 } from "../src/render/PdfPage";
 
 const renders: Record<string, any>[] = [];
+const destroyed: string[] = [];
 let opened = 0;
 
 /** A pdf.js shaped closely enough to hold the contract, and no more. */
@@ -36,6 +38,7 @@ function fakePdfJs(numPages = 32) {
       return {
         promise: Promise.resolve({
           numPages,
+          destroy: () => destroyed.push(url),
           getPage: async (n: number) => ({
             getViewport: ({ scale }: { scale: number }) => ({
               width: 600 * scale,
@@ -56,6 +59,7 @@ let realGetContext: typeof HTMLCanvasElement.prototype.getContext;
 
 beforeEach(() => {
   renders.length = 0;
+  destroyed.length = 0;
   opened = 0;
   installWorld({});
   // jsdom ships no 2D context, and pdf.js only ever hands it back to itself — what this
@@ -136,5 +140,48 @@ describe("renderPdfPage", () => {
 
   it("reports the page count", async () => {
     expect(await pdfPageCount("pdf/manual.pdf")).toBe(32);
+  });
+});
+
+/**
+ * Every size a PDF prop was drawn at, every reader opened on one and every page tried in
+ * the Studio stayed for the session — a full-size canvas each, outside the texture budget —
+ * and `clearPdfCache` had no caller.
+ */
+describe("the page cache", () => {
+  it("keeps a bounded number of pages, dropping the least recently used", async () => {
+    for (let size = 100; size < 100 + 12 * 10; size += 10) {
+      await renderPdfPage("pdf/manual.pdf", 1, size);
+    }
+    expect(cachedPageCount()).toBe(8);
+
+    // The newest is still served from the cache; the oldest has to be drawn again.
+    renders.length = 0;
+    await renderPdfPage("pdf/manual.pdf", 1, 210);
+    expect(renders).toHaveLength(0);
+    await renderPdfPage("pdf/manual.pdf", 1, 100);
+    expect(renders).toHaveLength(1);
+  });
+
+  it("keeps a page that is still being used, however old it is", async () => {
+    await renderPdfPage("pdf/manual.pdf", 1, 100);
+    for (let size = 200; size < 200 + 7 * 10; size += 10) {
+      await renderPdfPage("pdf/manual.pdf", 1, size);
+      await renderPdfPage("pdf/manual.pdf", 1, 100);
+    }
+    await renderPdfPage("pdf/manual.pdf", 1, 900);
+
+    renders.length = 0;
+    await renderPdfPage("pdf/manual.pdf", 1, 100);
+    expect(renders).toHaveLength(0);
+  });
+
+  it("empties, and frees the pdf.js documents, when the scene tears down", async () => {
+    await renderPdfPage("pdf/manual.pdf", 1, 512);
+    clearPdfCache();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(cachedPageCount()).toBe(0);
+    expect(destroyed).toEqual(["/pdf/manual.pdf"]);
   });
 });

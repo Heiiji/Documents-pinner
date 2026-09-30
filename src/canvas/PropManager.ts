@@ -63,9 +63,15 @@ import { dressing } from "../effects/EffectRegistry";
 import { svgDocument } from "../render/CardTemplate";
 import { inlineFonts, inlineImages } from "../render/AssetInliner";
 import { TextureCache, cacheKey } from "../render/TextureCache";
-import { currentLevel, sampleFrame, sampledFps } from "../effects/level";
+import { currentLevel, frameCap, sampleFrame, sampledFps } from "../effects/level";
 import { findPreset } from "../effects/preset-library";
-import { clearDomTier, setDomPropAlpha, syncDomTier, type DomPropEntry } from "./DomPropTier";
+import {
+  clearDomTier,
+  invalidateDomProps,
+  setDomPropAlpha,
+  syncDomTier,
+  type DomPropEntry,
+} from "./DomPropTier";
 import { overlay, write } from "../apps/OverlayRoot";
 import type { DpPinFlags } from "../types/dp";
 
@@ -78,6 +84,11 @@ const log = logger("props");
  * that holds under 45 for a solid second is not going to recover on its own.
  */
 export const DEGRADE_FRAME_MS = 1000 / 45;
+
+/** The frame time past which the guard counts a frame as slow: 3/4 of the cap's rate. */
+export function degradeFrameMs(cap: number): number {
+  return cap >= 60 ? DEGRADE_FRAME_MS : 1000 / (0.75 * Math.max(1, cap));
+}
 
 interface PropRecord {
   id: string;
@@ -277,6 +288,8 @@ class Manager {
       // Forget the content signal so the next pass builds a key this cache cannot serve.
       record.contentHash = "";
     }
+    // And the DOM tier, whose key has no content signal to forget.
+    invalidateDomProps(affected.map((record) => record.id));
 
     // Both directions: a pin on a whole JournalEntry must be invalidated by an edit to
     // one of its PAGES, whose uuid is longer than the entry's.
@@ -471,7 +484,9 @@ class Manager {
       this.#scheduleLod(DEFAULTS.lodDebounce);
     }
 
-    if (!this.#autoDegrade) return;
+    // Nothing to demote on a scene without props, and a notice blaming pins there — which
+    // a slow scene of any kind used to get — sends a GM looking in the wrong place.
+    if (!this.#autoDegrade || !this.#records.size) return;
 
     // The SCENE's frame time, not ours. This used to time the six lines above it — a
     // counter increment, a matrix read and six float compares, a few microseconds against
@@ -479,8 +494,13 @@ class Manager {
     // ticker. The guard could therefore never fire and acceptance criterion 10 could
     // never be observed. `sampledFps` is the rolling rate the effects level already
     // trusts, so the two agree about what "slow" means.
+    //
+    // The budget scales with core's frame-rate cap. A fixed 45 fps fired on every scene
+    // for a client capped at 40 or below — a setting core offers down to 10, and one
+    // Chrome's energy saver imposes at 30 — and demoted every prop for running exactly
+    // as fast as it was told to.
     const frameMs = 1000 / Math.max(1, sampledFps());
-    const { state, degrade } = stepPerf(this.#perf, frameMs, DEGRADE_FRAME_MS);
+    const { state, degrade } = stepPerf(this.#perf, frameMs, degradeFrameMs(frameCap()));
     this.#perf = state;
     if (degrade) this.#degrade();
   }
@@ -771,8 +791,13 @@ class Manager {
     this.#working = true;
     record.generating = true;
 
+    const epoch = this.#epoch;
     void this.#generate(record, tile).finally(() => {
       record.generating = false;
+      // A job from a scene that has since been torn down does not own the lock any more:
+      // `stop()` released it, and the new scene's job may hold it now. Releasing it here
+      // let two jobs run at once, against the queue's one-at-a-time rule.
+      if (this.#epoch !== epoch) return;
       this.#working = false;
       // Off-screen work waits for idle time so it never competes with a live frame.
       this.#idleHandle = onIdle(() => this.#pump(), 30);

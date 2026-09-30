@@ -478,3 +478,46 @@ describe("followDomProp under another id", () => {
     expect(box.style.top).toBe("360px");
   });
 });
+
+/**
+ * The key is claimed before the resolve, so a card whose resolve failed once kept its key
+ * and stayed blank for the session. It is retried now — but a bounded number of times, so
+ * a card that always throws does not warn after every pan for the rest of the evening.
+ */
+describe("a card that fails to resolve", () => {
+  it("is tried again on the next passes, then left alone", async () => {
+    vi.mocked(resolveCard).mockRejectedValue(new Error("enricher broke"));
+    try {
+      for (let pass = 0; pass < 6; pass++) {
+        syncDomTier([entry()]);
+        await settle();
+      }
+      // The first attempt and two retries.
+      expect(resolveCard).toHaveBeenCalledTimes(3);
+    } finally {
+      vi.mocked(resolveCard).mockReset();
+      vi.mocked(resolveCard).mockImplementation(async () => ({
+        html: '<div class="dp-card">letter</div>',
+        title: "Letter",
+        readable: true,
+        contentHash: "h",
+        missing: false,
+        naturalHeight: null,
+      }));
+    }
+  });
+
+  it("starts over when its source is edited", async () => {
+    const { invalidateDomProps } = await import("../src/canvas/DomPropTier");
+    syncDomTier([entry()]);
+    await settle();
+    syncDomTier([entry()]);
+    await settle();
+    expect(resolveCard).toHaveBeenCalledTimes(1);
+
+    invalidateDomProps(["t1"]);
+    syncDomTier([entry()]);
+    await settle();
+    expect(resolveCard).toHaveBeenCalledTimes(2);
+  });
+});

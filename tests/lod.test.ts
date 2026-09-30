@@ -195,3 +195,20 @@ describe("priorityOf", () => {
     expect(left).toBeCloseTo(right, 6);
   });
 });
+
+describe("degradeFrameMs", () => {
+  it("is 45 fps at core's default cap, as it always was", async () => {
+    const { degradeFrameMs, DEGRADE_FRAME_MS } = await import("../src/canvas/PropManager");
+    expect(degradeFrameMs(60)).toBe(DEGRADE_FRAME_MS);
+  });
+
+  it("follows a lower cap, so a client running exactly as fast as it is told is not slow", async () => {
+    const { degradeFrameMs } = await import("../src/canvas/PropManager");
+    // Capped at 40, running at 40: 25 ms a frame, inside a 33 ms budget.
+    expect(1000 / 40).toBeLessThanOrEqual(degradeFrameMs(40));
+    // Capped at 30 (Chrome's energy saver): 33 ms a frame, inside a 44 ms budget.
+    expect(1000 / 30).toBeLessThanOrEqual(degradeFrameMs(30));
+    // Under three quarters of the cap is still over budget.
+    expect(1000 / 25).toBeGreaterThan(degradeFrameMs(40));
+  });
+});

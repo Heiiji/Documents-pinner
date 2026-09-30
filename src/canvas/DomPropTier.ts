@@ -70,7 +70,12 @@ interface DomProp {
   alpha: number | null;
   /** The height at which the whole card fits, from the resolver; null when unknown. */
   naturalHeight: number | null;
+  /** Consecutive failed resolves, so a card that cannot be drawn stops being retried. */
+  failures: number;
 }
+
+/** How many times a failed card is tried again before it is left alone. */
+const RETRIES = 2;
 
 const props = new Map<string, DomProp>();
 
@@ -162,6 +167,7 @@ function upsert(entry: DomPropEntry): void {
       placedAt: null,
       alpha: null,
       naturalHeight: null,
+      failures: 0,
     };
     props.set(entry.id, prop);
     mount(element);
@@ -189,9 +195,42 @@ function upsert(entry: DomPropEntry): void {
       if (!current || current.generation !== generation) return;
       current.element.innerHTML = card.html;
       current.naturalHeight = card.naturalHeight ?? null;
+      current.failures = 0;
       applyOverflow(current);
     })
-    .catch((error) => log.warn(`DOM prop failed to resolve:`, error));
+    .catch((error) => {
+      log.warn(`DOM prop failed to resolve:`, error);
+      // The key was claimed before the resolve, so keeping it would leave this card blank
+      // for the rest of the session. Forgotten, the next pass tries again — a few times,
+      // not on every pan forever: a card that always throws would otherwise warn after
+      // each one. A change to its content, or an edit to its source, starts it over.
+      const current = props.get(entry.id);
+      if (current && current.generation === generation && ++current.failures <= RETRIES) {
+        current.key = "";
+      }
+    });
+}
+
+/**
+ * Forget what these cards show, so the next pass resolves them again.
+ *
+ * The content key is built from the PIN, and an edit to the journal behind it changes
+ * nothing the key can see. `PropManager.invalidate` reset the canvas tier's cache and
+ * never reached this one — and on every engine where HTML does not rasterise, which is
+ * every engine today, this tier draws every text prop. So a GM who corrected a pinned
+ * letter watched the reader show the new text while the paper on the map kept the old,
+ * on every client, until a zoom happened to cross a detail boundary.
+ *
+ * An empty key matches nothing, so the card re-resolves in place: same element, no
+ * arrival replayed, and the bumped generation drops a resolve still in flight.
+ */
+export function invalidateDomProps(ids: Iterable<string>): void {
+  for (const id of ids) {
+    const prop = props.get(id);
+    if (!prop) continue;
+    prop.key = "";
+    prop.failures = 0;
+  }
 }
 
 /**

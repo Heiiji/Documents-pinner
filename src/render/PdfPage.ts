@@ -36,6 +36,17 @@ let libPromise: Promise<any> | null = null;
 const documents = new Map<string, Promise<any>>();
 const pages = new Map<string, Promise<HTMLCanvasElement | null>>();
 
+/**
+ * How many rendered pages are kept, most recently used last.
+ *
+ * A page is a full-size canvas — up to ~20 MB at the top raster tier — and the cache had
+ * no bound and no caller of its clear: every size a PDF prop was drawn at, every reader
+ * opened on one and every page tried in the Studio stayed for the session, outside the
+ * texture budget. Eviction only drops the reference; a texture still drawing an evicted
+ * canvas keeps it alive, and it is collected when that texture goes.
+ */
+const PAGE_LIMIT = 8;
+
 /** Foundry's own route helper, so a server under a subpath still resolves. */
 function route(path: string): string {
   const helper = (globalThis as any).foundry?.utils?.getRoute;
@@ -114,6 +125,9 @@ export async function renderPdfPage(
   const key = `${src}|${pageNumber}|${longEdge}`;
   const cached = pages.get(key);
   if (cached) {
+    // Most recently used goes last, so eviction takes the oldest.
+    pages.delete(key);
+    pages.set(key, cached);
     const canvas = await cached;
     return canvas ? { canvas, width: canvas.width, height: canvas.height } : null;
   }
@@ -145,6 +159,7 @@ export async function renderPdfPage(
   })();
 
   pages.set(key, work);
+  while (pages.size > PAGE_LIMIT) pages.delete(pages.keys().next().value!);
   const canvas = await work;
   return canvas ? { canvas, width: canvas.width, height: canvas.height } : null;
 }
@@ -162,8 +177,22 @@ export function pdfSourceOf(source: any): string | null {
   return typeof src === "string" && src ? src : null;
 }
 
-/** Drop everything. Called when the module tears down. */
+/**
+ * Drop everything, and let pdf.js free what it holds. Called when the scene tears down.
+ *
+ * `destroy()` releases the document's worker-side data, which a dropped reference alone
+ * does not; a render still in flight on it fails, is caught, and draws nothing — which is
+ * what a render for a scene that no longer exists should do.
+ */
 export function clearPdfCache(): void {
+  for (const loading of documents.values()) {
+    void loading.then((doc) => doc?.destroy?.()).catch(() => {});
+  }
   documents.clear();
   pages.clear();
+}
+
+/** How many rendered pages are cached, for tests. */
+export function cachedPageCount(): number {
+  return pages.size;
 }

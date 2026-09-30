@@ -413,14 +413,17 @@ export function checkTileGeometry(): "agree" | "disagree" | "untested" {
 }
 
 /**
- * Redraw every pin on the canvas.
+ * Redraw every pin on the canvas, or only the ones named.
  *
  * Used when something outside a single document changes what pins should look like —
- * a user connecting, the effect level changing, a peek starting. Cheap: it sets render
- * flags and lets core's own batching decide when to actually draw.
+ * a user connecting, the effect level changing, a peek starting — and, with ids, when
+ * a pin's audience changed in its flags, which core does not treat as a visibility
+ * change. Cheap: it sets render flags and lets core's own batching decide when to draw.
  */
-export function refreshAllPins(): void {
+export function refreshAllPins(ids?: Iterable<string>): void {
+  const only = ids ? new Set(ids) : null;
   for (const tile of cv()?.tiles?.placeables ?? []) {
+    if (only && !only.has(tile.id)) continue;
     if (!readPin(tile.document)) continue;
     tile.renderFlags?.set?.({ refreshVisibility: true });
   }

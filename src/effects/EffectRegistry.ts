@@ -210,12 +210,18 @@ export function resolveAutoLevel(signals: {
   hardwareConcurrency: number | undefined;
   deviceMemory: number | undefined;
   fps: number | undefined;
+  /** The frame rate core is capped at, so a capped client is not read as a slow one. */
+  maxFps?: number;
 }): EffectsLevel {
   // Photosensitive mode is not a performance signal and is not negotiable: glitch and
   // scanlines are seizure hazards, so motion stops regardless of how fast the machine is.
   if (signals.photosensitive || signals.prefersReducedMotion) return "reduced";
   if ((signals.hardwareConcurrency ?? 8) <= 4) return "reduced";
   if ((signals.deviceMemory ?? 8) <= 4) return "reduced";
-  if ((signals.fps ?? 60) < 40) return "reduced";
+  // Measured against what this client ALLOWS, not a fixed 40: core's "Maximum framerate"
+  // goes down to 10, and a client capped at 40 sampled 39-40 and flipped between the two
+  // levels — and the level is in every card's key, so each flip re-resolved every prop,
+  // exactly on the machine that could least afford it. Two thirds of the cap is 40 at 60.
+  if ((signals.fps ?? 60) < Math.min(40, (2 / 3) * (signals.maxFps || 60))) return "reduced";
   return "full";
 }

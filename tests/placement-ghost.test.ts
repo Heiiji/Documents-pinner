@@ -303,6 +303,24 @@ describe("placement elevation", () => {
     expect(created).toHaveLength(1);
   });
 
+  it("places again after a create the server refused, instead of never again", async () => {
+    const scene = (globalThis as any).canvas.scene;
+    const succeed = scene.createEmbeddedDocuments;
+    scene.createEmbeddedDocuments = async () => {
+      throw new Error("refused");
+    };
+    arm(source);
+    const board = document.getElementById("board")!;
+    board.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0 }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(created).toHaveLength(0);
+
+    scene.createEmbeddedDocuments = succeed;
+    board.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0 }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(created).toHaveLength(1);
+  });
+
   it("shows the held modifiers on the ghost and keeps stamping across a shifted press", async () => {
     arm(source);
     const live = () => document.querySelector<HTMLElement>(".dp-ghost:not(.dp-ghost--out)")!;

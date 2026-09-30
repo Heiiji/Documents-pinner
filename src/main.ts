@@ -15,7 +15,7 @@ import { logger } from "./log";
 import { cv, g, isOurs } from "./fvtt";
 import { publicApi } from "./api";
 import * as settings from "./settings";
-import { definePinData } from "./data/PinData";
+import { concernsPins, definePinData } from "./data/PinData";
 import { onPreDeleteTile, onSourceOwnershipEdited, reconcile } from "./data/ownership-sync";
 import { onCanvasReady as migrateOnCanvasReady } from "./data/migrations";
 import {
@@ -24,9 +24,10 @@ import {
   onTileRefreshed,
   refreshAllPins,
 } from "./canvas/PinnedTile";
-import { registerPropHitLayer, suspendHits, syncHitLayer } from "./canvas/PropHitLayer";
+import { registerPropHitLayer, syncHitLayer } from "./canvas/PropHitLayer";
 import { propManager, teardownProps } from "./canvas/PropManager";
 import { probeRasterisation } from "./render/Rasterizer";
+import { clearPdfCache } from "./render/PdfPage";
 import { warmFontCache } from "./render/AssetInliner";
 import { definePinHUD, refreshPinHUD } from "./apps/PinHUD";
 import { openStudio, refreshStudios } from "./apps/PinStudio";
@@ -34,7 +35,7 @@ import { openPinboard, refreshPinboard } from "./apps/Pinboard";
 import { openPicker } from "./apps/DocumentPicker";
 import { openPresetStudio } from "./apps/PresetStudio";
 import { alignToBoard, destroyOverlay, syncTransform } from "./apps/OverlayRoot";
-import { closeReader, openReader, repositionReader } from "./apps/ReaderOverlay";
+import { closeReader, openReader, repositionReader, revalidateReader } from "./apps/ReaderOverlay";
 import { disarm } from "./apps/PlacementGhost";
 import { hidePropTooltip, setPropHover } from "./apps/PropTooltip";
 import { onGetSceneControlButtons } from "./ui/controls";
@@ -60,13 +61,6 @@ const CONTEXT_HOOKS = [
   "getJournalDirectoryEntryContext",
   "getJournalSheetPageContextOptions",
   "getJournalEntryPageContextOptions",
-];
-
-/** Gestures during which the prop hit areas must go dead. */
-const POINTER_BUSY_HOOKS: [string, boolean][] = [
-  ["dragLeftStart", true],
-  ["dragLeftDrop", false],
-  ["dragLeftCancel", false],
 ];
 
 Hooks.once("init", () => {
@@ -124,6 +118,7 @@ Hooks.on("canvasTearDown", () => {
   closeReader();
   teardownProps();
   destroyOverlay();
+  clearPdfCache();
 });
 
 Hooks.on("canvasPan", () => {
@@ -133,11 +128,15 @@ Hooks.on("canvasPan", () => {
   repositionReader();
 });
 
-for (const [hook, busy] of POINTER_BUSY_HOOKS) Hooks.on(hook, () => suspendHits(busy));
-
 // The GM's hit areas exist on the Notes layer only, so they follow the active layer.
-// The scene controls re-render whenever it changes, which is the signal core gives.
-Hooks.on("renderSceneControls", () => syncHitLayer());
+// `activateCanvasLayer`, not `renderSceneControls`: choosing a layer from the controls
+// RENDERS them first and activates the layer after (foundry.mjs 14.367, 146178 then
+// 146202), so a rebuild on the render read the layer being left. Arriving on Notes built
+// nothing; leaving it for Tokens or Walls left the GM's areas in place, where a press on a
+// prop switched to Tiles in the middle of a rubber-band select or a wall. A microtask,
+// because the GM's own press activates Tiles from INSIDE a hit area's handler, and the
+// rebuild would destroy that container while PIXI is still dispatching to it.
+Hooks.on("activateCanvasLayer", () => queueMicrotask(syncHitLayer));
 
 // Core redrew a pin's tile, so the texture we captured to restore later is stale and the
 // binding we recorded belongs to a mesh that no longer exists. `PinnedTile` has fired this
@@ -175,7 +174,9 @@ for (const hook of CONTEXT_HOOKS) {
 
 Hooks.on(`${MODULE_ID}.openPicker`, () => openPicker());
 Hooks.on(`${MODULE_ID}.openBoard`, () => openPinboard());
-Hooks.on(`${MODULE_ID}.openReader`, (doc: any) => void openReader(doc));
+Hooks.on(`${MODULE_ID}.openReader`, (doc: any) => {
+  openReader(doc).catch((error) => log.warn(`the reader could not open`, error));
+});
 Hooks.on(`${MODULE_ID}.openStudio`, (doc: any, tab?: any) => openStudio(doc, tab));
 Hooks.on(`${MODULE_ID}.openPresets`, (id?: string) => openPresetStudio(id));
 Hooks.on(`${MODULE_ID}.peek`, (active: boolean) => propManager().setPeeking(active));
@@ -202,7 +203,8 @@ Hooks.on("preDeleteTile", onPreDeleteTile);
 const changedTiles = new Set<string>();
 let tileRefreshQueued = false;
 
-function onTileChanged(doc: any): void {
+function onTileChanged(doc: any, changed?: any): void {
+  if (!concernsPins(doc, changed)) return;
   if (doc?.id) changedTiles.add(doc.id);
   if (tileRefreshQueued) return;
   tileRefreshQueued = true;
@@ -212,9 +214,14 @@ function onTileChanged(doc: any): void {
     const ids = [...changedTiles];
     changedTiles.clear();
 
+    // Core re-tests a tile's visibility only when `hidden`, `sort` or `locked` change.
+    // Who is in a pin's audience lives in its flags, so moving a player in or out of it
+    // left a pin icon — and a PDF, which is drawn on the tile's own mesh — showing to
+    // the player just removed and hidden from the one just added.
+    refreshAllPins(ids);
     propManager().refresh();
     syncHitLayer();
-    repositionReader();
+    revalidateReader();
     // The HUD is bound to at most one anchor, so it only cares whether that one moved.
     for (const id of ids) refreshPinHUD({ id });
     refreshStudios();

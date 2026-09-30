@@ -246,8 +246,26 @@ export function apparentWidth(m: Mat, width: number): number {
 
 declare const canvas: any;
 
+/**
+ * The stage's transform as it is NOW, not as it was last drawn.
+ *
+ * PIXI 7 recomputes `worldTransform` only when it renders, and core fires `canvasPan`
+ * from inside `Canvas#pan` — after the new pivot and scale are set, before any render.
+ * Read there, `worldTransform` is the PREVIOUS view: measured with the PIXI build v14
+ * ships, a 0.8 → 0.84 wheel notch read back 0.8. So every DOM card was written one step
+ * behind the map — a whole zoom notch off after each wheel turn, until the next pan.
+ *
+ * The stage is the renderer's root (`canvas.stage` is `app.stage`), so its world
+ * transform IS its local transform, and PIXI can bring that up to date on demand: a
+ * dirty-checked recompute of one matrix, not a walk of the scene graph.
+ */
 export function stageMatrix(): Mat {
-  const t = canvas?.stage?.worldTransform;
+  const stage = canvas?.stage;
+  let t = stage?.worldTransform;
+  if (stage && !stage.parent && typeof stage.transform?.updateLocalTransform === "function") {
+    stage.transform.updateLocalTransform();
+    t = stage.localTransform ?? t;
+  }
   if (!t) return { ...IDENTITY };
   return { a: t.a, b: t.b, c: t.c, d: t.d, tx: t.tx, ty: t.ty };
 }

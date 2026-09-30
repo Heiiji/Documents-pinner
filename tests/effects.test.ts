@@ -232,6 +232,17 @@ describe("resolveAutoLevel", () => {
     expect(resolveAutoLevel({ ...signals, fps: 30 })).toBe("reduced");
   });
 
+  it("reads a frame rate against the client's own cap, so a capped client is not slow", () => {
+    // Capped at 40 and running at it: full, where a fixed 40 flipped it on every sample.
+    expect(resolveAutoLevel({ ...signals, fps: 39, maxFps: 40 })).toBe("full");
+    expect(resolveAutoLevel({ ...signals, fps: 30, maxFps: 30 })).toBe("full");
+    // Well under its own cap is still slow.
+    expect(resolveAutoLevel({ ...signals, fps: 20, maxFps: 40 })).toBe("reduced");
+    // Uncapped and at 60 behave as they always did.
+    expect(resolveAutoLevel({ ...signals, fps: 39, maxFps: 60 })).toBe("reduced");
+    expect(resolveAutoLevel({ ...signals, fps: 39, maxFps: 0 })).toBe("reduced");
+  });
+
   it("assumes capable when a browser does not report a signal at all", () => {
     // Safari reports neither deviceMemory nor a useful concurrency hint; assuming the
     // worst there would permanently reduce effects for every Safari user.

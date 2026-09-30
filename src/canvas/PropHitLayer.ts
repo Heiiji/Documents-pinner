@@ -24,9 +24,11 @@
  * 1. **It sits below tokens and notes**, at a `zIndex` read from those layers at
  *    runtime rather than hardcoded, so a core or module change to the stacking order
  *    moves us with it instead of putting props in front of tokens.
- * 2. **Hit areas go dead during a drag or a measurement.** A GM dragging a token
- *    across a letter, or pulling a ruler over it, must not have the gesture swallowed
- *    by a prop underneath.
+ * 2. **A drag passing over a prop is not a hover.** A token dragged across a letter
+ *    must not light it up or pop its tooltip on the way. This used to be "hit areas go
+ *    dead during a drag", wired to hooks named `dragLeftStart`/`dragLeftDrop` — which
+ *    are callback names inside core's mouse manager, not hooks, so it never ran. A held
+ *    button on the hover is the signal core does give.
  */
 
 import { MODULE_ID } from "../const";
@@ -64,7 +66,8 @@ function buildLayerClass(CanvasLayer: any): any {
   return class PropHitLayer extends CanvasLayer {
     /** tileId -> the container carrying that prop's hit area. */
     hits = new Map<string, any>();
-    suspended = false;
+    /** The pin under the pointer, so a rebuild can say it is no longer hovered. */
+    hovered: any = null;
 
     static get layerOptions() {
       return { ...(super.layerOptions ?? {}), name: LAYER_NAME };
@@ -78,6 +81,7 @@ function buildLayerClass(CanvasLayer: any): any {
     }
 
     async _tearDown() {
+      this.#clearHover();
       this.removeChildren().forEach((child: any) => child.destroy({ children: true }));
       this.hits.clear();
     }
@@ -90,6 +94,11 @@ function buildLayerClass(CanvasLayer: any): any {
      * placeable to drift apart.
      */
     sync() {
+      // A destroyed container never receives its `pointerout`, so the pin it was hovering
+      // kept its warm light, its tint and its tooltip until the pointer happened to cross
+      // another prop — guaranteed on the GM's press from the Notes layer, which switches
+      // layer and so rebuilds. The pointer's next move re-establishes a real hover.
+      this.#clearHover();
       for (const container of this.hits.values()) container.destroy({ children: true });
       this.hits.clear();
 
@@ -146,16 +155,19 @@ function buildLayerClass(CanvasLayer: any): any {
       container.interactiveChildren = false;
 
       container.on("pointerdown", (event: any) => {
-        if (this.suspended || isArmed() || event?.button === 2) return;
+        if (isArmed() || event?.button === 2) return;
         cv()?.tiles?.activate?.();
         tile.control?.({ releaseOthers: !event?.shiftKey });
+        // Handled, as core's own placeables say it: a press left to bubble reached the
+        // canvas, whose click closes the HUD that selecting just opened and — with core's
+        // "left-click to release" on — released the pin it had just selected.
+        event?.stopPropagation?.();
       });
       container.on("pointertap", (event: any) => {
-        if (this.suspended || isArmed()) return;
+        if (isArmed()) return;
         if (event?.detail === 2) void api.openLocally(doc);
       });
-      container.on("pointerover", () => Hooks.callAll(`${MODULE_ID}.propHover`, doc, true));
-      container.on("pointerout", () => Hooks.callAll(`${MODULE_ID}.propHover`, doc, false));
+      this.#hover(container, doc);
 
       this.hits.set(doc.id, container);
       return container;
@@ -171,32 +183,40 @@ function buildLayerClass(CanvasLayer: any): any {
       container.hitArea = rotatedPolygon(doc, PIXI);
       container.interactiveChildren = false;
 
-      const open = () => {
-        if (this.suspended) return;
-        void api.openLocally(doc);
-      };
+      // A player's press is deliberately left to bubble. A prop can cover a good part of
+      // the map, and swallowing the press there would take away the long-press ping on it
+      // — "look at this letter" is exactly what a player wants to ping.
       container.on(
         pin.interaction.open === "single" ? "pointerdown" : "pointertap",
         (event: any) => {
           // A double-click open must not also fire the single-click handler underneath.
           if (pin.interaction.open === "double" && event?.detail !== 2) return;
-          open();
+          void api.openLocally(doc);
         }
       );
-      container.on("pointerover", () => Hooks.callAll(`${MODULE_ID}.propHover`, doc, true));
-      container.on("pointerout", () => Hooks.callAll(`${MODULE_ID}.propHover`, doc, false));
+      this.#hover(container, doc);
 
       this.hits.set(doc.id, container);
       return container;
     }
 
-    /** Go dead while another gesture owns the pointer. */
-    suspend(active: boolean) {
-      this.suspended = active;
-      this.eventMode = active ? "none" : "passive";
-      for (const container of this.hits.values()) {
-        container.eventMode = active ? "none" : "static";
-      }
+    /** Hover in and out, ignoring a pointer that arrives with a button held: a drag. */
+    #hover(container: any, doc: any): void {
+      container.on("pointerover", (event: any) => {
+        if (event?.buttons) return;
+        this.hovered = doc;
+        Hooks.callAll(`${MODULE_ID}.propHover`, doc, true);
+      });
+      container.on("pointerout", () => {
+        if (this.hovered === doc) this.hovered = null;
+        Hooks.callAll(`${MODULE_ID}.propHover`, doc, false);
+      });
+    }
+
+    #clearHover(): void {
+      const doc = this.hovered;
+      this.hovered = null;
+      if (doc) Hooks.callAll(`${MODULE_ID}.propHover`, doc, false);
     }
   };
 }
@@ -251,10 +271,6 @@ export function hitLayer(): any {
 
 export function syncHitLayer(): void {
   hitLayer()?.sync?.();
-}
-
-export function suspendHits(active: boolean): void {
-  hitLayer()?.suspend?.(active);
 }
 
 declare const Hooks: any;

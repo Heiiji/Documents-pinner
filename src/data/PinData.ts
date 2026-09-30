@@ -77,6 +77,23 @@ export function isPinned(doc: any): boolean {
 }
 
 /**
+ * Whether a tile's create, update or delete is any of this module's business.
+ *
+ * A pin, or a change to this module's flags — which is how a tile STOPS being a pin:
+ * after an unpin the document carries no flag, and only the diff says it used to. Any
+ * other tile is another module's or the GM's own, and every change to one used to cost
+ * a full LOD pass, a hit-layer rebuild and a re-render of every open window here.
+ * `changed` is the diff for an update, and core's options object — which never carries
+ * `flags` — for a create or a delete.
+ */
+export function concernsPins(doc: any, changed?: any): boolean {
+  if (isPinned(doc)) return true;
+  const flags = changed?.flags;
+  if (!flags || typeof flags !== "object") return false;
+  return MODULE_ID in flags || `-=${MODULE_ID}` in flags;
+}
+
+/**
  * Read a document's pin payload, normalised.
  *
  * Returns `null` only when the document carries no pin flag at all — a document that

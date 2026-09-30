@@ -71,8 +71,14 @@ export function sourceFromDropData(data: any): DpSource | null {
       followName: true,
     };
   }
-  // The file browser and an OS file drag both arrive as a bare path.
-  const path = data.src ?? data.path ?? (typeof data === "string" ? data : null);
+  // Core's file browser drags a TILE: `{type: "Tile", texture: {src}, fromFilePicker}`
+  // (foundry.mjs 14.367, 33809). Reading only a bare `src` or `path` missed it, so an
+  // Alt-drop of an image from the browser fell through to core and made a plain tile.
+  const path =
+    data.src ??
+    data.path ??
+    (data.type === "Tile" ? data.texture?.src : null) ??
+    (typeof data === "string" ? data : null);
   if (typeof path === "string" && path) {
     return { kind: "image", uuid: null, src: path, pageId: null, pdfPage: null, followName: false };
   }
@@ -415,8 +421,9 @@ export async function showToAudience(anchorDoc: any): Promise<void> {
   const recipients = playerIds().filter((id) => canUserSee(anchorDoc, id));
   if (!recipients.length) return;
 
+  // The namespaced class first: reading the bare global logs a compatibility warning.
   const Journal =
-    (globalThis as any).Journal ?? (globalThis as any).foundry?.documents?.collections?.Journal;
+    (globalThis as any).foundry?.documents?.collections?.Journal ?? (globalThis as any).Journal;
   if (Journal?.show) await Journal.show(source, { force: true, users: recipients });
   else notify({ key: "DP.notice.showUnavailable" }, "warn");
 }

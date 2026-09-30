@@ -16,7 +16,7 @@
  * someone who asked not to see one. The catch resolves to the SAFE answer.
  */
 
-import { g } from "../fvtt";
+import { cv, g } from "../fvtt";
 import * as settings from "../settings";
 import { resolveAutoLevel, type EffectsLevel } from "./EffectRegistry";
 
@@ -42,6 +42,17 @@ export function sampleFrame(now: number): void {
 
 export function sampledFps(): number {
   return Math.round(fps);
+}
+
+/**
+ * The frame rate the canvas is allowed, from core's "Maximum framerate" setting.
+ *
+ * Core writes it to the ticker (foundry.mjs 14.367, 117030) and reads it back the same way
+ * with 60 as the fallback (145781); 0 is PIXI's "uncapped".
+ */
+export function frameCap(): number {
+  const cap = Number(cv()?.app?.ticker?.maxFPS);
+  return Number.isFinite(cap) && cap > 0 ? cap : 60;
 }
 
 function prefersReducedMotion(): boolean {
@@ -80,6 +91,7 @@ export function currentLevel(): EffectsLevel {
     // assuming the worst would permanently reduce effects for every Safari user.
     deviceMemory: (navigator as any).deviceMemory,
     fps: sampledFps(),
+    maxFps: frameCap(),
   });
 }
 

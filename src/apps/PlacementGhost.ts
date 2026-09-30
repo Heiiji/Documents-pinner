@@ -17,8 +17,9 @@
  * place in the module that teaches itself.
  */
 
-import { cv, isGM } from "../fvtt";
+import { cv, isGM, notify } from "../fvtt";
 import { t } from "../i18n";
+import { logger } from "../log";
 import { escapeAttr, escapeHtml } from "../html";
 import * as api from "../api";
 import * as settings from "../settings";
@@ -38,6 +39,8 @@ import { resolveCard } from "../render/ContentResolver";
 import { measureCardHeight } from "../render/measure";
 import { leave, mount, syncTransform, write } from "./OverlayRoot";
 import type { DpMode, DpPinFlags, DpSource } from "../types/dp";
+
+const log = logger("ghost");
 
 /** Everything the ghost holds while armed. Pure data, so the steppers can be tested. */
 export interface GhostState {
@@ -548,7 +551,11 @@ function attach(): void {
       }
       event.preventDefault();
       event.stopPropagation();
-      void place(state.sticky || event.shiftKey);
+      place(state.sticky || event.shiftKey).catch((error) => {
+        // The ghost stays armed, so the GM can simply press again.
+        log.warn(`placing the pin failed`, error);
+        notify({ key: "DP.notice.placeFailed" }, "warn");
+      });
     },
     { capture: true }
   );
@@ -616,29 +623,35 @@ async function place(keepArmed: boolean): Promise<void> {
   placing = true;
   if (keepArmed) stamp();
 
-  const anchor = await api.pinAt(scene, current.source, {
-    x: current.x,
-    y: current.y,
-    centred: true,
-    mode: current.mode,
-    width: size.width,
-    height: size.height,
-    rotation: current.rotation,
-    // Zero, NOT `foregroundElevation`. That field is the scene's foreground THRESHOLD
-    // (default 20): a tile at or above it is an overhead tile and sorts above tokens in
-    // `canvas.primary`, which breaks acceptance criterion 4 — "a token standing on a
-    // prop renders in front of it" — for every ghost-placed prop. That is one of the two
-    // visual claims the whole primary-group architecture was chosen for. The brief asked
-    // for the active Scene Level, not the threshold; the Studio's elevation field is
-    // where a GM raises a prop deliberately.
-    elevation: 0,
-    effectId: preset.id,
-    audienceKind: current.audience,
-    typeSize: current.typeSize,
-    margin: DEFAULT_MARGIN_EM,
-  });
-
-  placing = false;
+  // Released whatever happens: a create the server refuses used to leave this set, and
+  // every placement after it — ghost, drop, `/pin`, Shift+P — did nothing for the rest
+  // of the session while the ghost went on swallowing the clicks.
+  let anchor: any;
+  try {
+    anchor = await api.pinAt(scene, current.source, {
+      x: current.x,
+      y: current.y,
+      centred: true,
+      mode: current.mode,
+      width: size.width,
+      height: size.height,
+      rotation: current.rotation,
+      // Zero, NOT `foregroundElevation`. That field is the scene's foreground THRESHOLD
+      // (default 20): a tile at or above it is an overhead tile and sorts above tokens in
+      // `canvas.primary`, which breaks acceptance criterion 4 — "a token standing on a
+      // prop renders in front of it" — for every ghost-placed prop. That is one of the two
+      // visual claims the whole primary-group architecture was chosen for. The brief asked
+      // for the active Scene Level, not the threshold; the Studio's elevation field is
+      // where a GM raises a prop deliberately.
+      elevation: 0,
+      effectId: preset.id,
+      audienceKind: current.audience,
+      typeSize: current.typeSize,
+      margin: DEFAULT_MARGIN_EM,
+    });
+  } finally {
+    placing = false;
+  }
   if (!keepArmed) disarm();
 
   await settings.set("lastPreset", preset.id);

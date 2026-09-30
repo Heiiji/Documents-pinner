@@ -26,7 +26,7 @@ vi.mock("../src/canvas/DomPropTier", () => ({
 vi.mock("../src/apps/PinHUD", () => ({ showPinHUD: vi.fn(), hidePinHUD: vi.fn() }));
 vi.mock("../src/apps/ReaderOverlay", () => ({ repositionReader: vi.fn() }));
 
-import { definePinnedTile, onTileRefreshed } from "../src/canvas/PinnedTile";
+import { definePinnedTile, onTileRefreshed, refreshAllPins } from "../src/canvas/PinnedTile";
 import { followDomProp, setDomPropControlled } from "../src/canvas/DomPropTier";
 import { repositionReader } from "../src/apps/ReaderOverlay";
 
@@ -255,5 +255,32 @@ describe("onTileRefreshed", () => {
     onTileRefreshed(new Tile(propDoc("p", "pin")));
     onTileRefreshed(new Tile(fakeTile({ id: "plain" })));
     expect(followDomProp).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * Core re-tests visibility only when `hidden`, `sort` or `locked` change; a pin's audience
+ * lives in its flags. So a changed pin asks for the refresh itself, and only that pin.
+ */
+describe("refreshAllPins", () => {
+  const placeable = (document: any) => ({
+    id: document.id,
+    document,
+    renderFlags: { set: vi.fn() },
+  });
+
+  it("asks only the named pins to re-test their visibility", () => {
+    const a = placeable(propDoc("a"));
+    const b = placeable(propDoc("b"));
+    const plain = placeable(fakeTile({ id: "plain" }));
+    (globalThis as any).canvas.tiles.placeables = [a, b, plain];
+
+    refreshAllPins(["a", "plain"]);
+    expect(a.renderFlags.set).toHaveBeenCalledWith({ refreshVisibility: true });
+    expect(b.renderFlags.set).not.toHaveBeenCalled();
+    expect(plain.renderFlags.set).not.toHaveBeenCalled();
+
+    refreshAllPins();
+    expect(b.renderFlags.set).toHaveBeenCalledTimes(1);
   });
 });

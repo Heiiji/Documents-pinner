@@ -183,6 +183,19 @@ describe("the focus reader", () => {
     expect(reader()).toBeNull();
   });
 
+  it("closes when the pin is hidden from the player reading it, and stays when it is not", async () => {
+    const { openReader, revalidateReader } = await import("../src/apps/ReaderOverlay");
+    await openReader(tile);
+
+    revalidateReader();
+    expect(reader()).not.toBeNull();
+
+    // The GM hides it, or takes this player out of its audience.
+    tile.object.isVisible = false;
+    revalidateReader();
+    expect(reader()).toBeNull();
+  });
+
   it("closes on a second click, which is what a click on what you are reading means", async () => {
     const { openReader } = await import("../src/apps/ReaderOverlay");
     await openReader(tile);

@@ -231,21 +231,37 @@ export async function enrichFor(source: any, text: string): Promise<EnrichedCont
   const isOwner = source?.isOwner === true;
   const TextEditor = ns("applications.ux.TextEditor.implementation");
 
-  let html = text ?? "";
-  if (TextEditor?.enrichHTML) {
-    html = await TextEditor.enrichHTML(html, {
-      // NEVER game.user.isGM, and never a value from another client. See rule 2.
-      secrets: isOwner,
-      documents: true,
-      links: true,
-      rolls: true,
-      embeds: true,
-      relativeTo: source,
-      rollData: source?.parent?.getRollData?.() ?? {},
-    });
-  }
+  const html = await enrichOrRaw(TextEditor, text ?? "", {
+    // NEVER game.user.isGM, and never a value from another client. See rule 2.
+    secrets: isOwner,
+    documents: true,
+    links: true,
+    rolls: true,
+    embeds: true,
+    relativeTo: source,
+    rollData: source?.parent?.getRollData?.() ?? {},
+  });
 
   return { html: sanitise(html, isOwner), isOwner };
+}
+
+/**
+ * Enrich, or hand back the text as it is when enrichment throws.
+ *
+ * Core does not catch an enricher that throws — a module's custom `@Tag` pattern, an
+ * embed of a document that fails to render — so one broken enricher rejected the whole
+ * card: the prop on the map stayed blank and the reader's click did nothing at all. The
+ * raw text is a safe fallback because it is never shown as it is: it goes through the
+ * SAME `sanitise` as enriched output, which scrubs it and strips the secrets.
+ */
+async function enrichOrRaw(TextEditor: any, text: string, options: any): Promise<string> {
+  if (!TextEditor?.enrichHTML) return text;
+  try {
+    return await TextEditor.enrichHTML(text, options);
+  } catch (error) {
+    log.warn(`enrichment failed; showing the text unenriched`, error);
+    return text;
+  }
 }
 
 /**
@@ -295,17 +311,14 @@ export async function enrichAsUser(source: any, text: string, user: any): Promis
   const isOwner = source?.testUserPermission?.(user, "OWNER") === true;
   const TextEditor = ns("applications.ux.TextEditor.implementation");
 
-  let html = text ?? "";
-  if (TextEditor?.enrichHTML) {
-    html = await TextEditor.enrichHTML(html, {
-      secrets: isOwner,
-      documents: true,
-      links: true,
-      rolls: false,
-      embeds: true,
-      relativeTo: source,
-      rollData: {},
-    });
-  }
+  const html = await enrichOrRaw(TextEditor, text ?? "", {
+    secrets: isOwner,
+    documents: true,
+    links: true,
+    rolls: false,
+    embeds: true,
+    relativeTo: source,
+    rollData: {},
+  });
   return { html: sanitise(html, isOwner), isOwner };
 }

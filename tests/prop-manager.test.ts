@@ -295,6 +295,31 @@ describe("the mesh under a prop", () => {
   });
 });
 
+/**
+ * On every engine where HTML does not rasterise — every engine today — the DOM tier draws
+ * every text prop, and `invalidate` only ever reset the canvas cache. A GM who corrected
+ * a pinned letter saw the new text in the reader and the old text on the map.
+ */
+describe("an edit to the source on the DOM path", () => {
+  it("re-resolves the card on the map, not only the canvas texture", async () => {
+    const { resolveCard } = await import("../src/render/ContentResolver");
+    await (globalThis as any).game.settings.set("documents-pinner", "rendering", "dom");
+    manager.refresh();
+    await settle();
+    const before = vi.mocked(resolveCard).mock.calls.length;
+
+    // A pass with nothing changed resolves nothing...
+    manager.refresh();
+    await settle();
+    expect(vi.mocked(resolveCard).mock.calls.length).toBe(before);
+
+    // ...and an edit to the page behind the pin does.
+    manager.invalidate("JournalEntry.j.JournalEntryPage.p");
+    await settle();
+    expect(vi.mocked(resolveCard).mock.calls.length).toBe(before + 1);
+  });
+});
+
 describe("switching the rendering setting mid-session", () => {
   it("clears the DOM cards when the canvas path takes over again", async () => {
     const { domPropCount } = await import("../src/canvas/DomPropTier");

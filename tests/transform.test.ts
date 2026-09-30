@@ -14,6 +14,7 @@ import {
   rotationOf,
   sameMat,
   scaleOf,
+  stageMatrix,
   screenPlacement,
   tileRect,
   toCssMatrix,
@@ -248,5 +249,57 @@ describe("centreAfterResize", () => {
   it("is the identity for an unchanged size", () => {
     const doc = { x: 12, y: 34, width: 50, height: 60, rotation: 33 };
     expect(centreAfterResize(doc, { width: 50, height: 60 })).toEqual({ x: 12, y: 34 });
+  });
+});
+
+/**
+ * The overlay followed the map one step behind. PIXI 7 recomputes `worldTransform` only
+ * when it renders, and core fires `canvasPan` between setting the new view and that render
+ * — so a wheel notch from 0.8 to 0.84 read back 0.8, measured with the PIXI build v14 ships.
+ */
+describe("stageMatrix", () => {
+  const withStage = (stage: any, run: () => void) => {
+    (globalThis as any).canvas = { stage };
+    try {
+      run();
+    } finally {
+      delete (globalThis as any).canvas;
+    }
+  };
+
+  /** A root stage whose last render was at 0.8 and whose view has since moved to 0.84. */
+  const build = (parent: any = null) => {
+    const stage: any = {
+      parent,
+      worldTransform: { a: 0.8, b: 0, c: 0, d: 0.8, tx: 100, ty: 0 },
+      localTransform: { a: 0.8, b: 0, c: 0, d: 0.8, tx: 100, ty: 0 },
+    };
+    stage.transform = {
+      updateLocalTransform: () => Object.assign(stage.localTransform, { a: 0.84, d: 0.84, tx: 60 }),
+    };
+    return stage;
+  };
+
+  it("reads the view as it is now, not as it was last drawn", () => {
+    withStage(build(), () => {
+      const m = stageMatrix();
+      expect(m.a).toBe(0.84);
+      expect(m.tx).toBe(60);
+    });
+  });
+
+  it("keeps the world transform for a stage that is not the root", () => {
+    withStage(build({}), () => {
+      expect(stageMatrix().a).toBe(0.8);
+    });
+  });
+
+  it("falls back to the world transform, then to identity", () => {
+    withStage({ worldTransform: { a: 2, b: 0, c: 0, d: 2, tx: 5, ty: 6 } }, () => {
+      expect(stageMatrix()).toEqual({ a: 2, b: 0, c: 0, d: 2, tx: 5, ty: 6 });
+    });
+    withStage(undefined, () => {
+      expect(stageMatrix()).toEqual(IDENTITY);
+    });
   });
 });

@@ -284,6 +284,25 @@ export function closeReader(): void {
   Hooks.callAll(`${MODULE_ID}.readerClosed`);
 }
 
+/**
+ * Re-check the open reader after a tile changed: its pin may have moved, or been hidden
+ * from this user.
+ *
+ * `repositionReader` closes only when the tile or the pin is GONE, so a GM hiding a pin
+ * — or taking a player out of its audience — left that player reading the whole of it.
+ * Checked here and not in `repositionReader`, which runs on every tick of a pan, where
+ * a `discovered` pin's visibility would be a line-of-sight test per frame.
+ */
+export function revalidateReader(): void {
+  if (!element || !openId) return;
+  const doc = cv()?.scene?.tiles?.get(openId);
+  if (doc?.object?.isVisible === false) {
+    closeReader();
+    return;
+  }
+  repositionReader();
+}
+
 /** Keep the reader glued to its prop through a pan, a zoom or a move. */
 export function repositionReader(): void {
   if (!element || !openId) return;

@@ -451,8 +451,9 @@ export function showPinHUD(tile: any): void {
 
 export function hidePinHUD(): void {
   if (!hudInstance) return;
-  if (hudInstance.clear) hudInstance.clear();
-  else hudInstance.close();
+  // `close`, never `clear`: that is deprecated since v13 and gone in v15, and it only
+  // ever logged a warning and called `close`.
+  hudInstance.close();
 }
 
 /** Re-render the HUD if it is showing this anchor. Wired to the tile hooks. */

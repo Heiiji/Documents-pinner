@@ -239,6 +239,61 @@ describe("PropHitLayer.sync", () => {
     });
   });
 
+  /** Every hover hook fired while `run` runs, as [doc id, hovering]. */
+  const hovers = (run: () => void): [string, boolean][] => {
+    const hooks = (globalThis as any).Hooks;
+    const calls: [string, boolean][] = [];
+    const original = hooks.callAll;
+    hooks.callAll = (name: string, doc: any, hovering: boolean) => {
+      if (name.endsWith(".propHover")) calls.push([doc.id, hovering]);
+    };
+    try {
+      run();
+    } finally {
+      hooks.callAll = original;
+    }
+    return calls;
+  };
+
+  it("handles the GM's press, so the canvas does not release what it just selected", () => {
+    const tile = pinned({ mode: "prop" });
+    tile.object.control = vi.fn();
+    const layer = layerFor([tile], true, "notes");
+    const stopPropagation = vi.fn();
+
+    [...layer.hits.values()][0].emit("pointerdown", { button: 0, stopPropagation });
+    expect(stopPropagation).toHaveBeenCalledTimes(1);
+  });
+
+  it("lets a player's press through, so a long-press ping still works on a prop", () => {
+    const layer = layerFor([pinned({ mode: "prop" })], false);
+    const stopPropagation = vi.fn();
+    const spy = vi.spyOn(api, "openLocally").mockImplementation(async () => {});
+
+    const container = [...layer.hits.values()][0];
+    container.emit("pointerdown", { button: 0, stopPropagation });
+    container.emit("pointertap", { detail: 2, stopPropagation });
+    expect(stopPropagation).not.toHaveBeenCalled();
+    spy.mockRestore();
+  });
+
+  it("does not light a prop up for a drag passing over it", () => {
+    const layer = layerFor([pinned({ mode: "prop" })], false);
+    const container = [...layer.hits.values()][0];
+
+    expect(hovers(() => container.emit("pointerover", { buttons: 1 }))).toEqual([]);
+    expect(hovers(() => container.emit("pointerover", { buttons: 0 }))).toEqual([["t1", true]]);
+  });
+
+  it("says the hovered pin is no longer hovered when a rebuild destroys its area", () => {
+    const layer = layerFor([pinned({ mode: "prop" })], false);
+    hovers(() => [...layer.hits.values()][0].emit("pointerover", { buttons: 0 }));
+
+    expect(hovers(() => layer.sync())).toEqual([["t1", false]]);
+    // And only once: nothing is hovered after it.
+    expect(hovers(() => layer.sync())).toEqual([]);
+  });
+
   it("skips a pin this player cannot see", () => {
     const layer = layerFor([pinned({ mode: "pin", isVisible: false })], false);
     expect(layer.hits.size).toBe(0);
