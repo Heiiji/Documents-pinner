@@ -21,6 +21,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   from Pin Studio's Appearance tab, and a preset can carry one in the Preset Studio's new
   *Type* group. It holds with effects switched off, and *Fit to content* measures in it.
   A shared preset can only name a face this way; anything else is refused with a warning.
+- **The wax seal can crack as the letter appears.** Every preset was silent and nothing
+  could change it, and every duplicated preset arrived with its ancestor's fade. The
+  Preset Studio's new *Reveal* group sets an effect's arrival — none, fade or materialise
+  — its duration and its sound, with a file browser and ▶ to hear it; Pin Studio can give
+  one prop a sound of its own. Each player hears it as the prop appears on their screen, at
+  their Environment volume, once however many props arrive together. A sound must be a
+  file on your own server: a shared preset naming a web address is refused on import, so
+  it cannot report your table's reveals to anyone.
 
 ### Changed
 

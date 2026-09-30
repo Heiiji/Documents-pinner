@@ -118,6 +118,13 @@ export interface DpEffectRef {
   motion: "loop" | "onReveal" | "none";
   /** Per-pin parameter overrides on top of the preset. */
   params: Record<string, unknown>;
+  /**
+   * This prop's own reveal sound, a same-origin path (`normalise.soundPath`). `null`
+   * means "the preset's". Its own field rather than a key in `params`: those are capped at
+   * 128 characters, and a dotted key inside a flag is expanded by v14 into an object that
+   * `params` then drops as non-scalar.
+   */
+  revealSound: string | null;
 }
 
 export interface DpInteraction {

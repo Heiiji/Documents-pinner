@@ -13,7 +13,7 @@
  * how a suite gets to 403 green tests over code that has never run.
  */
 
-const GLOBALS = ["game", "canvas", "CONFIG", "foundry", "ui", "PIXI", "Hooks"] as const;
+const GLOBALS = ["game", "canvas", "CONFIG", "foundry", "ui", "PIXI", "Hooks", "CONST"] as const;
 const saved = new Map<string, unknown>();
 
 /** Every animation scheduled since the world was installed, newest last. */
@@ -655,6 +655,9 @@ export function installWorld(world: FakeWorld = {}): InstalledWorld {
       activeGM: users[0],
     },
     journal: { contents: [], get: () => null },
+    // `AudioHelper#locked` (TYPES, audio/helper.d.mts:70-79): `true` until the browser has
+    // seen the gesture that unlocks audio. Unlocked here; a test sets it to lock.
+    audio: { locked: false },
     scenes: { contents: [scene], current: scene },
     modules: { get: () => ({}) },
     i18n: { localize: (key: string) => key, format: (key: string) => key },
@@ -742,10 +745,23 @@ export function installWorld(world: FakeWorld = {}): InstalledWorld {
       hud: { BasePlaceableHUD: fakeBasePlaceableHUD() },
       ux: {},
       settings: { menus: { FontConfig: fakeFontConfig() } },
+      apps: { FilePicker: fakeFilePicker() },
     },
     abstract: {},
     data: { operators: { DataFieldOperator, ForcedDeletion, ForcedReplacement } },
+    audio: { AudioHelper: fakeAudioHelper() },
+    // `foundry.CONST`, the same object core also exposes as the global `CONST` (TYPES,
+    // common/constants.d.mts:787-795 and :1825-1840).
+    CONST: {
+      AUDIO_CHANNELS: {
+        music: "AUDIO.CHANNELS.MUSIC.label",
+        environment: "AUDIO.CHANNELS.ENVIRONMENT.label",
+        interface: "AUDIO.CHANNELS.INTERFACE.label",
+      },
+      KEYBINDING_PRECEDENCE: { PRIORITY: 0, NORMAL: 1, DEFERRED: 2 },
+    },
   };
+  (globalThis as any).CONST = (globalThis as any).foundry.CONST;
 
   return { game, canvas, hooks, notifications };
 }
@@ -789,6 +805,73 @@ function fakeFontConfig(): any {
     static SETTING = "fonts";
     static getAvailableFonts(): string[] {
       return [...availableFonts];
+    }
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Audio and the file browser
+// ---------------------------------------------------------------------------
+
+/** One `AudioHelper.play` call, as it was made. */
+export interface PlayedSound {
+  data: Record<string, unknown>;
+  socket: unknown;
+}
+let played: PlayedSound[] = [];
+
+/** Every sound played since the world was installed, oldest first. */
+export function playedSounds(): PlayedSound[] {
+  return played;
+}
+
+/**
+ * `foundry.audio.AudioHelper`, for its static `play(data, socketOptions)` (TYPES,
+ * audio/helper.d.mts:173-187). Core resolves a Sound, or nothing when `autoplay` is false;
+ * this records the call and resolves. It does NOT refuse a remote `src` — core would fetch
+ * it — so the module's own path rule is the only thing a test can see stopping one.
+ */
+function fakeAudioHelper(): any {
+  played = [];
+  return class AudioHelper {
+    static async play(data: Record<string, unknown>, socket?: unknown) {
+      played.push({ data: { ...data }, socket });
+      return undefined;
+    }
+  };
+}
+
+/** One file browser the module opened: its options, and whether it was rendered. */
+export interface OpenedPicker {
+  options: { type?: string; current?: string; callback?: (path: string) => void };
+  rendered: unknown[];
+}
+let pickers: OpenedPicker[] = [];
+
+/** Every file browser opened since the world was installed; fire `options.callback` to pick. */
+export function filePickers(): OpenedPicker[] {
+  return pickers;
+}
+
+/**
+ * `foundry.applications.apps.FilePicker`, reached as core configures it: through the
+ * static `implementation` getter (TYPES, apps/file-picker.d.mts:179-181). Construction
+ * records the options; the picker does nothing until `render` is called, as in core.
+ */
+function fakeFilePicker(): any {
+  pickers = [];
+  return class FilePicker {
+    static get implementation() {
+      return FilePicker;
+    }
+    record: OpenedPicker;
+    constructor(options: OpenedPicker["options"] = {}) {
+      this.record = { options, rendered: [] };
+      pickers.push(this.record);
+    }
+    async render(options?: unknown) {
+      this.record.rendered.push(options);
+      return this;
     }
   };
 }

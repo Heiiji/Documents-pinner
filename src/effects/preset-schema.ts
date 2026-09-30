@@ -14,7 +14,7 @@
  * rejected, so a preset authored in a future version degrades instead of failing.
  */
 
-import { num, oneOf, warnUnknownKeys } from "../normalise";
+import { num, oneOf, soundPath, warnUnknownKeys } from "../normalise";
 import type { DpMode, DpNotice } from "../types/dp";
 import { fontFamily } from "./typeface";
 
@@ -36,6 +36,8 @@ export type DpFrameStyle = "none" | "holo" | "gilt" | "rune" | "plain";
 export const EDGE_STYLES = ["none", "torn", "burnt", "deckled", "singed"] as const;
 export const FRAME_STYLES = ["none", "holo", "gilt", "rune", "plain"] as const;
 export type DpRevealAnimation = "none" | "fade" | "materialise";
+/** The arrivals the renderer implements, in the order the Preset Studio offers them. */
+export const REVEAL_ANIMATIONS = ["none", "fade", "materialise"] as const;
 
 /**
  * The overlay's corner geometry, and its projected grid.
@@ -397,13 +399,15 @@ export function validatePreset(input: unknown): ValidationResult {
     reveal: {
       animation: oneOf(
         raw.reveal?.animation,
-        ["none", "fade", "materialise"] as const,
+        REVEAL_ANIMATIONS,
         "fade",
         warnings,
         "reveal.animation"
       ),
       durationMs: num(raw.reveal?.durationMs, 400, 0, 10_000),
-      sound: typeof raw.reveal?.sound === "string" ? raw.reveal.sound : null,
+      // Any string used to pass, a `https:` beacon included; the one same-origin rule
+      // now applies here as well as at the moment of play.
+      sound: soundPath(raw.reveal?.sound, warnings, "reveal.sound", "DP.preset.warn.badSound"),
     },
     paper: paperStock(raw.paper, warnings),
     params: normaliseParams(raw.params, warnings),

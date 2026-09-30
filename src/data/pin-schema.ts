@@ -20,7 +20,17 @@
  */
 
 import { SCHEMA_VERSION } from "../const";
-import { bool, int, num, obj, oneOf, str, stringList, warnUnknownKeys } from "../normalise";
+import {
+  bool,
+  int,
+  num,
+  obj,
+  oneOf,
+  soundPath,
+  str,
+  stringList,
+  warnUnknownKeys,
+} from "../normalise";
 import type {
   DpAudience,
   DpAudienceKind,
@@ -147,7 +157,15 @@ export function defaultGeometry(): DpGeometry {
 }
 
 export function defaultEffect(): DpEffectRef {
-  return { id: "none", intensity: 0.6, speed: 1, seed: 0, motion: "loop", params: {} };
+  return {
+    id: "none",
+    intensity: 0.6,
+    speed: 1,
+    seed: 0,
+    motion: "loop",
+    params: {},
+    revealSound: null,
+  };
 }
 
 export function defaultInteraction(): DpInteraction {
@@ -347,6 +365,7 @@ function normaliseEffect(raw: unknown, warnings: DpNotice[]): DpEffectRef {
     seed: int(s.seed, d.seed, 0, 0xffffffff),
     motion: oneOf(s.motion, MOTIONS, d.motion, warnings, "effect.motion", BAD_ENUM),
     params: normaliseParams(s.params, warnings),
+    revealSound: soundPath(s.revealSound, warnings, "effect.revealSound", "DP.pin.warn.badSound"),
   };
 }
 

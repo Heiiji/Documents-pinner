@@ -31,6 +31,12 @@ import { allPresets } from "../effects/preset-library";
 import { swatchStyle } from "../effects/preset-css";
 import { fontChoices, fontLabel, fontOptionsMarkup } from "../effects/typeface";
 import { registeredFontFamilies } from "../render/AssetInliner";
+import { findPreset } from "../effects/preset-library";
+import { playRevealSound, revealSoundOf } from "../canvas/PropManager";
+import { soundPath } from "../normalise";
+import { notify } from "../fvtt";
+import { logger } from "../log";
+import type { DpNotice } from "../types/dp";
 import { pdfPageCount, pdfSourceOf } from "../render/PdfPage";
 import { chipsMarkup, describeChips } from "./chips";
 import { openPicker } from "./DocumentPicker";
@@ -168,6 +174,8 @@ export interface StudioOptions {
   icons?: { label: string; src: string }[];
   /** The world's own font families, before `fontChoices` filters them. */
   fonts?: string[];
+  /** Whether this core has a file browser to choose a sound with. No browser, no button. */
+  canBrowse?: boolean;
 }
 
 function contentTab(pin: DpPinFlags, options: StudioOptions, attrs = ""): string {
@@ -330,6 +338,57 @@ function fontField(pin: DpPinFlags, options: StudioOptions, pdf: boolean): strin
   );
 }
 
+/** A path's last segment, for a GM to recognise; never throws on a stray `%`. */
+function fileName(path: string): string {
+  const last = path.split("/").pop() || path;
+  try {
+    return decodeURIComponent(last);
+  } catch {
+    return last;
+  }
+}
+
+/**
+ * This prop's own reveal sound, over the effect's: "this one letter arrives with a
+ * thunderclap" is a pin's decision, not a preset's.
+ *
+ * Disabled, with the reason, on an icon: only a prop has an arrival — the manager tracks
+ * props alone — and a control that cannot be honoured is not offered as if it could (A15).
+ * The path is shown rather than typed. Every way in is the file browser or the clear
+ * button, so every path meets the one same-origin rule on its way, and a refused one is
+ * said instead of silently stored as nothing. ▶ plays what the players will hear, which is
+ * the only way the GM hears it: their own client never sees a prop arrive.
+ */
+function revealSoundField(pin: DpPinFlags, options: StudioOptions): string {
+  const icon = pin.mode !== "prop";
+  const own = pin.effect.revealSound;
+  const effects = findPreset(pin.effect.id)?.reveal.sound ?? null;
+  const placeholder = effects
+    ? t("DP.studio.revealSoundEffect", { file: fileName(effects) })
+    : t("DP.studio.revealSoundSilent");
+  const off = icon ? " disabled" : "";
+  const button = (action: string, key: string, glyph: string) =>
+    `<button type="button" data-action="${action}"${off}` +
+    ` data-tooltip-text="${escapeAttr(t(key))}" aria-label="${escapeAttr(t(key))}">` +
+    `<i class="fa-solid ${glyph}" aria-hidden="true"></i></button>`;
+  return field(
+    "DP.studio.revealSound",
+    `<span class="dp-studio__sound">` +
+      `<input type="text" readonly value="${escapeAttr(own ?? "")}"` +
+      ` placeholder="${escapeAttr(placeholder)}"` +
+      ` aria-label="${escapeAttr(t("DP.studio.revealSound"))}"${off}>` +
+      (options.canBrowse
+        ? button("browseRevealSound", "DP.studio.revealSoundBrowse", "fa-folder-open")
+        : "") +
+      (revealSoundOf(pin)
+        ? button("previewRevealSound", "DP.studio.revealSoundPreview", "fa-play")
+        : "") +
+      (own ? button("clearRevealSound", "DP.studio.revealSoundClear", "fa-xmark") : "") +
+      `</span>`,
+    icon ? "DP.studio.revealSoundIcon" : "DP.studio.revealSoundHint"
+  );
+}
+
 function appearanceTab(doc: any, pin: DpPinFlags, options: StudioOptions = {}, attrs = ""): string {
   // The EFFECTIVE metrics, so a pin that predates stored type sizes shows the size it
   // is actually drawn at rather than an empty slider; the first edit freezes both.
@@ -423,6 +482,7 @@ function appearanceTab(doc: any, pin: DpPinFlags, options: StudioOptions = {}, a
         pdf
       )
     ) +
+    revealSoundField(pin, options) +
     field(
       "DP.studio.fadeUnderTokens",
       checkbox("display.fadeUnderTokens", pin.display.fadeUnderTokens),
@@ -655,6 +715,9 @@ export function definePinStudio(): any {
       actions: {
         setTab: onSetTab,
         browseIcon: onBrowseIcon,
+        browseRevealSound: onBrowseRevealSound,
+        previewRevealSound: onPreviewRevealSound,
+        clearRevealSound: onClearRevealSound,
         setEffect: onSetEffect,
         locate: onLocate,
         fitHeight: onFitHeight,
@@ -694,6 +757,7 @@ export function definePinStudio(): any {
             pdfPages: await pdfPageCountFor(pin),
             icons: noteIcons(),
             fonts: registeredFontFamilies(),
+            canBrowse: !!ns("applications.apps.FilePicker.implementation"),
           })
         : `<p class="dp-studio__gone">${escapeHtml(t("DP.studio.gone"))}</p>`;
       return wrapper.firstElementChild ?? wrapper;
@@ -917,6 +981,56 @@ function onBrowseIcon(this: any) {
     current: doc?.texture?.src,
     callback: (path: string) => void api.setPinIcon(doc, path),
   }).render(true);
+}
+
+const log = logger("studio");
+
+/**
+ * Store this prop's own reveal sound, or refuse it and say so.
+ *
+ * The pin normaliser refuses a bad path too — but silently, and by storing a null over
+ * whatever the prop had. Checked here first, so a refused pick changes nothing.
+ */
+async function setRevealSound(doc: any, value: string | null): Promise<void> {
+  const warnings: DpNotice[] = [];
+  const path = soundPath(value, warnings, "effect.revealSound", "DP.pin.warn.badSound");
+  for (const warning of warnings) notify(warning, "warn");
+  if (warnings.length || !readPin(doc)) return;
+  await api.patchAndSync(doc, { effect: { revealSound: path } });
+}
+
+/**
+ * Choose this prop's reveal sound from the file browser, audio only. Closes over `doc`,
+ * never `this`: the browser outlives the Studio if the GM closes it first.
+ */
+function onBrowseRevealSound(this: any) {
+  const FilePicker = ns("applications.apps.FilePicker.implementation");
+  const doc = this.doc;
+  if (!FilePicker || readPin(doc)?.mode !== "prop") return;
+  const failed = (error: unknown) => log.warn(`the reveal sound could not be set`, error);
+  try {
+    const picker = new FilePicker({
+      type: "audio",
+      current: readPin(doc)?.effect.revealSound ?? "",
+      callback: (path: string) => void setRevealSound(doc, path).catch(failed),
+    });
+    void Promise.resolve(picker.render({ force: true })).catch(failed);
+  } catch (error) {
+    failed(error);
+  }
+}
+
+/** Hear what the players will hear when this prop arrives. */
+function onPreviewRevealSound(this: any) {
+  const pin = readPin(this.doc);
+  if (pin) playRevealSound(revealSoundOf(pin), { preview: true });
+}
+
+/** Back to the effect's own sound. */
+function onClearRevealSound(this: any) {
+  void setRevealSound(this.doc, null).catch((error: unknown) =>
+    log.warn(`the reveal sound could not be cleared`, error)
+  );
 }
 
 /**
