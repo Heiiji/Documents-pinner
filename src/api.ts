@@ -673,26 +673,69 @@ export async function setPinIcon(anchorDoc: any, src: string | null): Promise<bo
  * — a ping is not "invisible against a hidden pin", it is a pulse on an empty patch of
  * map that says "something is here". So a hidden pin is flashed on this client only,
  * through the layer that draws pings, and the copy on the button says who sees it.
+ *
+ * A visible pin keeps that documented reach — every client, whoever its audience is —
+ * until a socket can narrow it to the audience. What changed is the door: `pingAt` states
+ * `pull: false`, so a GM holding Shift no longer turns a flash into a pull, and the local
+ * path now passes the scene, without which core drew nothing at all — the flash of a
+ * hidden pin had been a silent no-op.
  */
 export function flash(anchorDoc: any): void {
-  const canvas = cv();
-  if (!canvas || !anchorDoc) return;
-  const origin = centreOf(anchorDoc);
+  if (!cv() || !anchorDoc) return;
 
   // A ping is drawn inside the canvas and a text prop's card is drawn over it, so the
   // ping at its centre lands under the paper. The card pulses itself on this client.
   Hooks.callAll(`${MODULE_ID}.flash`, anchorDoc);
 
-  if (anchorDoc.hidden) {
-    const controls = canvas.controls;
-    if (typeof controls?.handlePing === "function") {
-      controls.handlePing(g()?.user, origin, {});
-    } else {
-      notify({ key: "DP.notice.flashHidden" }, "warn");
-    }
-    return;
+  const hidden = anchorDoc.hidden === true;
+  if (pingAt(anchorDoc, { broadcast: !hidden, pull: false }) === "unavailable" && hidden) {
+    notify({ key: "DP.notice.flashHidden" }, "warn");
   }
-  canvas.ping?.(origin);
+}
+
+/**
+ * Reveal & spotlight: reveal the pin if it is hidden, then bring the table to it.
+ *
+ * The reveal is `audience.revealed` — the remembered audience, never a toggle, so a
+ * second spotlight on a revealed pin points at it again and hides nothing — and it lands
+ * before anything points: a player pulled to the spot finds the pin already there.
+ *
+ * Every view is pulled only for a pin for everyone (K1). A core ping reaches every client
+ * whoever the pin is for, so pulling the table to the rogue's note walks everyone else to
+ * where it lies. For a narrower audience the GM's own screen is pointed at, and they are
+ * told, once, why nobody's view moved. A pin on a scene the GM is not viewing is revealed
+ * and not pointed at: its coordinates here would point at the wrong map.
+ */
+export async function spotlight(anchorDoc: any): Promise<{ revealed: boolean; pulled: boolean }> {
+  const outcome = { revealed: false, pulled: false };
+  if (!isGM() || !anchorDoc) return outcome;
+  let pin = readPin(anchorDoc);
+  if (!pin) return outcome;
+
+  if (anchorDoc.hidden === true || pin.audience.kind === "hidden") {
+    await setAudience(anchorDoc, audience.revealed(pin.audience));
+    // A write core refused still resolves, and the pin, or its scene, may be gone.
+    pin = readPin(anchorDoc);
+    if (!pin || anchorDoc.hidden === true || pin.audience.kind === "hidden") {
+      notify({ key: "DP.notice.spotlightFailed" }, "error");
+      return outcome;
+    }
+    outcome.revealed = true;
+  }
+
+  if (!onViewedScene(anchorDoc)) {
+    notify({ key: "DP.notice.spotlightElsewhere" }, "warn");
+    return outcome;
+  }
+
+  Hooks.callAll(`${MODULE_ID}.flash`, anchorDoc);
+  if (audience.pingsEveryone(pin.audience)) {
+    outcome.pulled = pingAt(anchorDoc, { broadcast: true, pull: true }) === "broadcast";
+  } else {
+    pingAt(anchorDoc, { broadcast: false, pull: false });
+    notify({ key: "DP.notice.spotlightNarrow" }, "info");
+  }
+  return outcome;
 }
 
 /**
@@ -1089,6 +1132,7 @@ export function publicApi() {
     showToAudience,
     openLocally,
     flash,
+    spotlight,
     locate,
     revealNext,
     fitToContent,

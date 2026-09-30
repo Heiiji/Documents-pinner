@@ -52,14 +52,62 @@ describe("hudMarkup", () => {
   it("is a toolbar with a single tab stop and no tabbable icons by default", () => {
     const markup = hudMarkup(doc, pin());
     expect(markup).toContain('role="toolbar"');
-    expect(markup.match(/tabindex="-1"/g)?.length).toBe(9);
+    // Eight for a prop and a pin alike: Fit, the one verb only a prop had, has left.
+    expect(markup.match(/tabindex="-1"/g)?.length).toBe(8);
+    expect(hudMarkup(doc, pin({ mode: "pin" })).match(/tabindex="-1"/g)?.length).toBe(8);
   });
 
-  it("offers fit-to-content for a prop and not for a pin", () => {
-    expect(hudMarkup(doc, pin())).toContain('data-action="fitHeight"');
-    const asPin = hudMarkup(doc, pin({ mode: "pin" }));
-    expect(asPin).not.toContain('data-action="fitHeight"');
-    expect(asPin.match(/tabindex="-1"/g)?.length).toBe(8);
+  /**
+   * K10. The live verbs on the left — the eye, the audience, the spotlight — and what the
+   * pin is on the right. Lock and Fit are prep and layout verbs, and they are in the
+   * Studio's strip (Fit also on Alt+Shift+F): these tests used to assert Fit on the HUD
+   * and the lock's state here.
+   */
+  it("lays out the live verbs on the left and the pin's own on the right", () => {
+    const markup = hudMarkup(doc, pin());
+    // Each button as its action, and the palette it opens when it opens one.
+    const actions = (column: string) => {
+      const start = markup.indexOf(`dp-hud__col--${column}`);
+      const body = markup.slice(start, markup.indexOf("</div>", start));
+      return [
+        ...body.matchAll(
+          /data-action="(\w+)"(?: aria-expanded="false" aria-controls="([\w-]+)")?/g
+        ),
+      ].map(([, action, palette]) => (palette ? `${action}:${palette}` : action));
+    };
+    expect(actions("left")).toEqual([
+      "toggleVisibility",
+      "togglePalette:dp-hud-audience",
+      "spotlight",
+    ]);
+    expect(actions("right")).toEqual([
+      "togglePalette:dp-hud-effects",
+      "toggleMode",
+      "openLocally",
+      "flash",
+      "configure",
+    ]);
+  });
+
+  it("has no lock and no fit: both live in the Studio's strip", () => {
+    for (const markup of [hudMarkup(doc, pin()), hudMarkup({ ...doc, locked: true }, pin())]) {
+      expect(markup).not.toContain('data-action="toggleLock"');
+      expect(markup).not.toContain('data-action="fitHeight"');
+      expect(markup).not.toContain("fa-lock");
+    }
+  });
+
+  it("says in the spotlight's label whose view it moves", () => {
+    // Hidden, remembering nobody narrower: the reveal is to everyone, and every view moves.
+    expect(hudMarkup(doc, pin())).toContain('data-tooltip-text="DP.hud.spotlight"');
+    const forAli = pin({
+      audience: {
+        ...pin().audience,
+        kind: "hidden",
+        restore: { kind: "selected", users: ["ali"] },
+      },
+    });
+    expect(hudMarkup(doc, forAli)).toContain('data-tooltip-text="DP.hud.spotlightNarrow"');
   });
 
   it("offers reveal while hidden and hide while visible", () => {
@@ -93,9 +141,5 @@ describe("hudMarkup", () => {
     const markup = hudMarkup(doc, pin({ effect: { ...pin().effect, id: "glitch" } }));
     expect(markup).toContain('data-dp-preset="glitch" aria-pressed="true"');
     expect(markup).toContain('data-dp-kind="hidden" aria-pressed="true"');
-  });
-
-  it("reflects the anchor's lock state rather than assuming it", () => {
-    expect(hudMarkup({ ...doc, locked: true }, pin())).toContain('fa-lock"');
   });
 });

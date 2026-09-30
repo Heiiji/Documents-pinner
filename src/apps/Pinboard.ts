@@ -352,6 +352,7 @@ function menuMarkup(row: PinboardRow, at: MenuPlacement): string {
     `<div class="dp-menu" role="menu" data-dp-id="${escapeAttr(row.id)}"` +
     ` style="${menuStyle(at)}">` +
     item("visibility", row.visible ? "DP.hud.hide" : "DP.hud.reveal") +
+    item("spotlight", "DP.board.menuSpotlight") +
     item("show", "DP.board.menuShow") +
     item("shape", "DP.board.menuShape") +
     (row.mode === "prop" ? item("fit", "DP.board.menuFit") : "") +
@@ -873,6 +874,21 @@ export function definePinboard(): any {
         return;
       }
 
+      // Reveal & spotlight. Checked before Space itself, which took Shift+Space as the eye
+      // and hid a revealed pin. The Shift is still down while it pings — which is why the
+      // verb states `pull` rather than letting core read it off the keyboard.
+      if (event.key === " " && event.shiftKey) {
+        event.preventDefault();
+        void api
+          .spotlight(doc)
+          .then(() => this.render())
+          .catch((error) => {
+            log.warn("spotlight failed", error);
+            notify({ key: "DP.notice.spotlightFailed" }, "error");
+          });
+        return;
+      }
+
       const actions: Record<string, () => void> = {
         " ": () => void api.toggleVisibility(doc)?.then(() => this.render()),
         Enter: () => Hooks.call(`${MODULE_ID}.openStudio`, doc),
@@ -1066,6 +1082,13 @@ async function onMenuAct(this: any, _event: Event, target: HTMLElement) {
       break;
     case "visibility":
       await api.toggleVisibility(doc);
+      break;
+    case "spotlight":
+      // A reveal the GM asked for and did not get is said, not left to the console.
+      await api.spotlight(doc).catch((error) => {
+        log.warn("spotlight failed", error);
+        notify({ key: "DP.notice.spotlightFailed" }, "error");
+      });
       break;
     case "show":
       await api.showToAudience(doc);

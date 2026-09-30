@@ -75,6 +75,7 @@ sidebar — so if you prepare scenes while players are connected, change the def
 |---|---|
 | `↑↓` `Space` | move · reveal |
 | `N` | reveal next: the first hidden row, in order, to the players it remembers — the footer names it, and says what is left |
+| `Shift+Space` | reveal & spotlight: every player's view is pulled to it — only when it is for everyone |
 | `Alt+↑↓` | reorder — row order is reveal order |
 | `Enter` `L` `O` `Shift+S` `F` `M` | studio · locate · open · show to audience · flash · shape |
 | effect · `…` | choose an effect · every verb the row has, each in a menu |
@@ -89,7 +90,7 @@ what you drag is the paper. The Pinboard's `L` (locate) does the same from a dis
 
 **A prop is a window onto its document.** Resizing it shows more or less of the page at
 the same text size; text that does not fit fades out at the bottom edge. *Fit to content*
-(Pin Studio, the HUD, `Alt+Shift+F`, or `F` while placing) sets the height so the whole
+(Pin Studio, `Alt+Shift+F`, or `F` while placing) sets the height so the whole
 page shows at the current width. *Text size* and *Margins* are in Pin Studio, with the
 width and height in grid squares and a ratio lock. So is a pin's **icon** — one of core's
 map-note icons or any image — and hovering a pin names it.
@@ -132,6 +133,15 @@ client renders its own copy and secrets are stripped for anyone who is not an ow
 they never reach a player's browser.
 
 If you need real secrecy, keep the document out of the world until you want it seen.
+
+**Spotlight moves views only for a pin that is for everyone.** A Foundry ping reaches
+every connected player, whoever the pin is for, so pulling the table to a note meant for
+one player would walk everyone else to where it lies. *Reveal & spotlight* (the HUD,
+`Shift+Space` or the row menu in the Pinboard) reveals a pin to its own audience either
+way, and pulls every view only when that audience is everyone; otherwise it points at the
+pin on your screen alone, and says so. *Reveal next* never moves a view, and pulses on the
+players' maps only for a pin that is for everyone. *Flash* still pulses on every player's
+map for any visible pin, as its label says.
 
 ## Known limitations
 
@@ -257,6 +267,7 @@ réglage.
 |---|---|
 | `↑↓` `Espace` | se déplacer · révéler |
 | `N` | révéler la suivante : la première ligne masquée, dans l'ordre, aux joueurs dont elle se souvient — le pied du tableau la nomme, et dit ce qui reste |
+| `Maj+Espace` | révéler et mettre en lumière : la vue de chaque joueur est amenée sur elle — seulement si elle est pour tout le monde |
 | `Alt+↑↓` | réordonner — l'ordre des lignes est l'ordre de révélation |
 | `Entrée` `L` `O` `Maj+S` `F` `M` | studio · localiser · ouvrir · montrer au public · faire clignoter · forme |
 | effet · `…` | choisir un effet · tous les verbes de la ligne, chacun dans un menu |
@@ -273,7 +284,7 @@ distance.
 
 **Un accessoire est une fenêtre sur son document.** Le redimensionner montre plus ou
 moins de la page à la même taille de texte ; le texte qui ne tient pas s'estompe au bord
-inférieur. *Ajuster au contenu* (Pin Studio, le HUD, `Alt+Maj+F`, ou `F` pendant le
+inférieur. *Ajuster au contenu* (Pin Studio, `Alt+Maj+F`, ou `F` pendant le
 placement) règle la hauteur pour que toute la page tienne à la largeur actuelle. *Taille
 du texte* et *Marges* sont dans Pin Studio, avec la largeur et la hauteur en cases et un
 verrou de ratio. L'**icône** d'une épingle aussi — une icône de note de carte de Foundry
@@ -321,6 +332,16 @@ n'est pas propriétaire : ils n'atteignent jamais le navigateur du joueur.
 
 Si vous avez besoin d'un vrai secret, gardez le document hors du monde jusqu'au moment
 voulu.
+
+**La mise en lumière ne déplace les vues que pour une épingle destinée à tous.** Un ping
+de Foundry atteint chaque joueur connecté, quel que soit le public de l'épingle : amener
+toute la table sur une note destinée à un seul joueur montrerait aux autres où elle se
+trouve. *Révéler et mettre en lumière* (le HUD, `Maj+Espace` ou le menu de ligne du tableau
+de bord) révèle l'épingle à son propre public dans tous les cas, et n'amène les vues que si
+ce public est tout le monde ; sinon elle la désigne sur votre seul écran, et le dit.
+*Révéler la suivante* ne déplace jamais de vue, et ne pulse sur la carte des joueurs que
+pour une épingle destinée à tous. *Faire clignoter* pulse toujours sur la carte de chaque
+joueur pour toute épingle visible, comme son libellé l'indique.
 
 ## Limitations connues
 

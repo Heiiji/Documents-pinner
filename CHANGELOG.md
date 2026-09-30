@@ -16,6 +16,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   board's filter, search and level, and never hides anything. *Reveal the next hidden pin*
   does the same with the board closed: it ships without a key, for you to give it one in
   Configure Controls.
+- **Reveal & spotlight.** One gesture reveals a pin to the players it remembers and brings
+  the table to it: when the pin is for everyone, every player's view glides there. For a
+  narrower audience nobody's view moves — a Foundry ping reaches every player, and would
+  show the others where a private clue lies — and you are told so. On the HUD, as
+  `Shift+Space` in the Pinboard, and in the Pinboard's row menu.
 
 ### Changed
 
@@ -24,6 +29,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   does not take back what the table has read. It is now in the bulk bar, apart from the
   selection's own verbs, and asks before it shows more than one pin, naming how many. The
   bulk bar's "Reveal to all" is now "Reveal".
+- **The HUD keeps to the verbs of the moment.** On the left: reveal, who can see it, and
+  spotlight; on the right: effect, shape, open for me, flash and Pin Studio. Lock and *Fit
+  to content* have left it for Pin Studio's strip, where both already were; Fit is still
+  `Alt+Shift+F`.
 
 ### Fixed
 
@@ -31,6 +40,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and hidden for a beat went back to that player when revealed with `Space` or the eye —
   and to everyone when revealed from the Pinboard's bulk bar or "Reveal all". Every reveal
   now restores the audience the pin remembers.
+- **Flashing a hidden pin did nothing.** It is drawn on your screen alone, so players are
+  not shown where it is — and it was sent without the scene Foundry needs to draw it. It
+  shows now. A flash also no longer pulls every player's view to the pin when Shift
+  happens to be held.
 - **Revealing one page handed over the whole journal.** Access was granted on the journal
   whatever page the pin showed, and every page that inherits its permissions — every page,
   by default — went with it, into the players' sidebars, for good. A pin showing one page

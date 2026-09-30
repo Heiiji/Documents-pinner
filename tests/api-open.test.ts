@@ -109,12 +109,15 @@ describe("flash", () => {
   it("pings every client for a visible pin", async () => {
     tile = pinned("prop");
     world = installWorld({ isGM: true, tiles: [tile] });
+    world.canvas.scene.id = "s1";
     world.canvas.ping = vi.fn();
     world.canvas.controls = { handlePing: vi.fn() };
     const { flash } = await import("../src/api");
     flash(tile);
-    // The document's point IS the centre; the ping lands on it.
-    expect(world.canvas.ping).toHaveBeenCalledWith({ x: 0, y: 0 });
+    // The document's point IS the centre; the ping lands on it. The options are stated,
+    // never left to core: it reads a held Shift as "pull every view" (K11). This asserted
+    // the bare `ping(origin)` that let it.
+    expect(world.canvas.ping).toHaveBeenCalledWith({ x: 0, y: 0 }, { pull: false, style: "pulse" });
     expect(world.canvas.controls.handlePing).not.toHaveBeenCalled();
   });
 
@@ -122,12 +125,19 @@ describe("flash", () => {
     tile = pinned("prop");
     tile.hidden = true;
     world = installWorld({ isGM: true, tiles: [tile] });
+    world.canvas.scene.id = "s1";
     world.canvas.ping = vi.fn();
     world.canvas.controls = { handlePing: vi.fn() };
     const { flash } = await import("../src/api");
     flash(tile);
     expect(world.canvas.ping).not.toHaveBeenCalled();
-    expect(world.canvas.controls.handlePing).toHaveBeenCalledTimes(1);
+    // With the viewed scene's id, which core requires to draw anything at all: this
+    // asserted only that it was called, and it was called with `{}` and drew nothing.
+    expect(world.canvas.controls.handlePing).toHaveBeenCalledWith(
+      world.game.user,
+      { x: 0, y: 0 },
+      { scene: "s1", style: "pulse" }
+    );
   });
 
   it("says so rather than leaking when this build cannot ping locally", async () => {
