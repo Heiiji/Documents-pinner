@@ -9,7 +9,96 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Nothing yet.
 
-## [0.3.1] — unreleased
+## [0.3.2] — unreleased
+
+A reliability pass. Three audits: one checked every Foundry API the module relies on
+against the 14.367 source, one checked the runtime for timing and state faults, and one
+checked the cost of every path that runs per frame or per event. The permissions
+findings were then confirmed by running v14's own document-update code.
+
+### Fixed
+
+- **Hiding a pin could leave players able to open its journal.** With ownership sync on,
+  revealing a pin grants players access to the journal, and hiding it is meant to take
+  that back. On v14 that failed three ways:
+  - **Most releases were refused outright.** Hiding a pin removes the player's entry from
+    the journal's permissions. v14 refuses that kind of write and drops the whole update,
+    with an error about permissions that never named the module. This was the usual case: a player
+    who had no entry of their own before the pin.
+  - **v14 rewrote the grant record's keys on every save**, so hiding a pin could not find
+    the grant to undo.
+  - **A record that only lost a player was wiped.**
+
+  Releases are now written the way v14 accepts: the whole permission list at once, as
+  core's own permission dialog does. The grant record is stored in a form every Foundry
+  version saves exactly as written. Records already in a world are read correctly and
+  rewritten the first time they are used. **Check the permissions of journals you
+  revealed and then hid on v14:** a grant whose release was refused, or whose record was
+  wiped, cannot be found automatically.
+- **Cards drawn over the map lagged one step behind a zoom.** They are the cards every
+  text prop uses on current browsers. After each mouse-wheel notch they sat at the
+  previous zoom until the next pan. The module read the map's transform before Foundry
+  had recomputed it.
+- **Editing a pinned journal did not update its card on the map.** The reader showed the
+  new text; the paper on the map kept the old one on every client until a zoom crossed a
+  detail boundary.
+- **Changing who can see a pin did not show or hide its icon.** Core re-checks
+  visibility only when `hidden` changes, and a pin's audience is stored elsewhere. The
+  player just removed kept seeing an icon they could not open, and the player just added
+  saw nothing.
+- **A reader stayed open after its pin was hidden** from the player reading it.
+- **A notice said pins were too costly on clients with a frame-rate cap.** At core's
+  "Maximum framerate" of 40 or below, or under Chrome's energy saver, the detail guard
+  fired on every scene: a warning, and every prop drawn one level coarser. It now
+  compares against the client's own cap and stays quiet on scenes without props. The
+  automatic effects level had the same fault, and at a cap of 40 it switched level back
+  and forth, re-drawing every card each time.
+- **One broken enricher from another module blanked a card and silenced its reader.** If
+  enrichment fails, the card now shows the text unenriched. It goes through the same
+  sanitiser, so GM secrets are still stripped.
+- **A card that failed to draw once stayed blank for the session.** The next pass
+  retries it.
+- **A refused placement disabled placing for the rest of the session.** It now says it
+  failed, and the next click tries again.
+- **The GM's shortcut onto a pin from the Notes layer followed the layer switch one step
+  late.** Arriving on Notes built nothing, and leaving it left the shortcut on Tokens and
+  Walls. A press there then switched to Tiles in the middle of a rubber-band select or a
+  wall. The press is also handled now, so the canvas no longer closes the HUD it just
+  opened or releases the pin it just selected.
+- **A pin's warm light and tooltip got stuck on** when the hit areas were rebuilt under
+  the pointer, and a token dragged across a prop no longer lights it up on the way.
+- **An image dragged from Foundry's file browser was not pinned by an Alt-drop.** It
+  fell through to core and became a plain tile.
+- **Rendered PDF pages were never released.** Every size a page was drawn at, and every
+  reader opened on one, stayed in memory for the session. At most eight are kept now,
+  and all of them are released when the scene changes.
+
+### Removed
+
+- **A sweep that could delete other people's Notes.** 250 ms after an Alt-drop it
+  deleted "any Note that appeared", though core never makes one from that drop. It
+  could only ever find someone else's. After a scene change inside that window it
+  deleted every Note on the new scene.
+- **The "hit areas go dead during a drag" mechanism, which never ran.** It listened for
+  hooks core does not fire. The one visible effect it was meant to have, no hover during
+  a drag, is now done differently.
+
+### Changed
+
+- **Deletions are written the v14 way.** The `-=key` form logged a compatibility warning
+  on every write, and v16 removes it. Permissions use a whole-list replacement and flags
+  use `ForcedDeletion`. A permission change made in core's dialog is now recorded when it
+  happens: the dialog sends the whole list, and a removed player, who is simply missing
+  from it, used to read as "no change". The context-menu entry, the HUD's hide and
+  the journal "show" call also moved off APIs v14 deprecates.
+- **Development toolchain:** vitest 5, eslint 10, jsdom 30.1; `npm audit` reports nothing.
+  The module still has no runtime dependencies.
+- **The test double for `Document#update` models v14 instead of v13.** It covers how
+  saves are validated, how changes are compared, and how nested keys are expanded. The
+  old double is why the permissions fault above passed every test. Under the new one,
+  the 0.3.1 ownership code fails most of the ownership tests.
+
+## [0.3.1] — 2026-09-30
 
 ### Fixed
 
@@ -28,7 +117,7 @@ Nothing yet.
   lines. While the reader has focus, the arrow, Page Up/Down, Home and End keys scroll
   it instead of panning the map underneath.
 
-## [0.3.0] — unreleased
+## [0.3.0] — 2026-09-02
 
 Three asks in one release: choose which page a pin shows, run the module in Firefox, and
 an augmented-reality effect family. The pin payload is version 4 and the preset payload is
@@ -121,7 +210,7 @@ version 2; both migrations are invisible on any map.
 - **Firefox is a supported browser and says so.** Measured by hand in Firefox 155 against
   a live world and a local harness, not reasoned about.
 
-## [0.2.2] — unreleased
+## [0.2.2] — 2026-09-01
 
 ### Fixed
 
@@ -149,7 +238,7 @@ version 2; both migrations are invisible on any map.
   sheet down and to the right in its own frame, as core's corner grip does, instead of
   about its middle. The pin payload is version 3; the payload itself is unchanged.
 
-## [0.2.1] — unreleased
+## [0.2.1] — 2026-09-01
 
 ### Fixed
 
@@ -245,7 +334,7 @@ The pin payload schema is now version 2; the migration changes nothing on any ma
   across zero turned the long way. The tooltip ignored a prop's rotation. Two strings
   nothing referenced, and three stale claims in comments, are gone.
 
-## [0.1.8] — unreleased
+## [0.1.8] — 2026-08-28
 
 ### Fixed
 
@@ -262,7 +351,7 @@ The pin payload schema is now version 2; the migration changes nothing on any ma
   a PDF whose effects cannot be baked on this browser falls back to the page exactly as
   pdf.js drew it — unadorned, but drawn.
 
-## [0.1.7] — unreleased
+## [0.1.7] — 2026-08-28
 
 ### Added
 
@@ -284,7 +373,7 @@ The pin payload schema is now version 2; the migration changes nothing on any ma
   prop from ever drawing, silently. There is now a decode timeout: a missing layer is a
   cosmetic loss, a stuck queue is not.
 
-## [0.1.6] — unreleased
+## [0.1.6] — 2026-08-28
 
 Re-releases the z-index fix, which shipped inside a re-pushed `v0.1.5` tag and so was
 never offered as an update to anyone who had already installed that version. Sorry —
@@ -312,7 +401,7 @@ moving a published tag was a mistake.
   speed and animation cannot apply to it. Leaving them live meant a GM moving sliders that
   could never do anything.
 
-## [0.1.5] — unreleased
+## [0.1.5] — 2026-08-28
 
 ### Fixed
 
@@ -332,7 +421,7 @@ moving a published tag was a mistake.
   button, the Pinboard's locate action switches layer and selects the pin it just found,
   and both READMEs say so.
 
-## [0.1.4] — unreleased
+## [0.1.4] — 2026-08-28
 
 ### Added
 
@@ -356,7 +445,7 @@ moving a published tag was a mistake.
   it just means an invisible prop with nothing to explain it, so the placeholder comes
   back.
 
-## [0.1.3] — unreleased
+## [0.1.3] — 2026-08-27
 
 ### Fixed
 
@@ -375,7 +464,7 @@ moving a published tag was a mistake.
   client that loaded a scene while not in front never sized its overlay or positioned a
   single prop — and never recovered. There is now a timeout floor under the frame.
 
-## [0.1.2] — unreleased
+## [0.1.2] — 2026-08-27
 
 First release tested in a live Foundry world. Four defects that only a running world could
 show, and one finding that changes what the module claims to be.
@@ -406,7 +495,7 @@ show, and one finding that changes what the module claims to be.
   copy and `docs/DESIGN.md` now say so plainly instead of promising the opposite. See
   amendment A10.
 
-## [0.1.1] — unreleased
+## [0.1.1] — 2026-08-27
 
 ### Fixed
 
@@ -435,7 +524,7 @@ Also documents plainly, at the call site, that the focus reader opening without 
 is the module's deliberate position rather than an oversight — the pin's audience is the
 authority, and ownership sync is a convenience on top of it.
 
-## [0.1.0] — unreleased
+## [0.1.0] — 2026-08-27
 
 First public beta. Pin any journal, page or image onto the map as a small icon or as a
 full-size readable prop, with per-pin visibility the GM controls in one click.

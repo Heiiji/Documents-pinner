@@ -55,24 +55,34 @@ jobs:
             console.log(`stamped ${m.id} ${m.version}`);
           '
 
-      # The changelog's top heading says "unreleased" in the repository, which is honest
-      # while the work is in progress and wrong the moment a tag exists. Stamped from the
-      # same single source of truth as the manifest.
-      - name: Stamp CHANGELOG.md
+      # The repository's CHANGELOG is what the module's `changelog` link and GitHub show,
+      # so the release commit dates its own heading: `## [X.Y.Z] — YYYY-MM-DD`, UTC. This
+      # step is the fallback for a release that forgot. It dates THIS version's heading
+      # only, in the packaged copy, and warns so the repository gets fixed. It used to
+      # stamp the first "unreleased" heading it found as this version, whatever version
+      # that heading was for, and only ever in the zip, so the repository said
+      # "unreleased" beside every version that had shipped.
+      - name: Check the CHANGELOG date
         env:
           VERSION: ${{ steps.version.outputs.value }}
         run: |
           node -e '
             const fs = require("fs");
             const { VERSION } = process.env;
+            const text = fs.readFileSync("CHANGELOG.md", "utf8");
+            const esc = VERSION.replace(/[.]/g, "\\.");
+            if (new RegExp(`^## \\[${esc}\\] — \\d{4}-\\d{2}-\\d{2}\\s*$`, "m").test(text)) {
+              console.log(`changelog dates ${VERSION}`);
+              process.exit(0);
+            }
+            const pending = new RegExp(`^## \\[${esc}\\][ \\t]*[—-][ \\t]*unreleased[ \\t]*$`, "im");
+            if (!pending.test(text)) {
+              console.log(`::warning::CHANGELOG.md has no heading for ${VERSION}`);
+              process.exit(0);
+            }
             const date = new Date().toISOString().slice(0, 10);
-            // Only a VERSION heading awaiting a date: `## [Unreleased]` is left alone.
-            const text = fs.readFileSync("CHANGELOG.md", "utf8").replace(
-              /^## \[\d[^\]]*\][ \t]*[—-][ \t]*unreleased[ \t]*$/im,
-              `## [${VERSION}] — ${date}`
-            );
-            fs.writeFileSync("CHANGELOG.md", text);
-            console.log(`changelog stamped ${VERSION} (${date})`);
+            fs.writeFileSync("CHANGELOG.md", text.replace(pending, `## [${VERSION}] — ${date}`));
+            console.log(`::warning::CHANGELOG.md still says ${VERSION} is unreleased; dated it ${date} in the package only`);
           '
 
       - name: Package
