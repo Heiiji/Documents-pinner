@@ -21,6 +21,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   narrower audience nobody's view moves — a Foundry ping reaches every player, and would
   show the others where a private clue lies — and you are told so. On the HUD, as
   `Shift+Space` in the Pinboard, and in the Pinboard's row menu.
+- **Pin Studio says when the table is watching.** Every control saves as it moves, so on a
+  revealed pin the players watched each paper, size and effect you tried. Above its tabs
+  the Studio now says how many players can see the pin, and offers *Hide while I edit*:
+  the pin hides at once, and comes back to the same players when you close the Studio or
+  click *Reveal again*. A pin you reveal or hide again by hand meanwhile is left as you set
+  it, and one hidden when the page reloaded comes back the next time the world loads.
 
 ### Changed
 

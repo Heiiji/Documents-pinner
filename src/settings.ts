@@ -18,6 +18,7 @@ import { DEFAULTS, MODULE_ID } from "./const";
 import { g } from "./fvtt";
 import { setLogLevel, type LogLevel } from "./log";
 import { DEFAULT_PRESET_ID } from "./effects/presets/core-presets";
+import type { DpAudience } from "./types/dp";
 
 export type RenderingMode = "canvas" | "dom";
 export type EffectsLevel = "auto" | "full" | "reduced" | "off";
@@ -213,7 +214,33 @@ export const SETTINGS = {
     type: Boolean,
     default: false,
   },
+  /**
+   * The pins this client's Pin Studios have hidden with "Hide while I edit", each with the
+   * audience that hide remembered.
+   *
+   * Written BEFORE the hide, and cleared when the Studio reveals it again. A reload in
+   * between — the Studio gone without its close ever running — is resumed by the `ready`
+   * sweep instead of stranding the pin hidden. This client's, because the hold is: no pin
+   * field, no flag, and no world write beyond the audience itself.
+   */
+  editHolds: {
+    scope: "client",
+    config: false,
+    type: Object,
+    default: [],
+  },
 } as const satisfies Record<string, SettingDef>;
+
+/** One "Hide while I edit": which pin, the world it is in, and what its hide remembered. */
+export interface EditHold {
+  anchor: string;
+  /**
+   * The world the anchor lives in. A client setting is this browser's, across every world
+   * it opens; a hold from another world is left for that world's sweep, not dropped.
+   */
+  world: string | null;
+  restore: DpAudience["restore"];
+}
 
 export type SettingKey = keyof typeof SETTINGS;
 
@@ -235,6 +262,7 @@ interface SettingTypes {
   lastTypeSize: number;
   seenVersion: string;
   peekTaught: boolean;
+  editHolds: EditHold[];
 }
 
 /**

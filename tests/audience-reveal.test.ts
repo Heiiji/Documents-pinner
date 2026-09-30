@@ -9,6 +9,8 @@
 import { describe, expect, it } from "vitest";
 import {
   makeAudience,
+  pingsEveryone,
+  resumeAfterEdit,
   revealed,
   sameAudience,
   toggleVisibility,
@@ -117,5 +119,57 @@ describe("sameAudience", () => {
     expect(sameAudience(base, { ...base, restore: { kind: "selected", users: ["ali"] } })).toBe(
       true
     );
+  });
+});
+
+/** K1: the one audience whose location every client may be shown. */
+describe("pingsEveryone", () => {
+  it.each([
+    ["everyone", makeAudience({ kind: "everyone" }), true],
+    ["one player", makeAudience({ kind: "selected", users: ["ali"] }), false],
+    ["every player, listed", makeAudience({ kind: "selected", users: PLAYERS }), false],
+    ["line of sight", makeAudience({ kind: "discovered", discovered: PLAYERS }), false],
+    ["hidden", hidden({ kind: "everyone", users: [] }), false],
+  ])("%s", (_name, audience, expected) => {
+    expect(pingsEveryone(audience)).toBe(expected);
+  });
+});
+
+/**
+ * "Hide while I edit", ended: the reveal again, only while the pin is exactly as the hold
+ * left it. A pin the GM revealed or re-hid by hand meanwhile is theirs.
+ */
+describe("resumeAfterEdit", () => {
+  const forAli = makeAudience({ kind: "selected", users: ["ali", "ben"] });
+  const held = toggleVisibility(forAli);
+
+  it("reveals again to the players the hold remembered", () => {
+    expect(resumeAfterEdit(held, held.restore)).toEqual(revealed(held));
+    expect(resumeAfterEdit(held, held.restore)).toMatchObject({
+      kind: "selected",
+      users: ["ali", "ben"],
+      restore: null,
+    });
+  });
+
+  it("does not care in which order the remembered list was written", () => {
+    expect(resumeAfterEdit(held, { kind: "selected", users: ["ben", "ali"] })).not.toBeNull();
+  });
+
+  it("leaves alone a pin revealed again by hand", () => {
+    expect(resumeAfterEdit(forAli, held.restore)).toBeNull();
+    expect(resumeAfterEdit(makeAudience({ kind: "everyone" }), held.restore)).toBeNull();
+  });
+
+  it("leaves alone a pin hidden again by hand over a different audience", () => {
+    const rehidden = toggleVisibility(makeAudience({ kind: "everyone" }));
+    expect(resumeAfterEdit(rehidden, held.restore)).toBeNull();
+    const narrower = toggleVisibility(makeAudience({ kind: "selected", users: ["ali"] }));
+    expect(resumeAfterEdit(narrower, held.restore)).toBeNull();
+  });
+
+  it("is a single effect: once resumed, a second resume finds nothing to do", () => {
+    const once = resumeAfterEdit(held, held.restore)!;
+    expect(resumeAfterEdit(once, held.restore)).toBeNull();
   });
 });

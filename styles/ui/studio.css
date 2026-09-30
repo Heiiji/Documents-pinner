@@ -16,6 +16,35 @@
   color: var(--color-text-primary, #eee);
 }
 
+/*
+ * The table is watching. Warm and above the tabs, because every control below saves as
+ * it moves; the held state is quieter — nothing is live while it shows.
+ */
+.dp-studio__live {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.6rem;
+  border-radius: 0.35rem;
+  border: 1px solid color-mix(in oklab, var(--color-warm-1, #c9ad6a) 55%, transparent);
+  background: color-mix(in oklab, var(--color-warm-1, #c9ad6a) 16%, transparent);
+
+  & > span {
+    flex: 1 1 12em;
+  }
+
+  & > button {
+    flex: none;
+    inline-size: auto;
+  }
+}
+
+.dp-studio__live--held {
+  border-color: color-mix(in oklab, var(--color-border-light-1, #7a7971) 60%, transparent);
+  background: color-mix(in oklab, var(--color-border-light-1, #7a7971) 14%, transparent);
+}
+
 .dp-studio__tabs {
   display: flex;
   gap: 0.25rem;

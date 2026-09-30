@@ -552,8 +552,11 @@ export function fakeApplicationV2(): any {
       return this;
     }
 
+    // `_onClose` runs once the application HAS closed, and the close does not await it
+    // (TYPES `application.d.mts:1019-1028`): a returned promise is dropped on the floor.
     close() {
       this.rendered = false;
+      (this as any)._onClose?.({});
       return Promise.resolve(this);
     }
 

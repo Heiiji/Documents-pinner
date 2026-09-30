@@ -198,6 +198,23 @@ export function pingsEveryone(audience: DpAudience): boolean {
   return audience.kind === "everyone";
 }
 
+/**
+ * What ending "Hide while I edit" writes, or null to leave the pin alone.
+ *
+ * The reveal again — `revealed`, the one reveal rule — only while the pin is exactly as
+ * the hold left it: hidden, remembering the audience the hold remembered. Anything else
+ * is the GM's own doing since — revealed again by hand, or hidden again over a different
+ * audience — and a resume that overwrote it would undo a decision made after the one it
+ * restores.
+ */
+export function resumeAfterEdit(
+  current: DpAudience,
+  held: DpAudience["restore"]
+): DpAudience | null {
+  if (current.kind !== "hidden" || !sameRestore(current.restore, held)) return null;
+  return revealed(current);
+}
+
 /** The same people, the same way: kind, list and memory. The order of a list is not news. */
 export function sameAudience(a: DpAudience, b: DpAudience): boolean {
   return a.kind === b.kind && sameUsers(a.users, b.users) && sameRestore(a.restore, b.restore);
