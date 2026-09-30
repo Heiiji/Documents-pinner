@@ -8,7 +8,8 @@
  *
  * `CanvasLayer`, deliberately NOT `InteractionLayer`: an InteractionLayer ties
  * `interactiveChildren` to whether the layer is *active*, and this layer is never the
- * active one — a player has no layer controls at all.
+ * active one — a player has no layer controls at all. A plain `CanvasLayer` does not
+ * escape the flag either: it defaults to `false`, so `sync()` turns it on.
  *
  * The GM gets hit areas too, on ONE layer: Notes, where the module's own tools leave
  * them. Core only lets a Tile be selected while the Tiles layer is active — `control()`
@@ -91,6 +92,14 @@ function buildLayerClass(CanvasLayer: any): any {
     sync() {
       for (const container of this.hits.values()) container.destroy({ children: true });
       this.hits.clear();
+
+      // v14's `CanvasLayer` declares `interactiveChildren = false` as a class field, so
+      // a layer that never says otherwise has every child skipped by the hit test: the
+      // press fell through to the stage and not one player could open a prop, on every
+      // map (measured on 14.367). Core's own `ControlsLayer` sets it back in its
+      // constructor for the same reason. Here it is asserted on every rebuild rather
+      // than once, so nothing that touches the flag between draws can strand the layer.
+      this.interactiveChildren = true;
 
       // The GM interacts with the real Tile placeable — on the Tiles layer, where it is
       // interactive and a hit area here would shadow it, and on Tokens, where a

@@ -18,6 +18,7 @@ import { fakeTile, installWorld, uninstallWorld } from "./helpers/fake-foundry";
 const card = {
   html:
     '<div class="dp-card"><div class="dp-card__sheet">' +
+    '<h1 class="dp-card__title">The Duke\'s Letter</h1>' +
     '<div class="dp-card__body"><p>The Duke is dead.</p></div></div></div>',
   title: "The Duke's Letter",
   readable: false,
@@ -188,5 +189,134 @@ describe("the focus reader", () => {
     await openReader(tile);
 
     expect(reader()).toBeNull();
+  });
+});
+
+/**
+ * A long document has to scroll wherever the pointer is. Only the body scrolls, and the
+ * title, the pad and the close button sit outside it: a wheel over any of those found no
+ * scrollable ancestor, and core ignores a wheel that is not over `#board`, so it did
+ * nothing — "sometimes it scrolls", depending on where the pointer happened to rest.
+ */
+describe("scrolling the reader", () => {
+  /** jsdom lays nothing out, so the body's scroll geometry is stated. */
+  function scrollable(body: HTMLElement) {
+    let scrollTop = 0;
+    Object.defineProperty(body, "scrollHeight", { value: 1000, configurable: true });
+    Object.defineProperty(body, "clientHeight", { value: 400, configurable: true });
+    Object.defineProperty(body, "scrollTop", {
+      get: () => scrollTop,
+      set: (v: number) => (scrollTop = v),
+      configurable: true,
+    });
+    body.style.lineHeight = "18px";
+    return body;
+  }
+
+  async function open() {
+    const { openReader } = await import("../src/apps/ReaderOverlay");
+    await openReader(tile);
+    return scrollable(reader()!.querySelector<HTMLElement>(".dp-card__body")!);
+  }
+
+  const wheel = (target: Element, init: WheelEventInit) => {
+    const event = new WheelEvent("wheel", { bubbles: true, cancelable: true, ...init });
+    target.dispatchEvent(event);
+    return event;
+  };
+
+  const key = (target: Element, name: string) => {
+    const event = new KeyboardEvent("keydown", { key: name, bubbles: true, cancelable: true });
+    target.dispatchEvent(event);
+    return event;
+  };
+
+  it("scrolls the text from a wheel over the title, which has nothing of its own to scroll", async () => {
+    const body = await open();
+    const event = wheel(reader()!.querySelector(".dp-card__title")!, { deltaY: 120 });
+
+    expect(body.scrollTop).toBe(120);
+    expect(event.defaultPrevented).toBe(true);
+  });
+
+  it("scrolls from the pad around the text and from the close button too", async () => {
+    const body = await open();
+    wheel(reader()!.querySelector(".dp-card__sheet")!, { deltaY: 50 });
+    wheel(reader()!.querySelector(".dp-reader__close")!, { deltaY: 50 });
+
+    expect(body.scrollTop).toBe(100);
+  });
+
+  it("leaves a wheel over the text itself to the browser, which scrolls it natively", async () => {
+    const body = await open();
+    const event = wheel(body.querySelector("p")!, { deltaY: 120 });
+
+    expect(event.defaultPrevented).toBe(false);
+    expect(body.scrollTop).toBe(0);
+  });
+
+  it("leaves a ctrl-wheel alone, because that is a zoom", async () => {
+    const body = await open();
+    wheel(reader()!.querySelector(".dp-card__title")!, { deltaY: 120, ctrlKey: true });
+
+    expect(body.scrollTop).toBe(0);
+  });
+
+  it("reads a wheel that reports lines as lines", async () => {
+    const body = await open();
+    wheel(reader()!.querySelector(".dp-card__title")!, { deltaY: 3, deltaMode: 1 });
+
+    expect(body.scrollTop).toBe(54);
+  });
+
+  it("pages with the keyboard while the reader has focus, ahead of core's panning", async () => {
+    const body = await open();
+    expect(reader()!.contains(document.activeElement)).toBe(true);
+    const core = vi.fn();
+    window.addEventListener("keydown", core);
+
+    const event = key(document.activeElement!, "PageDown");
+    expect(body.scrollTop).toBe(382);
+    expect(event.defaultPrevented).toBe(true);
+    expect(core).not.toHaveBeenCalled();
+
+    key(document.activeElement!, "End");
+    expect(body.scrollTop).toBe(600);
+    key(document.activeElement!, "Home");
+    expect(body.scrollTop).toBe(0);
+    key(document.activeElement!, "ArrowDown");
+    expect(body.scrollTop).toBe(36);
+
+    window.removeEventListener("keydown", core);
+  });
+
+  it("leaves the keys alone once focus is somewhere else", async () => {
+    const body = await open();
+    const input = document.createElement("input");
+    document.body.appendChild(input);
+    input.focus();
+
+    const event = key(input, "ArrowDown");
+    expect(body.scrollTop).toBe(0);
+    expect(event.defaultPrevented).toBe(false);
+  });
+});
+
+describe("the reader's scroll arithmetic", () => {
+  it("turns a line or a page into pixels, and leaves pixels as they are", async () => {
+    const { wheelPixels } = await import("../src/apps/ReaderOverlay");
+    expect(wheelPixels({ deltaY: 100, deltaMode: 0 }, 20, 400)).toBe(100);
+    expect(wheelPixels({ deltaY: 3, deltaMode: 1 }, 20, 400)).toBe(60);
+    expect(wheelPixels({ deltaY: -1, deltaMode: 2 }, 20, 400)).toBe(-400);
+  });
+
+  it("stays inside the text at both ends, and ignores a key that does not read", async () => {
+    const { readerScrollTop } = await import("../src/apps/ReaderOverlay");
+    const body = { scrollTop: 590, clientHeight: 400, scrollHeight: 1000 };
+    expect(readerScrollTop("PageDown", body, 20)).toBe(600);
+    expect(readerScrollTop("ArrowUp", { ...body, scrollTop: 10 }, 20)).toBe(0);
+    expect(readerScrollTop("End", { ...body, scrollHeight: 300 }, 20)).toBe(0);
+    expect(readerScrollTop("a", body, 20)).toBeNull();
+    expect(readerScrollTop("toString", body, 20)).toBeNull();
   });
 });

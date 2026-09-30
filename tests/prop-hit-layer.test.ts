@@ -150,6 +150,22 @@ describe("PropHitLayer.sync", () => {
 
   afterEach(() => uninstallWorld());
 
+  /**
+   * The hit area can be perfect and still never be hit. v14's `CanvasLayer` defaults
+   * `interactiveChildren` to false, and PIXI skips every child of a layer that says so —
+   * measured on 14.367, where a player's double-click landed on the stage and not one
+   * prop on the map would open.
+   */
+  it("lets the hit test reach its children, which the base layer does not", () => {
+    const layer = layerFor([pinned({ mode: "prop" })], false);
+    expect(layer.interactiveChildren).toBe(true);
+  });
+
+  it("stays reachable for the GM on the Notes layer, whose areas live here too", () => {
+    const layer = layerFor([pinned({ mode: "prop" })], true, "notes");
+    expect(layer.interactiveChildren).toBe(true);
+  });
+
   it("builds a hit area for a PIN, which is the gesture the whole module promises", () => {
     const layer = layerFor([pinned({ mode: "pin" })], false);
     expect(layer.hits.size).toBe(1);

@@ -108,6 +108,63 @@ export function readableScale(
   return Math.min(maxZoom, (LOD.READER_TYPE * 1.5) / fontPx);
 }
 
+/**
+ * A wheel's travel in pixels, whatever unit the device reported it in.
+ *
+ * Most report pixels; a mouse wheel in Firefox can report lines, and some devices report
+ * pages. Scrolling by the raw number in those units moved a long letter three pixels a
+ * notch, which reads as a reader that does not scroll.
+ */
+export function wheelPixels(
+  event: { deltaY: number; deltaMode: number },
+  lineHeight: number,
+  pageHeight: number
+): number {
+  if (event.deltaMode === 1) return event.deltaY * lineHeight; // DOM_DELTA_LINE
+  if (event.deltaMode === 2) return event.deltaY * pageHeight; // DOM_DELTA_PAGE
+  return event.deltaY;
+}
+
+/**
+ * Where a reading key takes the body, or null for a key that does not scroll.
+ *
+ * The steps a browser would take on a page: an arrow moves two lines, a page key moves a
+ * screenful less one line so the reader keeps their place, and Home and End go to the
+ * ends. Clamped, so a key at the end of the letter stays at the end.
+ */
+export function readerScrollTop(
+  key: string,
+  body: { scrollTop: number; clientHeight: number; scrollHeight: number },
+  lineHeight: number
+): number | null {
+  const max = Math.max(0, body.scrollHeight - body.clientHeight);
+  const page = Math.max(lineHeight, body.clientHeight - lineHeight);
+  let next: number;
+  switch (key) {
+    case "ArrowDown":
+      next = body.scrollTop + 2 * lineHeight;
+      break;
+    case "ArrowUp":
+      next = body.scrollTop - 2 * lineHeight;
+      break;
+    case "PageDown":
+      next = body.scrollTop + page;
+      break;
+    case "PageUp":
+      next = body.scrollTop - page;
+      break;
+    case "Home":
+      next = 0;
+      break;
+    case "End":
+      next = max;
+      break;
+    default:
+      return null;
+  }
+  return Math.min(max, Math.max(0, next));
+}
+
 export function focusedPinId(): string | null {
   return openId;
 }
@@ -292,24 +349,60 @@ function attach(): void {
   // here, because the reader scrolls where a prop clips: it shows while the body can
   // still scroll and goes once the last line is in view. One layout read per scroll
   // event, off the frame path.
-  const body = element!.querySelector<HTMLElement>(".dp-card__body");
+  const node = element!;
+  const body = node.querySelector<HTMLElement>(".dp-card__body");
   if (body) {
-    const node = element!;
     const update = () => {
       node.dataset.dpMore = String(body.scrollTop + body.clientHeight < body.scrollHeight - 1);
     };
     on(body, "scroll", update, { passive: true });
     requestAnimationFrame(update);
+
+    // The body is the one part of the reader that scrolls, and it is not the whole
+    // reader: the title, the pad around the text and the close button all sit outside
+    // it. A wheel over any of those found nothing to scroll — the sheet, the card and the
+    // reader all clip — and core ignores a wheel that is not over `#board`, so it did
+    // nothing at all. Whether a long document scrolled depended on where the pointer
+    // happened to rest. A wheel over the body itself is left to the browser, which
+    // scrolls it natively, with the platform's own smoothing.
+    on(
+      node,
+      "wheel",
+      (event: WheelEvent) => {
+        // A pinch or a ctrl-wheel is a zoom, never a scroll.
+        if (event.ctrlKey || body.contains(event.target as Node)) return;
+        const delta = wheelPixels(event, lineHeightOf(body), body.clientHeight);
+        if (!delta) return;
+        event.preventDefault();
+        body.scrollTop += delta;
+      },
+      { passive: false }
+    );
   }
 
   on(
     window,
     "keydown",
     (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+        closeReader();
+        return;
+      }
+
+      // The reading keys, while the reader has focus — and it takes focus as it opens.
+      // Core binds the arrows to panning the map, so they moved the scene out from under
+      // the text instead of the text; and the reader itself does not scroll, so the
+      // browser had nothing to page either. Captured here, ahead of core's listener.
+      const focused = document.activeElement;
+      if (!body || !node.contains(focused) || isTextEntry(focused)) return;
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
+      const next = readerScrollTop(event.key, body, lineHeightOf(body));
+      if (next === null) return;
       event.preventDefault();
       event.stopPropagation();
-      closeReader();
+      body.scrollTop = next;
     },
     { capture: true }
   );
@@ -328,6 +421,21 @@ function attach(): void {
     },
     { capture: true }
   );
+}
+
+/** The body's line height in pixels; the card's own 1.45 when the style says "normal". */
+function lineHeightOf(node: HTMLElement): number {
+  const style = getComputedStyle(node);
+  const line = parseFloat(style.lineHeight);
+  if (Number.isFinite(line) && line > 0) return line;
+  const font = parseFloat(style.fontSize);
+  return Number.isFinite(font) && font > 0 ? font * 1.45 : 20;
+}
+
+/** Somewhere the keys type rather than read, where the arrows must stay the field's. */
+function isTextEntry(node: Element | null): boolean {
+  if (!(node instanceof HTMLElement)) return false;
+  return ["INPUT", "SELECT", "TEXTAREA"].includes(node.tagName) || node.isContentEditable;
 }
 
 /** The pointer in scene coordinates, from core's tracking when it has it. */

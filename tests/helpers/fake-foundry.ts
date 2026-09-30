@@ -604,7 +604,13 @@ export function installWorld(world: FakeWorld = {}): InstalledWorld {
   };
   (globalThis as any).foundry = {
     canvas: {
-      layers: { CanvasLayer: class CanvasLayer {} },
+      // v14's own default, which is what left every player's hit area dead: a layer that
+      // never turns this on has all of its children skipped by the hit test.
+      layers: {
+        CanvasLayer: class CanvasLayer {
+          interactiveChildren = false;
+        },
+      },
       // Records what was scheduled and resolves to the end state. The RECORD is what
       // matters for assertions: a real animation runs over its duration, so "did this
       // touch the mesh at all" cannot be read off the final value.
