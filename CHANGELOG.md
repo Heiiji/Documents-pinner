@@ -9,6 +9,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Nothing yet.
 
+## [0.3.1] — unreleased
+
+### Fixed
+
+- **Players could not open a pin or a prop at all.** A v14 canvas layer starts with its
+  children switched off for the hit test, and the layer that carries the players' hit
+  areas never switched them on. So a player's click went through to the map underneath,
+  and a document pinned for the whole table could be read by nobody but the GM. The GM's
+  shortcut onto a pin from the Notes layer was dead the same way. Measured on 14.367: the
+  hit area was in the right place and never reached. The layer now switches them on
+  every time it rebuilds.
+- **A long document in the reader scrolled only while the pointer was over its text.**
+  The text is the one part of the reader that scrolls. The title, the margin around it
+  and the close button do not, and a wheel over any of them did nothing, so the same
+  reader scrolled or not depending on where the pointer rested. The wheel now scrolls
+  the text from anywhere over the reader, and a mouse that reports lines is read as
+  lines. While the reader has focus, the arrow, Page Up/Down, Home and End keys scroll
+  it instead of panning the map underneath.
+
 ## [0.3.0] — unreleased
 
 Three asks in one release: choose which page a pin shows, run the module in Firefox, and
