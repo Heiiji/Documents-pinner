@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Nothing yet.
 
-## [0.3.2] — unreleased
+## [0.3.2] — 2026-09-30
 
 A reliability pass. Three audits: one checked every Foundry API the module relies on
 against the 14.367 source, one checked the runtime for timing and state faults, and one
