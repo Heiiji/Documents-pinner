@@ -320,6 +320,7 @@
   "DP.studio.fadeUnderTokens": "Estomper sous les pions",
   "DP.studio.fadeUnderTokensHint": "Pour qu'un accessoire posé en travers d'un couloir ne masque jamais ce qui s'y tient.",
   "DP.studio.fitHeight": "Ajuster au contenu",
+  "DP.studio.fogNote": "Visible à travers le brouillard — révélez-le quand ils l'atteignent.",
   "DP.studio.followName": "Suivre le nom de la source",
   "DP.studio.followNameHint": "Renommer le document renomme l'épingle.",
   "DP.studio.gone": "Cette épingle n'existe plus.",

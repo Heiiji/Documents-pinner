@@ -6,10 +6,10 @@
  * compatibility path deliberately.
  *
  * What this tier gives up is a property of being drawn OVER the canvas rather than into
- * it: no darkness tint, no per-light illumination, no fog mask, no roof occlusion, and
- * no z-order against tokens. The README says so in both languages. What it keeps is
- * position, size, rotation, the effect and the fades — so a prop still reads as an
- * object lying on the map, just a flatter one.
+ * it: no per-light illumination, no fog mask, no roof occlusion, and no z-order against
+ * tokens. The README says so in both languages. What it keeps is position, size,
+ * rotation, the effect and the fades — so a prop still reads as an object lying on the
+ * map, just a flatter one — and the scene's global darkness, taken back by hand.
  */
 
 .dp-prop {
@@ -26,6 +26,12 @@
   /* The token fade and the peek arrive as an opacity write from PropManager, and ease
      at the state duration — the same clock the canvas tier's mesh uses for them. */
   transition: opacity var(--dp-dur-state, 120ms) linear;
+  /* The scene's darkness, which the overlay carries, handed to the card inside and
+     applied by the card's own filter chain in fx/effects.css. Set HERE and on nothing
+     else, so only a prop on the map is dimmed: the reader is for reading, and the ghost
+     and the swatches are interface. Not a filter on this element, whose own `filter` is
+     animated by the arrival and cleared under reduced motion — either would erase it. */
+  --dp-card-dim: var(--dp-scene-dim, 1);
 }
 
 /*

@@ -438,6 +438,19 @@ function grantNote(pin: DpPinFlags): string {
   return `<p class="dp-studio__note" data-dp-grants="${scope.kind}">${escapeHtml(text)}</p>`;
 }
 
+/**
+ * A prop drawn as a card is visible through unexplored fog, so its reveal has to be timed.
+ *
+ * Every prop but a PDF — which is drawn into the scene and fogged like the map — and
+ * whatever its audience: the advice matters most BEFORE the reveal (K8). Not
+ * `drawsAsDom`, which answers for the GM's own client; the players' clients are the ones
+ * that draw the card over their fog.
+ */
+function fogNote(pin: DpPinFlags): string {
+  if (pin.mode !== "prop" || isPdfPin(pin)) return "";
+  return `<p class="dp-studio__note" data-dp-fog="true">${escapeHtml(t("DP.studio.fogNote"))}</p>`;
+}
+
 function audienceTab(doc: any, pin: DpPinFlags, attrs = ""): string {
   const users = chipUsersFor(doc);
   return (
@@ -458,6 +471,7 @@ function audienceTab(doc: any, pin: DpPinFlags, attrs = ""): string {
     ) +
     chipsMarkup(users, { t: tn }) +
     `<p class="dp-studio__status" aria-live="polite">${escapeHtml(tn(describeChips(users)))}</p>` +
+    fogNote(pin) +
     field(
       "DP.studio.sync",
       checkbox("audience.ownershipSync.enabled", pin.audience.ownershipSync.enabled),

@@ -320,6 +320,7 @@
   "DP.studio.fadeUnderTokens": "Fade under tokens",
   "DP.studio.fadeUnderTokensHint": "So a prop lying across a corridor never hides what is standing on it.",
   "DP.studio.fitHeight": "Fit to content",
+  "DP.studio.fogNote": "Visible through fog — reveal it when they reach it.",
   "DP.studio.followName": "Follow the source's name",
   "DP.studio.followNameHint": "Renaming the document renames the pin.",
   "DP.studio.gone": "This pin no longer exists.",

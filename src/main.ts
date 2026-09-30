@@ -48,7 +48,7 @@ import {
   onRenderConfig,
   onSourceRenamed,
 } from "./ui/entry-points";
-import { flashDomProp, setDomPropHover } from "./canvas/DomPropTier";
+import { flashDomProp, setDomPropHover, syncSceneDim } from "./canvas/DomPropTier";
 import { onboardingReady } from "./ui/onboarding";
 
 const log = logger("boot");
@@ -104,6 +104,7 @@ Hooks.once("ready", () => {
 
 Hooks.on("canvasReady", () => {
   alignToBoard();
+  syncSceneDim(true);
   syncTransform(true);
   propManager().start();
   // The one assumption every placement rests on, checked against core's own bounds.
@@ -114,6 +115,11 @@ Hooks.on("canvasReady", () => {
   // one's pins until a tile happened to change.
   refreshPinboard();
 });
+
+// The scene's darkness, for the cards drawn over the canvas. This hook fires at the end of
+// the environment's own initialisation, which is where core applies a darkness change;
+// `lightingRefresh` is not the signal — it fires on every light-carrying token step.
+Hooks.on("initializeCanvasEnvironment", () => syncSceneDim());
 
 Hooks.on("canvasTearDown", () => {
   disarm();

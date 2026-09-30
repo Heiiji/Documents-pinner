@@ -690,6 +690,11 @@ export function installWorld(world: FakeWorld = {}): InstalledWorld {
     app: { renderer: { resolution: 1, screen: { width: 1920, height: 1080 } }, ticker: null },
     stage: { worldTransform: { a: 1, b: 0, c: 0, d: 1, tx: 0, ty: 0 }, scale: { x: 1, y: 1 } },
     visibility: { testVisibility: () => true },
+    // `EnvironmentCanvasGroup#darknessLevel` (TYPES, groups/environment.d.mts:54-58): a
+    // number once the environment has initialised, `undefined` before. Core's own
+    // `canvas.darknessLevel` getter THROWS before initialisation, which is why the fake
+    // has no such getter — nothing may read it.
+    environment: { darknessLevel: 0 },
   };
 
   (globalThis as any).game = game;

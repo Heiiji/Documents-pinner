@@ -141,10 +141,13 @@ If you need real secrecy, keep the document out of the world until you want it s
    the page explicitly in Pin Studio and it is drawn.
 4. Images referenced by a journal page are inlined; anything the module cannot fetch is
    dropped rather than left broken.
-5. **Props are not lit, fogged, occluded, or sorted behind tokens.** Drawing them into the
-   scene needs an HTML-to-texture step: an SVG with a `foreignObject`, which tainted the
-   canvas in every browser measured, so the WebGL upload threw. The module probes for this
-   at startup and draws props as an HTML layer over the canvas instead. *That probe now
+5. **Text props darken with the scene, but are not lit by its lights, fogged, occluded,
+   or sorted behind tokens.** Drawing them into the scene needs an HTML-to-texture step:
+   an SVG with a `foreignObject`, which tainted the canvas in every browser measured, so
+   the WebGL upload threw. The module probes for this at startup and draws props as an
+   HTML layer over the canvas instead, dimmed by the scene's global darkness level and by
+   nothing else. So a revealed text prop shows through fog a player has not explored:
+   reveal it when they reach it — Pin Studio's Audience tab says so. *That probe now
    passes on current Chrome and Firefox* — see [`docs/DESIGN.md`](docs/DESIGN.md) A21 — so
    the tier may be reachable again; nothing has been changed on that until the whole
    pipeline is measured in a real world, not just the probe.
@@ -327,11 +330,15 @@ voulu.
    c'est le journal. Choisissez la page explicitement dans le Studio et elle est dessinée.
 4. Les images référencées par une page de journal sont intégrées ; ce que le module ne peut
    pas récupérer est retiré plutôt que laissé cassé.
-5. **Les accessoires ne sont ni éclairés, ni embrumés, ni occultés, ni placés derrière les
-   pions.** Les dessiner dans la scène exige une conversion HTML → texture : un SVG avec
-   `foreignObject`, qui contaminait le canevas dans tous les navigateurs mesurés, si bien
-   que l'envoi WebGL échouait. Le module teste cela au démarrage et dessine les accessoires
-   en HTML par-dessus le canevas. *Ce test réussit désormais sur Chrome et Firefox
+5. **Les accessoires de texte s'assombrissent avec la scène, mais ne sont ni éclairés par
+   ses lumières, ni embrumés, ni occultés, ni placés derrière les pions.** Les dessiner
+   dans la scène exige une conversion HTML → texture : un SVG avec `foreignObject`, qui
+   contaminait le canevas dans tous les navigateurs mesurés, si bien que l'envoi WebGL
+   échouait. Le module teste cela au démarrage et dessine les accessoires en HTML
+   par-dessus le canevas, assombris par le niveau d'obscurité global de la scène et par
+   rien d'autre. Un accessoire de texte révélé se voit donc à travers un brouillard que le
+   joueur n'a pas exploré : révélez-le quand ils l'atteignent — l'onglet Audience du Studio
+   le rappelle. *Ce test réussit désormais sur Chrome et Firefox
    actuels* — voir [`docs/DESIGN.md`](docs/DESIGN.md) A21 — la voie est donc peut-être
    rouverte ; rien n'a été changé tant que toute la chaîne n'aura pas été mesurée dans un
    vrai monde, et pas seulement le test.

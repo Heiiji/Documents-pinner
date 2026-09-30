@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **A letter no longer glows in a pitch-black crypt.** Text props are drawn over the map
+  rather than into it, so core's darkness never reached them: bright paper floated over
+  every night scene. They now darken with the scene's darkness level, and follow it when
+  it changes. Lights and fog still do not reach them, so Pin Studio's Audience tab now
+  says, on every text prop, that it shows through unexplored fog — reveal it when the
+  party gets there.
+
 ### Fixed
 
 - **Revealing one page handed over the whole journal.** Access was granted on the journal
