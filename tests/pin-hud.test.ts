@@ -52,9 +52,10 @@ describe("hudMarkup", () => {
   it("is a toolbar with a single tab stop and no tabbable icons by default", () => {
     const markup = hudMarkup(doc, pin());
     expect(markup).toContain('role="toolbar"');
-    // Eight for a prop and a pin alike: Fit, the one verb only a prop had, has left.
-    expect(markup.match(/tabindex="-1"/g)?.length).toBe(8);
-    expect(hudMarkup(doc, pin({ mode: "pin" })).match(/tabindex="-1"/g)?.length).toBe(8);
+    // Nine for a prop and a pin alike: Fit, the one verb only a prop had, has left, and
+    // the `?` for the keys (E2) has joined the toolbar's roving order at its end.
+    expect(markup.match(/tabindex="-1"/g)?.length).toBe(9);
+    expect(hudMarkup(doc, pin({ mode: "pin" })).match(/tabindex="-1"/g)?.length).toBe(9);
   });
 
   /**
@@ -86,6 +87,8 @@ describe("hudMarkup", () => {
       "openLocally",
       "flash",
       "configure",
+      // E2: the keys, last, after K10's five.
+      "cheatSheet",
     ]);
   });
 

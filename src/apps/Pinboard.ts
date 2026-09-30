@@ -36,6 +36,8 @@ import { releaseAnchor, syncAnchor } from "../data/ownership-sync";
 import { allPresets, findPreset } from "../effects/preset-library";
 import { swatchStyle } from "../effects/preset-css";
 import { modifierGlyphs, platform } from "../ui/modifiers";
+import { isTextEntry } from "../ui/cheatsheet";
+import { closeCheatSheet, toggleCheatSheet } from "./CheatSheet";
 import { chipsMarkup } from "./chips";
 import { chipUsersFor } from "./PinHUD";
 import { focusSelectorIn } from "./focus-restore";
@@ -453,6 +455,9 @@ export function boardMarkup(
     `<input type="search" class="dp-board__search" data-action="search"`,
     ` value="${escapeAttr(query.search)}" placeholder="${escapeAttr(t("DP.board.search"))}"`,
     ` aria-label="${escapeAttr(t("DP.board.search"))}">`,
+    `<button type="button" class="dp-board__keys" data-action="cheatSheet" aria-haspopup="dialog"`,
+    ` aria-label="${escapeAttr(t("DP.cheat.open"))}" data-tooltip-text="${escapeAttr(t("DP.cheat.open"))}">`,
+    `<i class="fa-solid fa-question" aria-hidden="true"></i></button>`,
     `</header>`,
     filterBarMarkup(rows, query),
     `<ul class="dp-board__list" role="grid" aria-multiselectable="true"`,
@@ -521,6 +526,9 @@ export function definePinboard(): any {
         place: onPlace,
         revealAll: onRevealAll,
         revealNext: onRevealNext,
+        cheatSheet(this: any, _event: Event, target: HTMLElement) {
+          toggleCheatSheet("board", target);
+        },
         hideAll(this: any) {
           return allRows(this, false);
         },
@@ -766,6 +774,12 @@ export function definePinboard(): any {
     #onKey(event: KeyboardEvent) {
       const target = event.target as HTMLElement;
 
+      // The sheet goes first, before the menu, the search and the selection.
+      if (event.key === "Escape" && closeCheatSheet()) {
+        event.preventDefault();
+        return;
+      }
+
       // While the row menu is open it owns Escape and the arrows.
       if (this.menu) {
         if (event.key === "Escape") {
@@ -789,15 +803,10 @@ export function definePinboard(): any {
           return;
         }
       }
-      // BUTTON and contenteditable are here because Space and the single letters are
-      // real keystrokes for them: Space on a focused button activates it, and stealing
+      // A field's text, and a BUTTON as well, because Space and the single letters are
+      // real keystrokes for one: Space on a focused button activates it, and stealing
       // that would make the row controls unusable from the keyboard.
-      const typing =
-        target?.tagName === "INPUT" ||
-        target?.tagName === "SELECT" ||
-        target?.tagName === "TEXTAREA" ||
-        target?.tagName === "BUTTON" ||
-        target?.isContentEditable === true;
+      const typing = isTextEntry(target) || target?.tagName === "BUTTON";
 
       if (event.key === "Escape") {
         if (this.query.search) this.query = { ...this.query, search: "" };
@@ -810,6 +819,12 @@ export function definePinboard(): any {
         (event.currentTarget as HTMLElement)
           .querySelector<HTMLInputElement>(".dp-board__search")
           ?.focus();
+        event.preventDefault();
+        return;
+      }
+      // Shift+/ on most layouts, so it cannot be mistaken for the search's `/`.
+      if (event.key === "?" && !typing) {
+        toggleCheatSheet("board");
         event.preventDefault();
         return;
       }

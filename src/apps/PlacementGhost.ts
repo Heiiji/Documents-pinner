@@ -39,6 +39,8 @@ import { resolveCard } from "../render/ContentResolver";
 import { measureCardHeight } from "../render/measure";
 import { leave, mount, syncTransform, write } from "./OverlayRoot";
 import { modifierGlyphs, platform } from "../ui/modifiers";
+import { isTextEntry } from "../ui/cheatsheet";
+import { closeCheatSheet, toggleCheatSheet } from "./CheatSheet";
 import type { DpMode, DpPinFlags, DpSource } from "../types/dp";
 
 const log = logger("ghost");
@@ -165,10 +167,12 @@ export function stepKey(
   state: GhostState,
   key: string,
   mods: { shift?: boolean } = {}
-): GhostState | "cancel" | null {
+): GhostState | "cancel" | "help" | null {
   switch (key) {
     case "Escape":
       return "cancel";
+    case "?":
+      return "help";
     case " ":
       return { ...state, mode: state.mode === "prop" ? "pin" : "prop", heightOverride: null };
     case "f":
@@ -304,6 +308,9 @@ export function legendLines(): string {
     key("esc", `${g.esc} ${t("DP.ghost.cancel")}`) +
     sep +
     key("right", t("DP.ghost.pan")) +
+    sep +
+    // The rest, R among them, is on the sheet — which answers `?` with the legend off too.
+    key("help", `? ${t("DP.cheat.legend")}`) +
     `</span>` +
     `</div>`
   );
@@ -478,6 +485,8 @@ export function armAt(source: DpSource, point: { x: number; y: number }, mode?: 
 export function disarm(): void {
   for (const off of listeners) off();
   listeners = [];
+  // However the placement ended — a click, Shift+P, the window losing focus.
+  closeCheatSheet("ghost", false);
   const node = element;
   element = null;
   state = null;
@@ -602,10 +611,19 @@ function attach(): void {
       }
       const next = stepKey(state, event.key, { shift: event.shiftKey });
       if (next === null) return;
+      // A `?` typed into the chat box is the chat's.
+      if (next === "help" && isTextEntry(event.target)) return;
       event.preventDefault();
       event.stopPropagation();
+      // The sheet is over the placement, so Escape takes the sheet down first.
+      if (next === "cancel" && closeCheatSheet()) return;
       if (next === "cancel") disarm();
-      else {
+      else if (next === "help") {
+        // `?` is Shift+/ on most layouts: that Shift was a modifier, not "keep placing".
+        if (event.shiftKey) state = { ...state, sticky: false, shiftChorded: true };
+        renderChip(state);
+        toggleCheatSheet("ghost");
+      } else {
         state = next;
         render();
       }

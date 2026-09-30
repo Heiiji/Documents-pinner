@@ -38,7 +38,9 @@ import { readPin } from "../data/PinData";
 import { pingsEveryone, revealed } from "../data/audience";
 import { allPresets } from "../effects/preset-library";
 import { swatchStyle } from "../effects/preset-css";
+import { isTextEntry } from "../ui/cheatsheet";
 import { chipsMarkup, describeChips, type ChipUser } from "./chips";
+import { closeCheatSheet, toggleCheatSheet } from "./CheatSheet";
 import { focusSelectorIn } from "./focus-restore";
 import type { DpPinFlags } from "../types/dp";
 
@@ -73,6 +75,8 @@ interface ButtonSpec {
    */
   on?: boolean;
   expands?: string;
+  /** Opens a dialog rather than acting: the `?` sheet. */
+  dialog?: boolean;
 }
 
 function buttonMarkup(spec: ButtonSpec): string {
@@ -82,12 +86,13 @@ function buttonMarkup(spec: ButtonSpec): string {
       ? ` aria-expanded="false" aria-controls="${escapeAttr(spec.expands)}"`
       : "";
   const on = spec.on ? ` data-dp-on="true"` : "";
+  const dialog = spec.dialog ? ` aria-haspopup="dialog"` : "";
 
   // Foundry's own tooltip rather than `title`: the native one waits a second, looks like
   // no other control in the interface, and never appears on a touch screen.
   return (
     `<button type="button" class="dp-hud__btn" data-action="${escapeAttr(spec.action)}"` +
-    `${state}${on} tabindex="-1" data-tooltip-text="${escapeAttr(label)}"` +
+    `${state}${on}${dialog} tabindex="-1" data-tooltip-text="${escapeAttr(label)}"` +
     ` aria-label="${escapeAttr(label)}">` +
     `<i class="${escapeAttr(spec.icon)}" aria-hidden="true"></i></button>`
   );
@@ -208,6 +213,8 @@ export function hudMarkup(anchorDoc: any, pin: DpPinFlags): string {
     { action: "openLocally", icon: "fa-solid fa-book-open", key: "DP.hud.openForMe" },
     { action: "flash", icon: "fa-solid fa-bolt", key: "DP.hud.flash" },
     { action: "configure", icon: "fa-solid fa-gear", key: "DP.hud.configure" },
+    // Last, and in the toolbar's roving order: the keys, for a GM who cannot see them.
+    { action: "cheatSheet", icon: "fa-solid fa-question", key: "DP.cheat.open", dialog: true },
   ];
 
   return (
@@ -265,6 +272,9 @@ export function definePinHUD(): any {
         setAudienceKind: onSetAudienceKind,
         setEffect: onSetEffect,
         editPresets: onEditPresets,
+        cheatSheet(this: any, _event: Event, target: HTMLElement) {
+          toggleCheatSheet("hud", target);
+        },
       },
     };
 
@@ -356,10 +366,16 @@ export function definePinHUD(): any {
       root.addEventListener("keydown", (event) => {
         const target = event.target as HTMLElement;
         if (event.key === "Escape") {
-          // A palette closes first; with none open, Escape lets go of the pin, which is
-          // what closes the HUD — it used to do nothing at all.
-          if (this.openPaletteId) this.#closePalettes(root);
+          // The sheet closes first, then a palette; with neither open, Escape lets go of
+          // the pin, which is what closes the HUD — it used to do nothing at all.
+          if (closeCheatSheet()) event.preventDefault();
+          else if (this.openPaletteId) this.#closePalettes(root);
           else this.object?.release?.();
+          return;
+        }
+        if (event.key === "?" && !isTextEntry(target)) {
+          toggleCheatSheet("hud", root.querySelector<HTMLElement>('[data-action="cheatSheet"]'));
+          event.preventDefault();
           return;
         }
         if (!target?.classList?.contains("dp-hud__btn")) return;

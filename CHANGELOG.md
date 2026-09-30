@@ -48,6 +48,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the pin hides at once, and comes back to the same players when you close the Studio or
   click *Reveal again*. A pin you reveal or hide again by hand meanwhile is left as you set
   it, and one hidden when the page reloaded comes back the next time the world loads.
+- **`?` shows the keys.** Some twenty-five shortcuts across the ghost, the Pinboard and the
+  HUD, and the only one that taught itself was the ghost's legend, which can be switched
+  off. Press `?` while placing, on the Pinboard or on a pin's HUD — or click the `?` on the
+  last two — and that surface's keys are listed in your keyboard's own names, ⌘ on a Mac,
+  with every Configure Controls binding shown as you set it and *Reveal next* as unbound
+  until you give it a key. Escape or a click anywhere else puts it away.
 
 ### Changed
 

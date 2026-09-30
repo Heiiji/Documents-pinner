@@ -15,13 +15,14 @@
  */
 
 import { MODULE_ID } from "../const";
-import { cv, g, isGM, notify, ns } from "../fvtt";
+import { cv, g, isGM, notify } from "../fvtt";
 import { logger } from "../log";
 import * as api from "../api";
 import * as settings from "../settings";
 import { openPicker } from "../apps/DocumentPicker";
 import { openPinboard, pinboardFocusedDoc, revealNextOnBoard } from "../apps/Pinboard";
 import { armLastUsed, disarm, isArmed } from "../apps/PlacementGhost";
+import { bindingName } from "../apps/CheatSheet";
 import { readPin } from "../data/PinData";
 
 const log = logger("keys");
@@ -224,14 +225,8 @@ export function teachPeekOnce(doc: any): void {
   void settings.set("peekTaught", true);
 }
 
-/** A binding as the keyboard names it: core's own display string where there is one. */
-export function bindingName(binding: { key: string; modifiers?: string[] }): string {
-  const Keyboard = ns("helpers.interaction.KeyboardManager");
-  const display = (code: string) =>
-    Keyboard?.getKeycodeDisplayString?.(code) ??
-    code.replace(/^(Key|Digit)/, "").replace(/(Left|Right)$/, "");
-  return [...(binding.modifiers ?? []).map(display), display(binding.key)].join("+");
-}
+// Moved beside the cheat sheet, which names every binding this way.
+export { bindingName };
 
 /**
  * Fade every prop towards transparent while peeking.

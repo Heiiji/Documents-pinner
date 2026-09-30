@@ -93,6 +93,20 @@ describe("localisation files", () => {
       ["DP.font.", ["serif", "sansSerif", "monospace", "cursive"]],
       // The Preset Studio's Reveal group, one per animation the renderer implements.
       ["DP.revealAnimation.", ["none", "fade", "materialise"]],
+      // The cheat sheet: a pointer gesture's name, and each action's own Configure Controls name.
+      ["DP.cheat.", ["click", "rightClick", "rightDrag", "chip"]],
+      [
+        "DP.keys.",
+        [
+          "pinLastUsed",
+          "openPinboard",
+          "revealNext",
+          "cycleAudience",
+          "toggleMode",
+          "fitSelected",
+          "peek",
+        ],
+      ],
       [
         "DP.settings.",
         [

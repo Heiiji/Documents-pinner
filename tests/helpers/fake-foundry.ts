@@ -697,6 +697,23 @@ export function installWorld(world: FakeWorld = {}): InstalledWorld {
       register: (_scope: string, key: string, options: any) => {
         game.keybindings.registered.push({ key, options });
       },
+      /** What `set` stored, by action: a GM's rebinding in Configure Controls. */
+      rebound: new Map<string, { key: string; modifiers?: string[] }[]>(),
+      // `ClientKeybindings#get(namespace, action)` (TYPES client-keybindings.d.mts:85): the
+      // bindings as configured NOW — the registered `editable` until `set` replaces them.
+      // An action nobody registered THROWS (RECALLED, "This is not a registered keybind
+      // action"), so a caller that reads one must guard.
+      get(_scope: string, action: string) {
+        const rebound = game.keybindings.rebound.get(action);
+        if (rebound) return rebound;
+        const found = game.keybindings.registered.find((r: any) => r.key === action);
+        if (!found) throw new Error("This is not a registered keybind action");
+        return found.options.editable ?? [];
+      },
+      // `ClientKeybindings#set` (TYPES client-keybindings.d.mts:105).
+      async set(_scope: string, action: string, bindings: { key: string; modifiers?: string[] }[]) {
+        game.keybindings.rebound.set(action, bindings);
+      },
     },
     // `KeyboardManager#isModifierActive`, which core's `Canvas#ping` reads to decide a
     // pull (Shift) or an alert (Alt) the caller did not state. `holdModifier` presses.

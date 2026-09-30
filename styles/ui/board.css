@@ -95,6 +95,13 @@
   min-inline-size: 8rem;
 }
 
+/* The `?` beside the search: its own size, never stretched across the header. */
+.dp-board__keys {
+  flex: none;
+  inline-size: auto;
+  padding-inline: 0.5rem;
+}
+
 .dp-board__filters {
   display: flex;
   flex-wrap: wrap;
