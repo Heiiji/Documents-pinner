@@ -30,6 +30,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   their Environment volume, once however many props arrive together. A sound must be a
   file on your own server: a shared preset naming a web address is refused on import, so
   it cannot report your table's reveals to anyone.
+- **Reveal next: the Pinboard's order plays.** Row order has always been reveal order, and
+  nothing used it. `N` on the board — or the footer's button, which names the pin before
+  it goes out — shows the first hidden row to the players it remembers, points at it, and
+  moves the list on; the footer says what went out and how many are left. It follows the
+  board's filter, search and level, and never hides anything. *Reveal the next hidden pin*
+  does the same from anywhere — through the board when it is open, with a notice when it
+  is not — and ships without a key, for you to give it one in Configure Controls.
+- **Reveal & spotlight.** One gesture reveals a pin to the players it remembers and brings
+  the table to it: when the pin is for everyone, every player's view glides there. For a
+  narrower audience nobody's view moves — a Foundry ping reaches every player, and would
+  show the others where a private clue lies — and you are told so. On the HUD, as
+  `Shift+Space` in the Pinboard, and in the Pinboard's row menu.
+- **Pin Studio says when the table is watching.** Every control saves as it moves, so on a
+  revealed pin the players watched each paper, size and effect you tried. Above its tabs
+  the Studio now says how many players can see the pin, and offers *Hide while I edit*:
+  the pin hides at once, and comes back to the same players when you close the Studio or
+  click *Reveal again*. A pin you reveal or hide again by hand meanwhile is left as you set
+  it, and one hidden when the page reloaded comes back the next time the world loads.
 
 ### Changed
 
@@ -48,9 +66,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   sound.** Opening a scene updates its pins silently and the rest of the world is offered
   once, as before; nothing changes on any map. A preset exported from this version and
   imported into an older one is reported there as newer, and loses only its typeface.
+- **"Reveal all" asks first, and has left the footer.** It sat one button from "Hide all",
+  and it is the one reveal whose slip is a whole scene's worth of spoilers — hiding again
+  does not take back what the table has read. It is now in the bulk bar, apart from the
+  selection's own verbs, asks before it shows more than one pin, naming how many, and is
+  greyed out when nothing on the scene is hidden. The bulk bar's "Reveal to all" is now
+  "Reveal".
+- **The HUD keeps to the verbs of the moment.** On the left: reveal, who can see it, and
+  spotlight; on the right: effect, shape, open for me, flash and Pin Studio. Lock and *Fit
+  to content* have left it for Pin Studio's strip, where both already were; Fit is still
+  `Alt+Shift+F`.
 
 ### Fixed
 
+- **"Reveal all" showed a private note to the whole table.** A pin narrowed to one player
+  and hidden for a beat went back to that player when revealed with `Space` or the eye —
+  and to everyone when revealed from the Pinboard's bulk bar or "Reveal all". Every reveal
+  now restores the audience the pin remembers.
+- **Flashing a hidden pin did nothing.** It is drawn on your screen alone, so players are
+  not shown where it is — and it was sent without the scene Foundry needs to draw it. It
+  shows now. A flash also no longer pulls every player's view to the pin when Shift
+  happens to be held.
 - **Revealing one page handed over the whole journal.** Access was granted on the journal
   whatever page the pin showed, and every page that inherits its permissions — every page,
   by default — went with it, into the players' sidebars, for good. A pin showing one page

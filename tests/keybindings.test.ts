@@ -16,6 +16,7 @@ const board = { focused: null as any };
 vi.mock("../src/apps/Pinboard", () => ({
   openPinboard: vi.fn(),
   pinboardFocusedDoc: () => board.focused,
+  revealNextOnBoard: () => false,
 }));
 vi.mock("../src/apps/DocumentPicker", () => ({ openPicker: vi.fn() }));
 
@@ -63,6 +64,7 @@ describe("registerKeybindings", () => {
       "openPinboard",
       "peek",
       "pinLastUsed",
+      "revealNext",
       "toggleMode",
     ]);
   });

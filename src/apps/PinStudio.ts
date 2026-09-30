@@ -19,30 +19,32 @@
  */
 
 import { MODULE_ID, PLACEHOLDER_TEXTURE } from "../const";
-import { cfg, cv, g, ns } from "../fvtt";
+import { cfg, cv, g, isGM, notify, ns, playerIds, resolveUuidSync } from "../fvtt";
 import { previewIntensity } from "../canvas/DomPropTier";
 import { t, tn, tOr } from "../i18n";
 import { escapeAttr, escapeHtml } from "../html";
 import * as api from "../api";
+import { logger } from "../log";
+import { resumeAfterEdit, toggleVisibility } from "../data/audience";
+import * as settings from "../settings";
+import type { EditHold } from "../settings";
 import { readPin } from "../data/PinData";
 import { cardMetrics, freezeMetrics } from "../data/pin-schema";
 import { PAPERS } from "../render/CardTemplate";
-import { allPresets } from "../effects/preset-library";
+import { allPresets, findPreset } from "../effects/preset-library";
 import { swatchStyle } from "../effects/preset-css";
 import { fontChoices, fontLabel, fontOptionsMarkup } from "../effects/typeface";
 import { registeredFontFamilies } from "../render/AssetInliner";
-import { findPreset } from "../effects/preset-library";
 import { playRevealSound, revealSoundOf } from "../canvas/PropManager";
 import { soundPath } from "../normalise";
-import { notify } from "../fvtt";
-import { logger } from "../log";
-import type { DpNotice } from "../types/dp";
 import { pdfPageCount, pdfSourceOf } from "../render/PdfPage";
 import { chipsMarkup, describeChips } from "./chips";
 import { openPicker } from "./DocumentPicker";
 import { chipUsersFor } from "./PinHUD";
 import { restoreFocus, snapshotFocus } from "./focus-restore";
-import type { DpPinFlags, DpSource } from "../types/dp";
+import type { DpNotice, DpPinFlags, DpSource } from "../types/dp";
+
+const log = logger("studio");
 
 let StudioClass: any = null;
 const open = new Map<string, any>();
@@ -166,6 +168,8 @@ function text(name: string, value: string, placeholderKey?: string): string {
  */
 export interface StudioOptions {
   aspectLocked?: boolean;
+  /** Whether the table is watching this pin, and whether this Studio has hidden it. */
+  live?: StudioLive;
   /** Pages the GM may choose between, from the entry this pin's uuid names. */
   pages?: { id: string; name: string; type: string }[];
   /** How many pages the PDF behind this pin has, or 0 while that is not known. */
@@ -585,6 +589,49 @@ function gridOf(doc: any): number {
 
 const squares = (px: number, grid: number) => Math.round((px / grid) * 100) / 100;
 
+/** The facts the banner is drawn from, computed by the application and passed in. */
+export interface StudioLive {
+  /** Whether the pin reaches any player right now (`api.isRevealed`). */
+  revealed: boolean;
+  /** How many players can see it. */
+  count: number;
+  /** Whether this Studio hid it, and it is still exactly as that hide left it. */
+  held: boolean;
+}
+
+/**
+ * The line above the tabs that says when the table is watching.
+ *
+ * Every control here saves as it moves, which is right for prep and wrong in front of the
+ * players: on a revealed prop they watched the GM cycle papers, sizes and effects. So a
+ * revealed pin says so, with how many are watching, and offers to hide it until the
+ * Studio closes — which reveals it again, to the same players. A pin this Studio hid says
+ * that instead, with the way back. Anything else draws nothing.
+ *
+ * PURE, like the rest of the markup: the application works out the facts.
+ */
+export function liveBanner(live: StudioLive | undefined): string {
+  if (live?.held) {
+    return (
+      `<div class="dp-studio__live dp-studio__live--held" role="status">` +
+      `<i class="fa-solid fa-eye-slash" aria-hidden="true"></i>` +
+      `<span>${escapeHtml(t("DP.studio.holdBanner"))}</span>` +
+      `<button type="button" data-action="resumeEdit">${escapeHtml(t("DP.studio.resumeEdit"))}</button>` +
+      `</div>`
+    );
+  }
+  if (!live?.revealed) return "";
+  return (
+    `<div class="dp-studio__live" role="status">` +
+    `<i class="fa-solid fa-eye" aria-hidden="true"></i>` +
+    `<span>${escapeHtml(t("DP.studio.liveBanner", { count: live.count }))}</span>` +
+    `<button type="button" data-action="holdForEdit"` +
+    ` data-tooltip-text="${escapeAttr(t("DP.studio.holdHint"))}">` +
+    `${escapeHtml(t("DP.studio.holdForEdit"))}</button>` +
+    `</div>`
+  );
+}
+
 export function studioMarkup(
   doc: any,
   pin: DpPinFlags,
@@ -619,6 +666,7 @@ export function studioMarkup(
 
   return (
     `<div class="dp-studio">` +
+    liveBanner(options.live) +
     `<nav class="dp-studio__tabs" role="tablist">${nav}</nav>` +
     body +
     // Always visible, on every tab: geometry is the question a GM asks while looking
@@ -725,6 +773,8 @@ export function definePinStudio(): any {
         editPresets: onEditPresets,
         retargetSource: onRetargetSource,
         deletePin: onDeletePin,
+        holdForEdit: onHoldForEdit,
+        resumeEdit: onResumeEdit,
       },
     };
 
@@ -734,6 +784,120 @@ export function definePinStudio(): any {
     aspectLocked = false;
     /** Where the focus goes after the next render, when it is not where it was. */
     focusAfterRender: string | null = null;
+    /**
+     * The hold this Studio placed with "Hide while I edit", or null. Kept here for the
+     * banner and the close, and in the `editHolds` setting for a reload.
+     */
+    hold: EditHold | null = null;
+    /** The hide in flight, so a close in the middle of it ends the hold after it lands. */
+    hiding: Promise<void> | null = null;
+
+    /** Who is watching, and whether this Studio has hidden the pin from them. */
+    liveState(pin: DpPinFlags): StudioLive {
+      const doc = this.doc;
+      return {
+        revealed: api.isRevealed(doc, pin),
+        count: playerIds().filter((id) => api.canUserSee(doc, id)).length,
+        held: !!this.hold && resumeAfterEdit(pin.audience, this.hold.restore) !== null,
+      };
+    }
+
+    /**
+     * "Hide while I edit", in the order that can never strand the pin: the hold is
+     * written, THEN the pin is hidden, then the hide is checked. A reload between the
+     * first two finds the pin still showing and drops the hold; the other order could
+     * leave it hidden with nothing to bring it back.
+     */
+    async holdForEdit() {
+      const doc = this.doc;
+      const pin = readPin(doc);
+      if (!pin || !doc?.uuid || !api.isRevealed(doc, pin)) return;
+
+      const hidden = toggleVisibility(pin.audience);
+      const hold: EditHold = { anchor: doc.uuid, world: worldId(), restore: hidden.restore };
+      const release = () => writeHolds((holds) => holds.filter((h) => h.anchor !== hold.anchor));
+      await writeHolds((holds) => [...holds.filter((h) => h.anchor !== hold.anchor), hold]);
+      // Closed while the hold was being written: nothing was hidden, so nothing is held.
+      if (!this.rendered) return release();
+
+      // Held before the hide lands, so the render the hide itself triggers already shows
+      // the way back, and a hide that throws still has its hold ended by the close.
+      this.hold = hold;
+      this.hiding = api.setAudience(doc, hidden);
+      try {
+        await this.hiding;
+      } finally {
+        this.hiding = null;
+      }
+
+      // A write core refused still resolves: keep the hold only if the pin now hides.
+      const after = readPin(doc);
+      if (!after || (doc.hidden !== true && after.audience.kind !== "hidden")) {
+        this.hold = null;
+        await release();
+        notify({ key: "DP.notice.editHoldFailed" }, "error");
+        return;
+      }
+      this.render();
+    }
+
+    /**
+     * End the hold: reveal the pin again if it is still as the hold left it, and forget
+     * the hold whatever happens — a pin the GM revealed or re-hid by hand is theirs.
+     */
+    async resumeHold() {
+      const hold = this.hold;
+      if (!hold) return;
+      this.hold = null;
+      try {
+        // A close in the middle of the hide waits for it: resuming first would find the
+        // pin still showing, and the hide would land after, with no hold left to end it.
+        await this.hiding?.catch(() => undefined);
+        await resumeOne(hold);
+      } finally {
+        await writeHolds((holds) => holds.filter((h) => h.anchor !== hold.anchor));
+      }
+      if (this.rendered) this.render();
+    }
+
+    /**
+     * The pin showed again since the hide: whatever the GM does to it next is theirs, not
+     * the close's.
+     *
+     * `resumeAfterEdit` can only compare what the pin remembers with what the hold
+     * remembers, and a pin shown again by hand and hidden again by hand remembers the
+     * same audience — so the close revealed it against the GM's last word. The hold ends
+     * the moment the pin is seen showing, in memory and in the setting a reload reads.
+     */
+    dropHold() {
+      const hold = this.hold;
+      if (!hold) return;
+      this.hold = null;
+      void writeHolds((holds) => holds.filter((h) => h.anchor !== hold.anchor)).catch(
+        (error: unknown) => log.warn("could not forget the edit hold", error)
+      );
+    }
+
+    /** The fire-and-forget form the close and the banner's button use. */
+    runResume() {
+      void this.resumeHold().catch((error: unknown) => {
+        log.warn("could not reveal the pin again after editing", error);
+        notify({ key: "DP.notice.editHoldResumeFailed" }, "error");
+      });
+    }
+
+    /**
+     * Closing the Studio ends its hold. Core calls this after the window has gone and
+     * does not await it, so nothing here may throw into it; the reveal runs on its own.
+     */
+    _onClose(options: unknown) {
+      try {
+        super._onClose?.(options);
+        if (this.hold) this.runResume();
+      } catch (error) {
+        log.warn("the Studio did not close cleanly", error);
+      }
+    }
 
     /**
      * The pin's name in the title bar. Every Studio said "Pin Studio", and a GM with
@@ -746,10 +910,16 @@ export function definePinStudio(): any {
 
     async _renderHTML() {
       const pin = readPin(this.doc);
+      // Every audience change reaches an open Studio as a render — `refreshStudios` on the
+      // tile's update, or the chip handler's own — so the first render that finds the pin
+      // showing, outside the hide's own write, is where a hold learns it is over.
+      const showing = this.doc?.hidden !== true && pin?.audience.kind !== "hidden";
+      if (pin && showing && this.hold && !this.hiding) this.dropHold();
       const wrapper = document.createElement("div");
       wrapper.innerHTML = pin
         ? studioMarkup(this.doc, pin, this.tab, {
             aspectLocked: this.aspectLocked,
+            live: this.liveState(pin),
             pages: api.pageChoices(pin),
             // Awaited here and not in the markup: parsing a PDF is not free and the
             // markup builder must stay synchronous and world-free. A count that fails to
@@ -983,8 +1153,6 @@ function onBrowseIcon(this: any) {
   }).render(true);
 }
 
-const log = logger("studio");
-
 /**
  * Store this prop's own reveal sound, or refuse it and say so.
  *
@@ -1068,6 +1236,83 @@ async function onDeletePin(this: any) {
 
   await api.deletePin(this.doc);
   this.close();
+}
+
+function onHoldForEdit(this: any) {
+  void this.holdForEdit().catch((error: unknown) => {
+    log.warn("could not hide the pin for editing", error);
+    notify({ key: "DP.notice.editHoldFailed" }, "error");
+  });
+}
+
+function onResumeEdit(this: any) {
+  this.runResume();
+}
+
+// ---------------------------------------------------------------------------
+// Edit holds, across a reload
+// ---------------------------------------------------------------------------
+
+/** The world this client is in, or null on a build that does not say. */
+function worldId(): string | null {
+  const id = g()?.world?.id;
+  return typeof id === "string" && id ? id : null;
+}
+
+/** The holds this client has placed, read defensively: the setting is ours, but stored. */
+function readHolds(): EditHold[] {
+  const stored = settings.get("editHolds");
+  if (!Array.isArray(stored)) return [];
+  return stored.filter((hold): hold is EditHold => typeof hold?.anchor === "string");
+}
+
+function writeHolds(change: (holds: EditHold[]) => EditHold[]): Promise<void> {
+  return settings.set("editHolds", change(readHolds()));
+}
+
+/**
+ * Reveal a held pin again iff it is still exactly as the hold left it.
+ *
+ * The anchor is resolved afresh from its uuid, never taken from a Studio: the pin may have
+ * been deleted meanwhile, and a deleted pin is simply not there to reveal.
+ */
+async function resumeOne(hold: EditHold): Promise<boolean> {
+  const doc = resolveUuidSync(hold.anchor);
+  const pin = readPin(doc);
+  const next = pin ? resumeAfterEdit(pin.audience, hold.restore) : null;
+  if (!next) return false;
+  await api.setAudience(doc, next);
+  return true;
+}
+
+/**
+ * The `ready` sweep: end every hold a Studio could not end itself — the page reloaded,
+ * or the browser closed, with a pin hidden for editing.
+ *
+ * Each pin still as its hold left it is revealed again, to the same players; one the GM
+ * changed since is left as it is. Every hold of this world is then dropped in one write,
+ * resumed or not, and the GM is told how many came back. A hold of another world is kept
+ * for that world. A GM who never returns leaves the pin hidden with its audience
+ * remembered: one Space from where it was.
+ */
+export async function resumeEditHolds(): Promise<number> {
+  if (!isGM()) return 0;
+  const world = worldId();
+  const mine = readHolds().filter((hold) => !hold.world || !world || hold.world === world);
+  if (!mine.length) return 0;
+
+  let resumed = 0;
+  for (const hold of mine) {
+    try {
+      if (await resumeOne(hold)) resumed++;
+    } catch (error) {
+      log.warn(`could not reveal ${hold.anchor} again after a reload`, error);
+    }
+  }
+  const swept = new Set(mine.map((hold) => hold.anchor));
+  await writeHolds((holds) => holds.filter((hold) => !swept.has(hold.anchor)));
+  if (resumed) notify({ key: "DP.notice.editHoldsResumed", data: { count: resumed } }, "info");
+  return resumed;
 }
 
 /**

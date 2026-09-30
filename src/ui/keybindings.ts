@@ -16,12 +16,18 @@
 
 import { MODULE_ID } from "../const";
 import { cv, g, isGM, notify, ns } from "../fvtt";
+import { logger } from "../log";
 import * as api from "../api";
 import * as settings from "../settings";
 import { openPicker } from "../apps/DocumentPicker";
-import { openPinboard, pinboardFocusedDoc } from "../apps/Pinboard";
+import { openPinboard, pinboardFocusedDoc, revealNextOnBoard } from "../apps/Pinboard";
 import { armLastUsed, disarm, isArmed } from "../apps/PlacementGhost";
 import { readPin } from "../data/PinData";
+
+const log = logger("keys");
+
+/** The reveal the binding is announcing, so a second press sharing it is not said twice. */
+let announcing: Promise<unknown> | null = null;
 
 /** The class the peek state is carried by, so the CSS and the canvas agree. */
 export const PEEK_CLASS = "dp-peeking";
@@ -146,6 +152,51 @@ export function registerKeybindings(): void {
     onDown: () => {
       for (const doc of targets()) void api.fitToContent(doc);
       return true;
+    },
+  });
+
+  // Reveal next with the Pinboard closed: advancing the script without looking away from
+  // the table. Shipped UNBOUND — every key a GM might want is taken by core, a system or a
+  // popular module somewhere — and listed in Configure Controls for them to bind. No
+  // `precedence`: NORMAL is right, and above-core is not what this needs.
+  keybindings.register(MODULE_ID, "revealNext", {
+    name: "DP.keys.revealNext",
+    hint: "DP.keys.revealNextHint",
+    editable: [],
+    restricted: true,
+    onDown: () => {
+      try {
+        // An open board plays its own script, and says so on its own status line.
+        if (revealNextOnBoard()) return true;
+        const scene = cv()?.scene;
+        if (!scene) return false;
+        const pending = api.revealNext(scene);
+        // A press while the last is still writing shares its reveal: said once.
+        if (pending === announcing) return true;
+        announcing = pending;
+        void pending
+          .then(({ doc, left }) => {
+            const pin = doc ? readPin(doc) : null;
+            // Said out loud: with the board closed there is nowhere else to say it.
+            if (pin) {
+              notify(
+                { key: "DP.notice.revealNext", data: { name: api.labelFor(pin), count: left } },
+                "info"
+              );
+            }
+          })
+          .catch((error) => {
+            log.warn("reveal next failed", error);
+            notify({ key: "DP.notice.revealNextFailed" }, "error");
+          })
+          .finally(() => {
+            if (announcing === pending) announcing = null;
+          });
+        return true;
+      } catch (error) {
+        log.warn("reveal next failed", error);
+        return false;
+      }
     },
   });
 }

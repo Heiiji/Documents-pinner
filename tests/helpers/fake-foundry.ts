@@ -45,6 +45,27 @@ export function answerDialogs(answer: boolean): void {
   dialogAnswer = answer;
 }
 
+/** One thing the fake canvas did with a ping, in the order it happened. */
+export interface RecordedPing {
+  /** Sent to every client, drawn on this one, or this client's view pulled to it. */
+  kind: "broadcast" | "local" | "pan";
+  user: any;
+  origin: { x: number; y: number };
+  data: Record<string, any>;
+}
+
+/** Every ping the installed canvas has broadcast, drawn or panned to, oldest first. */
+export function recordedPings(): RecordedPing[] {
+  return (globalThis as any).canvas?.pingRecord ?? [];
+}
+
+/** Hold (or release) a modifier, as `game.keyboard.isModifierActive` will report it. */
+export function holdModifier(modifier: "Shift" | "Alt" | "Control", held = true): void {
+  const keys: Set<string> | undefined = (globalThis as any).game?.keyboard?.held;
+  if (held) keys?.add(modifier);
+  else keys?.delete(modifier);
+}
+
 // ---------------------------------------------------------------------------
 // Documents
 // ---------------------------------------------------------------------------
@@ -531,8 +552,11 @@ export function fakeApplicationV2(): any {
       return this;
     }
 
+    // `_onClose` runs once the application HAS closed, and the close does not await it
+    // (TYPES `application.d.mts:1019-1028`): a returned promise is dropped on the floor.
     close() {
       this.rendered = false;
+      (this as any)._onClose?.({});
       return Promise.resolve(this);
     }
 
@@ -674,10 +698,59 @@ export function installWorld(world: FakeWorld = {}): InstalledWorld {
         game.keybindings.registered.push({ key, options });
       },
     },
+    // `KeyboardManager#isModifierActive`, which core's `Canvas#ping` reads to decide a
+    // pull (Shift) or an alert (Alt) the caller did not state. `holdModifier` presses.
+    keyboard: {
+      held: new Set<string>(),
+      isModifierActive(modifier: string) {
+        return this.held.has(modifier);
+      },
+    },
   };
 
   const canvas: any = {
     ready: true,
+    /** What `ping`, `controls.handlePing` and `animatePan` did; read by `recordedPings`. */
+    pingRecord: [] as RecordedPing[],
+    // `Canvas#ping`, as core builds it (RECALLED from v11–v13; consistent with the 14.366
+    // doc, `board.d.mts:597-605`). Refused outside the scene's rect. A base of
+    // `{scene, pull: <Shift held>, style: Shift ? PULL : Alt ? ALERT : PULSE, zoom}` with
+    // the caller's options MERGED OVER it — so a held Shift pulls every view unless the
+    // caller states `pull` — broadcast to every other client, then drawn on this one.
+    ping(origin: { x: number; y: number }, options: Record<string, unknown> = {}) {
+      if (!canvas.dimensions.rect.contains(origin.x, origin.y)) return Promise.resolve(false);
+      const types = (globalThis as any).CONFIG?.Canvas?.pings?.types ?? {};
+      const shift = game.keyboard.isModifierActive("Shift");
+      const alt = game.keyboard.isModifierActive("Alt");
+      const style = shift ? types.PULL : alt ? types.ALERT : types.PULSE;
+      const zoom = canvas.stage.scale.x;
+      const data = { scene: canvas.scene?.id, pull: shift, style, zoom, ...options };
+      canvas.pingRecord.push({ kind: "broadcast", user: game.user, origin, data });
+      return canvas.controls.handlePing(game.user, origin, data);
+    },
+    // `ControlsLayer#handlePing` (TYPES `controls.d.mts:197-210`, body RECALLED): draws
+    // nothing and resolves false unless `data.scene` is the viewed scene's id — "an
+    // object containing a valid scene property must be passed" — and, for a pull from a
+    // GM or from this client, pans this client's view to the spot first. A missing id is
+    // refused even here, where the test scene may have none: a real scene always has one,
+    // and letting `{}` draw on an id-less scene passed the very call this exists to catch.
+    controls: {
+      handlePing(user: any, origin: { x: number; y: number }, data: any = {}) {
+        if (!canvas.ready || !origin || !data?.scene || data.scene !== canvas.scene?.id) {
+          return Promise.resolve(false);
+        }
+        if (data.pull && (user?.isGM || user?.id === game.user?.id)) {
+          void canvas.animatePan({ x: origin.x, y: origin.y, duration: 700 });
+        }
+        canvas.pingRecord.push({ kind: "local", user, origin, data });
+        return Promise.resolve(true);
+      },
+    },
+    // `Canvas#animatePan`: records the view it would move to, and arrives at once.
+    animatePan(view: { x: number; y: number }) {
+      canvas.pingRecord.push({ kind: "pan", user: game.user, origin: view, data: view });
+      return Promise.resolve(true);
+    },
     scene,
     grid: { size: 100 },
     tiles: {
@@ -689,7 +762,22 @@ export function installWorld(world: FakeWorld = {}): InstalledWorld {
     notes: { zIndex: 40 },
     // The padded scene rect, which is the space TileDocument x/y live in — and a
     // different space from the renderer's screen.
-    dimensions: { width: 3840, height: 1920, sceneX: 0, sceneY: 0 },
+    dimensions: {
+      width: 3840,
+      height: 1920,
+      sceneX: 0,
+      sceneY: 0,
+      // `PIXI.Rectangle#contains` over the whole padded rect, which `Canvas#ping` checks.
+      rect: {
+        x: 0,
+        y: 0,
+        width: 3840,
+        height: 1920,
+        contains(x: number, y: number) {
+          return x >= this.x && x < this.x + this.width && y >= this.y && y < this.y + this.height;
+        },
+      },
+    },
     app: { renderer: { resolution: 1, screen: { width: 1920, height: 1080 } }, ticker: null },
     stage: { worldTransform: { a: 1, b: 0, c: 0, d: 1, tx: 0, ty: 0 }, scale: { x: 1, y: 1 } },
     visibility: { testVisibility: () => true },
@@ -702,7 +790,15 @@ export function installWorld(world: FakeWorld = {}): InstalledWorld {
 
   (globalThis as any).game = game;
   (globalThis as any).canvas = canvas;
-  (globalThis as any).CONFIG = { Canvas: { layers: {} }, Tile: {}, fontDefinitions: {} };
+  (globalThis as any).CONFIG = {
+    // `CONFIG.Canvas.pings.types`, core's defaults (TYPES `config.d.mts:2665-2690`).
+    Canvas: {
+      layers: {},
+      pings: { types: { PULSE: "pulse", PULL: "chevron", ALERT: "alert", ARROW: "arrow" } },
+    },
+    Tile: {},
+    fontDefinitions: {},
+  };
   (globalThis as any).PIXI = fakePixi();
   (globalThis as any).ui = {
     notifications: {

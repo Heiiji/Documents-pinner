@@ -30,7 +30,7 @@ import { probeRasterisation } from "./render/Rasterizer";
 import { clearPdfCache } from "./render/PdfPage";
 import { warmFontCache } from "./render/AssetInliner";
 import { definePinHUD, refreshPinHUD } from "./apps/PinHUD";
-import { openStudio, refreshStudios } from "./apps/PinStudio";
+import { openStudio, refreshStudios, resumeEditHolds } from "./apps/PinStudio";
 import { openPinboard, refreshPinboard } from "./apps/Pinboard";
 import { openPicker } from "./apps/DocumentPicker";
 import { openPresetStudio } from "./apps/PresetStudio";
@@ -96,6 +96,8 @@ Hooks.once("ready", () => {
   warmFontCache();
   void reconcile();
   void onboardingReady();
+  // A pin hidden with "Hide while I edit" in a Studio this reload closed without asking.
+  void resumeEditHolds().catch((error) => log.warn("could not resume the edit holds", error));
 
   Hooks.callAll(`${MODULE_ID}.ready`, module?.api);
 });

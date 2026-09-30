@@ -28,13 +28,14 @@
  */
 
 import { MODULE_ID } from "../const";
-import { g, ns, playerIds } from "../fvtt";
+import { g, notify, ns, playerIds } from "../fvtt";
 import { logger } from "../log";
 import { t, tn } from "../i18n";
 import { escapeAttr, escapeHtml } from "../html";
 import * as api from "../api";
 import { previewIntensity } from "../canvas/DomPropTier";
 import { readPin } from "../data/PinData";
+import { pingsEveryone, revealed } from "../data/audience";
 import { allPresets } from "../effects/preset-library";
 import { swatchStyle } from "../effects/preset-css";
 import { chipsMarkup, describeChips, type ChipUser } from "./chips";
@@ -64,12 +65,11 @@ interface ButtonSpec {
   action: string;
   icon: string;
   key: string;
-  /** Rendered pressed when true; omitted entirely when the control is stateless. */
-  pressed?: boolean;
   /**
    * Drawn "on" without claiming `aria-pressed`: for a control whose LABEL already changes
    * with its state. A button that renames itself AND reports pressed is announced as
-   * "Hide from players, pressed", which reads as the opposite of what it is.
+   * "Hide from players, pressed", which reads as the opposite of what it is. (The one
+   * pressed toggle the HUD had, Lock, has gone to the Studio.)
    */
   on?: boolean;
   expands?: string;
@@ -80,9 +80,7 @@ function buttonMarkup(spec: ButtonSpec): string {
   const state =
     spec.expands !== undefined
       ? ` aria-expanded="false" aria-controls="${escapeAttr(spec.expands)}"`
-      : spec.pressed !== undefined
-        ? ` aria-pressed="${spec.pressed}"`
-        : "";
+      : "";
   const on = spec.on ? ` data-dp-on="true"` : "";
 
   // Foundry's own tooltip rather than `title`: the native one waits a second, looks like
@@ -160,10 +158,22 @@ function effectsPaletteMarkup(pin: DpPinFlags): string {
   );
 }
 
+/**
+ * The HUD's two columns: who sees it on the left, what it is on the right.
+ *
+ * The left column is the live verbs a GM reaches for mid-scene — the eye, the audience,
+ * and the spotlight that brings the table to it. Lock and Fit were here, and they are
+ * prep and layout verbs: both live in the Studio's strip, and Fit also on `Alt+Shift+F`.
+ * Flash stays, because its label already says who sees it.
+ *
+ * The spotlight's label says who it moves, before it is pressed: every view for a pin
+ * that will be for everyone, nobody's for any narrower audience.
+ */
 export function hudMarkup(anchorDoc: any, pin: DpPinFlags): string {
   // Whether anyone is actually reached, not whether the kind says "hidden": a selection
   // naming nobody left the eye open over a row of hollow chips.
   const visible = api.isRevealed(anchorDoc, pin);
+  const pulls = pingsEveryone(revealed(pin.audience));
   const left: ButtonSpec[] = [
     {
       action: "toggleVisibility",
@@ -178,28 +188,23 @@ export function hudMarkup(anchorDoc: any, pin: DpPinFlags): string {
       expands: "dp-hud-audience",
     },
     {
+      action: "spotlight",
+      icon: "fa-solid fa-bullseye",
+      key: pulls ? "DP.hud.spotlight" : "DP.hud.spotlightNarrow",
+    },
+  ];
+  const right: ButtonSpec[] = [
+    {
       action: "togglePalette",
       icon: "fa-solid fa-wand-magic-sparkles",
       key: "DP.hud.effects",
       expands: "dp-hud-effects",
     },
     {
-      action: "toggleLock",
-      icon: anchorDoc?.locked ? "fa-solid fa-lock" : "fa-solid fa-lock-open",
-      key: "DP.hud.lock",
-      pressed: anchorDoc?.locked === true,
-    },
-  ];
-  const right: ButtonSpec[] = [
-    {
       action: "toggleMode",
       icon: "fa-solid fa-right-left",
       key: pin.mode === "prop" ? "DP.hud.toPin" : "DP.hud.toProp",
     },
-    // A prop's verb only: a pin is one grid square and has no content to fit.
-    ...(pin.mode === "prop"
-      ? [{ action: "fitHeight", icon: "fa-solid fa-text-height", key: "DP.hud.fitHeight" }]
-      : []),
     { action: "openLocally", icon: "fa-solid fa-book-open", key: "DP.hud.openForMe" },
     { action: "flash", icon: "fa-solid fa-bolt", key: "DP.hud.flash" },
     { action: "configure", icon: "fa-solid fa-gear", key: "DP.hud.configure" },
@@ -252,9 +257,8 @@ export function definePinHUD(): any {
       actions: {
         toggleVisibility: onToggleVisibility,
         togglePalette: onTogglePalette,
-        toggleLock: onToggleLock,
+        spotlight: onSpotlight,
         toggleMode: onToggleMode,
-        fitHeight: onFitHeight,
         openLocally: onOpenLocally,
         flash: onFlash,
         configure: onConfigure,
@@ -525,17 +529,19 @@ function onTogglePalette(this: any, _event: Event, target: HTMLElement) {
 // Re-exported: the helper moved to `focus-restore.ts` when the Studios needed it too.
 export { focusSelectorIn };
 
-function onToggleLock(this: any) {
-  const doc = this.anchorDoc;
-  void doc?.update({ locked: !doc.locked })?.then(() => this.render());
+/** Reveal & spotlight. Nothing to render on failure but the GM must hear of it. */
+function onSpotlight(this: any) {
+  void api
+    .spotlight(this.anchorDoc)
+    .then(() => this.render())
+    .catch((error) => {
+      log.warn("spotlight failed", error);
+      notify({ key: "DP.notice.spotlightFailed" }, "error");
+    });
 }
 
 function onToggleMode(this: any) {
   void api.toggleMode(this.anchorDoc)?.then(() => this.render());
-}
-
-function onFitHeight(this: any) {
-  void api.fitToContent(this.object?.document);
 }
 
 function onOpenLocally(this: any) {

@@ -76,7 +76,17 @@ describe("the row menu", () => {
     const acts = [...menu.querySelectorAll<HTMLElement>("[data-dp-act]")].map(
       (b) => b.dataset.dpAct
     );
-    expect(acts).toEqual(["visibility", "show", "shape", "fit", "locate", "studio", "delete"]);
+    // Reveal & spotlight sits beside the eye it extends.
+    expect(acts).toEqual([
+      "visibility",
+      "spotlight",
+      "show",
+      "shape",
+      "fit",
+      "locate",
+      "studio",
+      "delete",
+    ]);
   });
 
   it("closes on Escape and on a second press of its button", async () => {
@@ -105,7 +115,14 @@ describe("the bulk bar", () => {
   it("is always there, with nothing selected as a disabled state", () => {
     const bar = root().querySelector<HTMLElement>(".dp-board__bulk")!;
     expect(bar).not.toBeNull();
-    for (const button of bar.querySelectorAll("button")) expect(button.disabled).toBe(true);
+    // "Reveal all" moved here from the footer, and acts on the scene rather than on the
+    // selection, so an empty selection is no reason to disable it. (It is disabled here
+    // for another reason — nothing on this scene is hidden; tests/pinboard-reveal.test.ts.)
+    for (const button of bar.querySelectorAll<HTMLButtonElement>(
+      'button:not([data-action="revealAll"])'
+    )) {
+      expect(button.disabled).toBe(true);
+    }
   });
 });
 

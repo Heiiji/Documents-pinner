@@ -14,7 +14,8 @@
  */
 
 import { MODULE_ID, PLACEHOLDER_TEXTURE } from "./const";
-import { cv, g, isGM, notify, playerIds, resolveUuid, resolveUuidSync } from "./fvtt";
+import { cfg, cv, g, isGM, notify, playerIds, resolveUuid, resolveUuidSync } from "./fvtt";
+import { logger } from "./log";
 import * as audience from "./data/audience";
 import * as store from "./data/PinStore";
 import { readPin } from "./data/PinData";
@@ -31,9 +32,12 @@ import { findPreset } from "./effects/preset-library";
 import { resolveCard } from "./render/ContentResolver";
 import * as settings from "./settings";
 import { centreOf, docPositionFor } from "./canvas/transform";
+import { nextToReveal, type PinboardQuery, type RowFacts } from "./apps/pinboard-model";
 import type { DpAudience, DpMode, DpPinFlags, DpSource } from "./types/dp";
 
 declare const Hooks: any;
+
+const log = logger("api");
 
 // ---------------------------------------------------------------------------
 // Sources
@@ -669,26 +673,69 @@ export async function setPinIcon(anchorDoc: any, src: string | null): Promise<bo
  * — a ping is not "invisible against a hidden pin", it is a pulse on an empty patch of
  * map that says "something is here". So a hidden pin is flashed on this client only,
  * through the layer that draws pings, and the copy on the button says who sees it.
+ *
+ * A visible pin keeps that documented reach — every client, whoever its audience is —
+ * until a socket can narrow it to the audience. What changed is the door: `pingAt` states
+ * `pull: false`, so a GM holding Shift no longer turns a flash into a pull, and the local
+ * path now passes the scene, without which core drew nothing at all — the flash of a
+ * hidden pin had been a silent no-op.
  */
 export function flash(anchorDoc: any): void {
-  const canvas = cv();
-  if (!canvas || !anchorDoc) return;
-  const origin = centreOf(anchorDoc);
+  if (!cv() || !anchorDoc) return;
 
   // A ping is drawn inside the canvas and a text prop's card is drawn over it, so the
   // ping at its centre lands under the paper. The card pulses itself on this client.
   Hooks.callAll(`${MODULE_ID}.flash`, anchorDoc);
 
-  if (anchorDoc.hidden) {
-    const controls = canvas.controls;
-    if (typeof controls?.handlePing === "function") {
-      controls.handlePing(g()?.user, origin, {});
-    } else {
-      notify({ key: "DP.notice.flashHidden" }, "warn");
-    }
-    return;
+  const hidden = anchorDoc.hidden === true;
+  if (pingAt(anchorDoc, { broadcast: !hidden, pull: false }) === "unavailable" && hidden) {
+    notify({ key: "DP.notice.flashHidden" }, "warn");
   }
-  canvas.ping?.(origin);
+}
+
+/**
+ * Reveal & spotlight: reveal the pin if it is hidden, then bring the table to it.
+ *
+ * The reveal is `audience.revealed` — the remembered audience, never a toggle, so a
+ * second spotlight on a revealed pin points at it again and hides nothing — and it lands
+ * before anything points: a player pulled to the spot finds the pin already there.
+ *
+ * Every view is pulled only for a pin for everyone (K1). A core ping reaches every client
+ * whoever the pin is for, so pulling the table to the rogue's note walks everyone else to
+ * where it lies. For a narrower audience the GM's own screen is pointed at, and they are
+ * told, once, why nobody's view moved. A pin on a scene the GM is not viewing is revealed
+ * and not pointed at: its coordinates here would point at the wrong map.
+ */
+export async function spotlight(anchorDoc: any): Promise<{ revealed: boolean; pulled: boolean }> {
+  const outcome = { revealed: false, pulled: false };
+  if (!isGM() || !anchorDoc) return outcome;
+  let pin = readPin(anchorDoc);
+  if (!pin) return outcome;
+
+  if (anchorDoc.hidden === true || pin.audience.kind === "hidden") {
+    await setAudience(anchorDoc, audience.revealed(pin.audience));
+    // A write core refused still resolves, and the pin, or its scene, may be gone.
+    pin = readPin(anchorDoc);
+    if (!pin || anchorDoc.hidden === true || pin.audience.kind === "hidden") {
+      notify({ key: "DP.notice.spotlightFailed" }, "error");
+      return outcome;
+    }
+    outcome.revealed = true;
+  }
+
+  if (!onViewedScene(anchorDoc)) {
+    notify({ key: "DP.notice.spotlightElsewhere" }, "warn");
+    return outcome;
+  }
+
+  Hooks.callAll(`${MODULE_ID}.flash`, anchorDoc);
+  if (audience.pingsEveryone(pin.audience)) {
+    outcome.pulled = pingAt(anchorDoc, { broadcast: true, pull: true }) === "broadcast";
+  } else {
+    pingAt(anchorDoc, { broadcast: false, pull: false });
+    notify({ key: "DP.notice.spotlightNarrow" }, "info");
+  }
+  return outcome;
 }
 
 /**
@@ -726,6 +773,192 @@ export async function locate(anchorDoc: any): Promise<void> {
     }
   }
   flash(anchorDoc);
+}
+
+// ---------------------------------------------------------------------------
+// The scene's script
+// ---------------------------------------------------------------------------
+
+/** "Journal › Page" for a page, the document's own name otherwise. */
+function breadcrumbFor(source: any): string {
+  if (!source) return "";
+  if (source.documentName === "JournalEntryPage" && source.parent?.name) {
+    return `${source.parent.name} › ${source.name}`;
+  }
+  return source.name ?? "";
+}
+
+/** What each player can do with a pin: the two facts the Pinboard's filters read. */
+function factsUsers(anchorDoc: any): RowFacts["users"] {
+  return playerIds().map((id) => ({
+    canSee: canUserSee(anchorDoc, id),
+    canOpen: canUserOpen(anchorDoc, id),
+  }));
+}
+
+/**
+ * A pin as the Pinboard's list logic reads it, or null for a tile that is not one.
+ *
+ * The one derivation of these facts. The Pinboard builds its rows on top of it, passing
+ * the chips it has already built as `users`; `revealNext` builds them with the board
+ * closed. Two copies would be two answers to "which pin is next".
+ */
+export function rowFacts(
+  anchorDoc: any,
+  users: RowFacts["users"] = factsUsers(anchorDoc)
+): RowFacts | null {
+  const pin = readPin(anchorDoc);
+  if (!pin) return null;
+  return {
+    id: anchorDoc.id,
+    name: labelFor(pin),
+    breadcrumb: breadcrumbFor(resolveSourceSync(pin)),
+    mode: pin.mode,
+    // Whether anyone is reached, not whether the kind says "hidden": a selection that
+    // names nobody was counted as visible while every chip on its row was hollow.
+    visible: isRevealed(anchorDoc, pin),
+    hidden: anchorDoc.hidden === true || pin.audience.kind === "hidden",
+    elevation: anchorDoc.elevation ?? 0,
+    users,
+  };
+}
+
+const EVERY_ROW: PinboardQuery = { filter: "all", search: "", level: null };
+
+/** The Reveal next in flight, and the scene it is revealing on. */
+let revealing: { scene: any; promise: Promise<{ doc: any; left: number }> } | null = null;
+
+/**
+ * Reveal the next pin of the scene's script: the first hidden row in the Pinboard's
+ * order, under the view the GM is looking at, to the audience it remembers.
+ *
+ * The Pinboard's order has always been called the reveal order, and nothing consumed it.
+ * This is the play button. It reveals through `audience.revealed`, never the eye's
+ * toggle: a toggle on a row that is not hidden would hide it, and pressing N twice would
+ * take back the clue it had just given.
+ *
+ * Then it points at the pin, after the reveal has landed, so the table finds it there:
+ * the GM's own card pulses, and the ping reaches every client only when the pin is for
+ * everyone. A pin for one player is pointed at on the GM's screen alone — a pulse on the
+ * others' maps would show them where the rogue's clue lies. It never pulls a view; that
+ * is spotlight's decision to make, not a side effect of stepping through a script.
+ *
+ * Nothing to reveal is said, and said apart from "nothing in this view": the second one
+ * means the filter is hiding the rest of the script, which is the GM's to know.
+ *
+ * One at a time per scene. Two presses faster than a write read the same payloads and
+ * chose the same row: the second revealed nothing new, and pinged and said so again. A
+ * press while one is in flight now shares its answer.
+ */
+export function revealNext(
+  scene: any,
+  query: PinboardQuery = EVERY_ROW
+): Promise<{ doc: any; left: number }> {
+  if (revealing && revealing.scene === scene) return revealing.promise;
+  const promise = revealNextNow(scene, query).finally(() => {
+    if (revealing?.promise === promise) revealing = null;
+  });
+  revealing = { scene, promise };
+  return promise;
+}
+
+async function revealNextNow(
+  scene: any,
+  query: PinboardQuery
+): Promise<{ doc: any; left: number }> {
+  const nothing = { doc: null, left: 0 };
+  if (!isGM() || !scene) return nothing;
+
+  const docs = store.all(scene);
+  const facts = docs.map((doc) => rowFacts(doc)).filter((row): row is RowFacts => row !== null);
+  const { next, left } = nextToReveal(facts, query);
+  const doc = next ? docs.find((candidate) => candidate.id === next.id) : null;
+  const pin = readPin(doc);
+  if (!doc || !pin) {
+    const outOfView = facts.some((row) => row.hidden);
+    notify(
+      { key: outOfView ? "DP.notice.revealNextNoneInView" : "DP.notice.revealNextNone" },
+      "info"
+    );
+    return nothing;
+  }
+
+  await setAudience(doc, audience.revealed(pin.audience));
+  // A write core refused still resolves; the pin must be out of hiding before anything
+  // points at it.
+  const after = readPin(doc);
+  if (!after || doc.hidden === true || after.audience.kind === "hidden") {
+    notify({ key: "DP.notice.revealNextFailed" }, "error");
+    return nothing;
+  }
+
+  Hooks.callAll(`${MODULE_ID}.flash`, doc);
+  pingAt(doc, { broadcast: audience.pingsEveryone(after.audience), pull: false });
+  return { doc, left };
+}
+
+// ---------------------------------------------------------------------------
+// Pings
+// ---------------------------------------------------------------------------
+
+/** What a ping did: sent to every client, drawn here only, or not at all and why. */
+type PingOutcome = "broadcast" | "local" | "elsewhere" | "outside" | "unavailable";
+
+/** Whether a pin lies on the scene this client is viewing: the only map a ping reaches. */
+function onViewedScene(anchorDoc: any): boolean {
+  const viewed = cv()?.scene?.id;
+  const own = anchorDoc?.parent?.id;
+  return !!viewed && (!own || own === viewed);
+}
+
+/**
+ * Point at a pin. The one door every ping in the module goes through.
+ *
+ * `canvas.ping` draws here AND on every connected client, and whatever it is not told it
+ * reads off the keyboard: core builds `{scene, pull: <Shift held>, style, zoom}` and merges
+ * the options over it, so a GM holding Shift pulls every view to the spot. The Pinboard's
+ * Shift+Space is exactly a Shift held while pinging. So a broadcast here always states
+ * `pull` and `style`, and the keyboard decides nothing the table sees.
+ *
+ * `handlePing` draws on this client alone — and draws nothing unless it is handed the
+ * viewed scene's id, which core compares against the one it is showing.
+ *
+ * A pin on another scene is not pinged at all: its coordinates on the map being viewed
+ * point at nothing, and a ping there would send the table looking for it.
+ */
+function pingAt(
+  anchorDoc: any,
+  { broadcast, pull }: { broadcast: boolean; pull: boolean }
+): PingOutcome {
+  const canvas = cv();
+  if (!canvas?.scene?.id || !anchorDoc) return "unavailable";
+  if (!onViewedScene(anchorDoc)) return "elsewhere";
+
+  const origin = centreOf(anchorDoc);
+  // Core refuses a broadcast outside the scene's rect; the local path is held to the same.
+  const rect = canvas.dimensions?.rect;
+  if (typeof rect?.contains === "function" && !rect.contains(origin.x, origin.y)) {
+    return "outside";
+  }
+
+  const types = cfg()?.Canvas?.pings?.types;
+  const style = pull ? (types?.PULL ?? "chevron") : (types?.PULSE ?? "pulse");
+  const drawn = (ping: unknown) =>
+    void Promise.resolve(ping).catch((error) => log.warn("a ping could not be drawn", error));
+
+  try {
+    if (broadcast) {
+      if (typeof canvas.ping !== "function") return "unavailable";
+      drawn(canvas.ping(origin, { pull, style }));
+      return "broadcast";
+    }
+    if (typeof canvas.controls?.handlePing !== "function") return "unavailable";
+    drawn(canvas.controls.handlePing(g()?.user, origin, { scene: canvas.scene.id, style }));
+    return "local";
+  } catch (error) {
+    log.warn("a ping could not be drawn", error);
+    return "unavailable";
+  }
 }
 
 /** Delete a pin, releasing its ownership claim first so no grant is orphaned. */
@@ -918,7 +1151,9 @@ export function publicApi() {
     showToAudience,
     openLocally,
     flash,
+    spotlight,
     locate,
+    revealNext,
     fitToContent,
     resetSize,
     resize,

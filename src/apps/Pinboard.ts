@@ -10,21 +10,27 @@
  *
  * - **One-handed from the keyboard.** Arrow keys move, Space reveals, `/` searches.
  *   No pointer required for anything a GM does mid-scene.
- * - **No confirmation on reveal or hide.** Both are one keystroke to undo, and a
- *   dialog in the middle of a reveal is worse than the mistake it prevents. Delete —
- *   the only irreversible action — does confirm.
+ * - **No confirmation on a row's reveal or hide.** A dialog in the middle of a reveal
+ *   is worse than the mistake it prevents. Two actions do ask: Delete, and "Reveal
+ *   all" when it would show more than one pin. A reveal is not undone by hiding again —
+ *   the table has already read it — and "Reveal all" is the one reveal whose mistake is
+ *   a whole scene's worth of spoilers.
  * - **Bulk is first-class.** Shift-range-select then one action, because "as the
  *   ritual completes, all three glyphs light up" is one moment, not three.
- * - **Row order is reveal order**, hand-sortable and persisted, which quietly turns
- *   the list into a scene script.
+ * - **Row order is reveal order**, hand-sortable and persisted, which turns the list
+ *   into a scene script — and N plays it: Reveal next shows the first hidden row in
+ *   the order, to the players it remembers, and moves the list on.
  */
 
 import { MODULE_ID, PLACEHOLDER_TEXTURE } from "../const";
-import { cv, g, internal, ns } from "../fvtt";
+import { cv, g, internal, notify, ns, playerIds } from "../fvtt";
+import { logger } from "../log";
 import { t, tn } from "../i18n";
 import { escapeAttr, escapeHtml } from "../html";
 import * as api from "../api";
 import * as store from "../data/PinStore";
+import { anchorHidden, revealed, sameAudience, wouldReveal } from "../data/audience";
+import type { DpAudience } from "../types/dp";
 import { readPin } from "../data/PinData";
 import { releaseAnchor, syncAnchor } from "../data/ownership-sync";
 import { allPresets, findPreset } from "../effects/preset-library";
@@ -38,6 +44,7 @@ import {
   filterRows,
   focusIndex,
   levelsIn,
+  nextToReveal,
   planReorder,
   rangeSelect,
   summarise,
@@ -46,6 +53,8 @@ import {
   type PinboardQuery,
   type PinboardRow,
 } from "./pinboard-model";
+
+const log = logger("board");
 
 let PinboardClass: any = null;
 let instance: any = null;
@@ -62,6 +71,20 @@ export function pinboardFocusedDoc(): any {
   return instance.docFor(instance.focusedId) ?? null;
 }
 
+/**
+ * Reveal next through the open Pinboard, if one is open: true when it took the press.
+ *
+ * The global binding asks it first, so a key pressed with the board open does what N on
+ * the board does. The board's own view chooses the row — a GM who filtered it to one
+ * level is running that level's script — its status line says what went out, and the
+ * focus moves on to what is next.
+ */
+export function revealNextOnBoard(): boolean {
+  if (!instance?.rendered) return false;
+  instance.runRevealNext();
+  return true;
+}
+
 const FILTERS: { id: PinboardFilter; key: string; icon?: string }[] = [
   { id: "all", key: "DP.board.filterAll" },
   { id: "visible", key: "DP.board.filterVisible" },
@@ -71,27 +94,28 @@ const FILTERS: { id: PinboardFilter; key: string; icon?: string }[] = [
   { id: "mismatch", key: "DP.board.filterMismatch", icon: "fa-key" },
 ];
 
-/** Build the row model for a scene. The only place documents become plain data. */
+/**
+ * Build the row model for a scene. The only place documents become plain data.
+ *
+ * On top of `api.rowFacts`, the facts Reveal next chooses by, so the row the board shows
+ * as next and the row the verb reveals cannot disagree. The chips are built once and
+ * handed in as the facts' users.
+ */
 export function rowsFor(scene: any): PinboardRow[] {
-  return store.all(scene).map((doc: any) => {
-    const pin = readPin(doc)!;
+  return store.all(scene).flatMap((doc: any) => {
+    const pin = readPin(doc);
+    const users = chipUsersFor(doc);
+    const facts = api.rowFacts(doc, users);
+    if (!pin || !facts) return [];
     const source = api.resolveSourceSync(pin);
     // The library, not just the shipped ten, or a user preset shows as a raw id.
     const preset = findPreset(pin.effect.id);
-    const users = chipUsersFor(doc);
 
     return {
-      id: doc.id,
-      name: api.labelFor(pin),
-      breadcrumb: breadcrumbFor(source),
-      mode: pin.mode,
-      // Whether anyone is reached, not whether the kind says "hidden": a selection that
-      // names nobody was counted as visible while every chip on its row was hollow.
-      visible: api.isRevealed(doc, pin),
+      ...facts,
       effectId: pin.effect.id,
       effectLabel: preset ? t(preset.label) : pin.effect.id,
       sort: doc.sort ?? 0,
-      elevation: doc.elevation ?? 0,
       locked: doc.locked === true,
       thumbnail: thumbnailFor(doc, pin, source),
       icon: iconFor(pin, source),
@@ -132,14 +156,6 @@ function iconFor(pin: any, source: any): string {
     default:
       return "fa-file-lines";
   }
-}
-
-function breadcrumbFor(source: any): string {
-  if (!source) return "";
-  if (source.documentName === "JournalEntryPage" && source.parent?.name) {
-    return `${source.parent.name} › ${source.name}`;
-  }
-  return source.name ?? "";
 }
 
 // ---------------------------------------------------------------------------
@@ -339,6 +355,7 @@ function menuMarkup(row: PinboardRow, at: MenuPlacement): string {
     `<div class="dp-menu" role="menu" data-dp-id="${escapeAttr(row.id)}"` +
     ` style="${menuStyle(at)}">` +
     item("visibility", row.visible ? "DP.hud.hide" : "DP.hud.reveal") +
+    item("spotlight", "DP.board.menuSpotlight") +
     item("show", "DP.board.menuShow") +
     item("shape", "DP.board.menuShape") +
     (row.mode === "prop" ? item("fit", "DP.board.menuFit") : "") +
@@ -349,13 +366,41 @@ function menuMarkup(row: PinboardRow, at: MenuPlacement): string {
   );
 }
 
+/**
+ * The footer's Reveal next, naming what it will reveal.
+ *
+ * "Reveal next: The Ledger" rather than a bare verb, because the GM presses it with the
+ * table watching and must know which clue goes out before it does. With nothing left it
+ * says so in its own label, disabled — a tooltip on a disabled button never shows — and
+ * tells "nothing hidden" from "nothing hidden in this view", where the filter is hiding
+ * the rest of the script.
+ */
+function revealNextMarkup(rows: PinboardRow[], query: PinboardQuery): string {
+  const { next } = nextToReveal(rows, query);
+  if (!next) {
+    const key = rows.some((row) => row.hidden)
+      ? "DP.board.revealNextNoneInView"
+      : "DP.board.revealNextNone";
+    return (
+      `<button type="button" class="dp-board__next" data-action="revealNext" disabled>` +
+      `${escapeHtml(t(key))}</button>`
+    );
+  }
+  return (
+    `<button type="button" class="dp-board__next" data-action="revealNext"` +
+    ` aria-keyshortcuts="N" data-tooltip-text="${escapeAttr(t("DP.board.revealNextHint"))}">` +
+    `${escapeHtml(t("DP.board.revealNext", { name: next.name }))}</button>`
+  );
+}
+
 export function boardMarkup(
   rows: PinboardRow[],
   query: PinboardQuery,
   selected: readonly string[],
   focusedId: string | null,
   sceneName: string,
-  menu: MenuPlacement | null = null
+  menu: MenuPlacement | null = null,
+  status = ""
 ): string {
   const visible = filterRows(rows, query);
   const counts = summarise(rows);
@@ -387,6 +432,16 @@ export function boardMarkup(
     `<button type="button" data-action="bulkReveal"${none}>${escapeHtml(t("DP.board.revealSelected"))}</button>` +
     `<button type="button" data-action="bulkHide"${none}>${escapeHtml(t("DP.board.hideSelected"))}</button>` +
     `<button type="button" class="dp-danger" data-action="bulkDelete"${none}>${escapeHtml(t("DP.board.deleteSelected"))}</button>` +
+    // The scene's, not the selection's, so never disabled by an empty one — only by a
+    // scene with nothing hidden, where it has nothing to do. It sat in the footer one
+    // button from "Hide all", which is the one pair on this board where a slip cannot be
+    // taken back; here it is apart from both, and it asks first. Named in full, because
+    // the group around it is named for the selection it does not act on.
+    `<button type="button" class="dp-board__reveal-all" data-action="revealAll"` +
+    `${rows.some((row) => row.hidden) ? "" : " disabled"}` +
+    ` aria-label="${escapeAttr(t("DP.board.revealAllHint"))}"` +
+    ` data-tooltip-text="${escapeAttr(t("DP.board.revealAllHint"))}">` +
+    `${escapeHtml(t("DP.board.revealAll"))}</button>` +
     `</div>`;
 
   const menuRow = menu ? rows.find((row) => row.id === menu.id) : null;
@@ -405,8 +460,10 @@ export function boardMarkup(
     bulk,
     `<footer class="dp-board__foot">`,
     `<button type="button" data-action="place">${escapeHtml(t("DP.board.place"))}</button>`,
-    `<button type="button" data-action="revealAll">${escapeHtml(t("DP.board.revealAll"))}</button>`,
+    revealNextMarkup(rows, query),
     `<button type="button" data-action="hideAll">${escapeHtml(t("DP.board.hideAll"))}</button>`,
+    // What the last Reveal next did, where the GM's eyes already are.
+    `<span class="dp-board__status" role="status">${escapeHtml(status)}</span>`,
     `<span class="dp-board__totals" aria-live="polite">`,
     escapeHtml(t("DP.board.totals", { visible: counts.visible, total: counts.total })),
     counts.mismatched
@@ -462,9 +519,8 @@ export function definePinboard(): any {
         },
         bulkDelete: onBulkDelete,
         place: onPlace,
-        revealAll(this: any) {
-          return allRows(this, true);
-        },
+        revealAll: onRevealAll,
+        revealNext: onRevealNext,
         hideAll(this: any) {
           return allRows(this, false);
         },
@@ -484,6 +540,8 @@ export function definePinboard(): any {
     menuReturnTo: { id: string; kind: MenuKind } | null = null;
     /** The scene the rows were last drawn from, so a scene change starts clean. */
     renderedSceneId: string | null = null;
+    /** What the last Reveal next did, for the footer's status line. */
+    status = "";
 
     get scene(): any {
       return cv()?.scene ?? g()?.scenes?.current ?? null;
@@ -514,6 +572,7 @@ export function definePinboard(): any {
           this.menu = null;
           this.menuReturnTo = null;
           this.query = { ...this.query, level: null };
+          this.status = "";
         }
         this.renderedSceneId = sceneId;
       }
@@ -538,7 +597,8 @@ export function definePinboard(): any {
         this.selected,
         this.focusedId,
         this.scene?.name ?? "",
-        this.menu
+        this.menu,
+        this.status
       );
       return wrapper.firstElementChild ?? wrapper;
     }
@@ -766,6 +826,17 @@ export function definePinboard(): any {
       }
       if (typing) return;
 
+      // Reveal next: the script's play button, with no row needed under the cursor. A
+      // held key repeats, and a repeat is not a GM asking for the next clue — holding N
+      // would reveal the scene. Stopped here as well as handled, so a global binding the
+      // GM set to the same key cannot reveal a second pin from the same keystroke.
+      if (event.key.toLowerCase() === "n" && !event.ctrlKey && !event.metaKey && !event.altKey) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (!event.repeat) this.runRevealNext();
+        return;
+      }
+
       const visible = this.visibleRows;
       const current = visible.findIndex((r) => r.id === this.focusedId);
 
@@ -810,6 +881,21 @@ export function definePinboard(): any {
         return;
       }
 
+      // Reveal & spotlight. Checked before Space itself, which took Shift+Space as the eye
+      // and hid a revealed pin. The Shift is still down while it pings — which is why the
+      // verb states `pull` rather than letting core read it off the keyboard.
+      if (event.key === " " && event.shiftKey) {
+        event.preventDefault();
+        void api
+          .spotlight(doc)
+          .then(() => this.render())
+          .catch((error) => {
+            log.warn("spotlight failed", error);
+            notify({ key: "DP.notice.spotlightFailed" }, "error");
+          });
+        return;
+      }
+
       const actions: Record<string, () => void> = {
         " ": () => void api.toggleVisibility(doc)?.then(() => this.render()),
         Enter: () => Hooks.call(`${MODULE_ID}.openStudio`, doc),
@@ -823,6 +909,32 @@ export function definePinboard(): any {
         action();
         event.preventDefault();
       }
+    }
+
+    /**
+     * Reveal next, from N or the footer, then move the list on to what follows it.
+     *
+     * The focus goes to the row that is now next, so the GM's next N and the row under
+     * their eyes are the same one; with nothing left it stays where it was.
+     */
+    async revealNext() {
+      const { doc, left } = await api.revealNext(this.scene, this.query);
+      if (!doc) return;
+      const pin = readPin(doc);
+      this.status = t("DP.board.statusRevealed", {
+        name: pin ? api.labelFor(pin) : "",
+        count: left,
+      });
+      this.focusedId = nextToReveal(this.rows, this.query).next?.id ?? this.focusedId;
+      this.render();
+    }
+
+    /** The fire-and-forget form every surface of the board calls. */
+    runRevealNext() {
+      void this.revealNext().catch((error: unknown) => {
+        log.warn("reveal next failed", error);
+        notify({ key: "DP.notice.revealNextFailed" }, "error");
+      });
     }
 
     /** Persist a new position for one row, in one scene write. */
@@ -978,6 +1090,13 @@ async function onMenuAct(this: any, _event: Event, target: HTMLElement) {
     case "visibility":
       await api.toggleVisibility(doc);
       break;
+    case "spotlight":
+      // A reveal the GM asked for and did not get is said, not left to the console.
+      await api.spotlight(doc).catch((error) => {
+        log.warn("spotlight failed", error);
+        notify({ key: "DP.notice.spotlightFailed" }, "error");
+      });
+      break;
     case "show":
       await api.showToAudience(doc);
       break;
@@ -1014,23 +1133,71 @@ async function allRows(app: any, reveal: boolean) {
   await applyVisibility(app, store.all(app.scene), reveal);
 }
 
+/**
+ * "Reveal all", which asks first when it would show more than one pin.
+ *
+ * Counted when the button is pressed, not on every render, and counted as what the
+ * reveal would actually do: a pin already showing is not news, and one whose remembered
+ * audience names only players who have left reaches nobody. One pin is what a row's
+ * Space does without asking, so one pin does not ask here either.
+ *
+ * `=== true`, because a dialog closed with its ✕ resolves `null`, and a build with no
+ * dialog to ask with refuses rather than acting unasked.
+ *
+ * A reveal that fails is said: the GM pressed the scene's biggest button with the table
+ * watching, and a rejection in the console is not an answer.
+ */
+async function onRevealAll(this: any) {
+  try {
+    const docs = store.all(this.scene);
+    const players = playerIds();
+    const count = docs.filter((doc: any) => {
+      const pin = readPin(doc);
+      return !!pin && wouldReveal(pin.audience, doc.hidden === true, players);
+    }).length;
+
+    if (count > 1) {
+      const DialogV2 = ns("applications.api.DialogV2");
+      const confirmed = DialogV2?.confirm
+        ? await DialogV2.confirm({
+            window: { title: t("DP.board.revealAllTitle") },
+            content: `<p>${escapeHtml(t("DP.board.revealAllBody", { count }))}</p>`,
+          }).catch(() => false)
+        : false;
+      if (confirmed !== true) return;
+    }
+    await applyVisibility(this, docs, true);
+  } catch (error) {
+    log.warn("reveal all failed", error);
+    notify({ key: "DP.board.revealAllFailed" }, "error");
+  }
+}
+
 async function applyVisibility(app: any, docs: any[], reveal: boolean) {
-  if (!docs.length) return;
-  await store.batchUpdate(
-    app.scene,
-    docs.map((doc) => {
-      const pin = readPin(doc)!;
-      return { doc, patch: { audience: audienceFor(pin.audience, reveal) } };
-    })
-  );
+  // Only the pins the gesture changes. "Reveal all" over a scene where most pins already
+  // show wrote every one of them anyway, and re-synced every one's ownership after.
+  const changes = docs.flatMap((doc) => {
+    const pin = readPin(doc);
+    if (!pin) return [];
+    const next = audienceFor(pin.audience, reveal);
+    const same = sameAudience(next, pin.audience) && (doc.hidden === true) === anchorHidden(next);
+    return same ? [] : [{ doc, patch: { audience: next } }];
+  });
+  if (!changes.length) return;
+
+  await store.batchUpdate(app.scene, changes);
   // Ownership follows the payload, one source at a time; the queue in ownership-sync
   // keeps two pins of the same journal from racing.
-  for (const doc of docs) await syncAnchor(doc);
+  for (const { doc } of changes) await syncAnchor(doc);
   app.render();
 }
 
 /**
  * The audience a bulk reveal or hide should write.
+ *
+ * A reveal is the eye's own rule, `revealed`: each pin goes back to the audience it
+ * remembers. This wrote `everyone` for every pin, so a note narrowed to one player and
+ * hidden for a beat was shown to the whole table by the bulk bar or "Reveal all".
  *
  * Hiding an ALREADY-hidden pin must leave `restore` alone. Writing it unconditionally
  * stored `{ kind: "hidden" }`, which `normaliseAudience` rewrites to "everyone" — so a
@@ -1038,8 +1205,8 @@ async function applyVisibility(app: any, docs: any[], reveal: boolean) {
  * revealed itself to the whole table. That is the exact failure the remembered audience
  * exists to prevent.
  */
-function audienceFor(current: any, reveal: boolean) {
-  if (reveal) return { ...current, kind: "everyone", users: [], restore: null };
+function audienceFor(current: DpAudience, reveal: boolean): DpAudience {
+  if (reveal) return revealed(current);
   if (current.kind === "hidden") return { ...current };
   return { ...current, kind: "hidden", restore: { kind: current.kind, users: [...current.users] } };
 }
@@ -1079,6 +1246,10 @@ async function deleteRows(app: any, docs: any[]) {
 
   app.selected = app.selected.filter((id: string) => !docs.some((doc) => doc.id === id));
   app.render();
+}
+
+function onRevealNext(this: any) {
+  this.runRevealNext();
 }
 
 function onPlace(this: any) {
