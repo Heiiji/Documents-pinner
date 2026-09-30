@@ -25,6 +25,14 @@ export interface PinboardRow {
   mode: DpMode;
   /** Whether anyone at all can currently see it. Not the core `hidden` field alone. */
   visible: boolean;
+  /**
+   * Whether the anchor is hidden: core's `hidden`, or an audience whose kind says so.
+   *
+   * Not `!visible`. A selection naming nobody is not visible and not hidden either, and
+   * revealing it would reveal it to the same nobody — so Reveal next reads this, and
+   * steps past such a row rather than stopping on it for ever.
+   */
+  hidden: boolean;
   effectId: string;
   effectLabel: string;
   sort: number;
@@ -39,6 +47,18 @@ export interface PinboardRow {
   icon?: string;
   users: ChipUser[];
 }
+
+/**
+ * What the list logic reads of a row: enough to filter, search and choose what is next.
+ *
+ * `api.revealNext` builds these without the Pinboard — the keybinding works with the
+ * board closed — so the functions below take any row that carries them, and the board's
+ * own rows and the verb's facts go through the same filter.
+ */
+export type RowFacts = Pick<
+  PinboardRow,
+  "id" | "name" | "breadcrumb" | "mode" | "visible" | "hidden" | "elevation"
+> & { users: readonly Pick<ChipUser, "canSee" | "canOpen">[] };
 
 export interface PinboardQuery {
   filter: PinboardFilter;
@@ -60,7 +80,7 @@ export function fold(value: string): string {
     .toLowerCase();
 }
 
-function matchesFilter(row: PinboardRow, filter: PinboardFilter): boolean {
+function matchesFilter(row: RowFacts, filter: PinboardFilter): boolean {
   switch (filter) {
     case "visible":
       return row.visible;
@@ -81,7 +101,7 @@ function matchesFilter(row: PinboardRow, filter: PinboardFilter): boolean {
 }
 
 /** Filtering never reorders: the list a GM reads is always the order they arranged. */
-export function filterRows(rows: readonly PinboardRow[], query: PinboardQuery): PinboardRow[] {
+export function filterRows<R extends RowFacts>(rows: readonly R[], query: PinboardQuery): R[] {
   const needle = fold(query.search.trim());
 
   return rows.filter((row) => {
@@ -90,6 +110,23 @@ export function filterRows(rows: readonly PinboardRow[], query: PinboardQuery): 
     if (!needle) return true;
     return fold(row.name).includes(needle) || fold(row.breadcrumb).includes(needle);
   });
+}
+
+/**
+ * What Reveal next reveals: the first hidden row, in the order the GM arranged, among the
+ * rows they are looking at — and how many hidden ones are left after it.
+ *
+ * Under the board's own filter, search and level, because "next" means next in the list
+ * on screen: a GM who filtered to one level is running that level's script. Hidden, not
+ * "not visible" (see `PinboardRow.hidden`), and chosen here rather than toggled: the verb
+ * reveals it with `audience.revealed`, which never hides.
+ */
+export function nextToReveal<R extends RowFacts>(
+  rows: readonly R[],
+  query: PinboardQuery
+): { next: R | null; left: number } {
+  const hidden = filterRows(rows, query).filter((row) => row.hidden);
+  return { next: hidden[0] ?? null, left: Math.max(0, hidden.length - 1) };
 }
 
 /**

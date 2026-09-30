@@ -68,11 +68,13 @@ sidebar — so if you prepare scenes while players are connected, change the def
 | `Shift+P` | place the last document again, no dialogs |
 | `Alt+Shift+V` / `Alt+M` / `Alt+Shift+F` | cycle audience · switch shape · fit to content |
 | hold `Alt` | peek: props fade so the map can be read (players too) |
+| *Reveal the next hidden pin* | Reveal next with the Pinboard closed — no key until you give it one in Configure Controls |
 | `/pin <name>` | place by name from chat |
 
 | Pinboard | |
 |---|---|
 | `↑↓` `Space` | move · reveal |
+| `N` | reveal next: the first hidden row, in order, to the players it remembers — the footer names it, and says what is left |
 | `Alt+↑↓` | reorder — row order is reveal order |
 | `Enter` `L` `O` `Shift+S` `F` `M` | studio · locate · open · show to audience · flash · shape |
 | effect · `…` | choose an effect · every verb the row has, each in a menu |
@@ -248,11 +250,13 @@ réglage.
 | `Maj+P` | reposer le dernier document, sans dialogue |
 | `Alt+Maj+V` / `Alt+M` / `Alt+Maj+F` | faire défiler le public · changer de forme · ajuster au contenu |
 | `Alt` maintenu | coup d'œil : les accessoires s'estompent (les joueurs aussi) |
+| *Révéler l'épingle masquée suivante* | révéler la suivante tableau fermé — sans touche tant que vous ne lui en donnez pas une dans Configurer les contrôles |
 | `/pin <nom>` | poser par son nom depuis le chat |
 
 | Tableau de bord | |
 |---|---|
 | `↑↓` `Espace` | se déplacer · révéler |
+| `N` | révéler la suivante : la première ligne masquée, dans l'ordre, aux joueurs dont elle se souvient — le pied du tableau la nomme, et dit ce qui reste |
 | `Alt+↑↓` | réordonner — l'ordre des lignes est l'ordre de révélation |
 | `Entrée` `L` `O` `Maj+S` `F` `M` | studio · localiser · ouvrir · montrer au public · faire clignoter · forme |
 | effet · `…` | choisir un effet · tous les verbes de la ligne, chacun dans un menu |

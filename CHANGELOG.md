@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Reveal next: the Pinboard's order plays.** Row order has always been reveal order, and
+  nothing used it. `N` on the board — or the footer's button, which names the pin before
+  it goes out — shows the first hidden row to the players it remembers, points at it, and
+  moves the list on; the footer says what went out and how many are left. It follows the
+  board's filter, search and level, and never hides anything. *Reveal the next hidden pin*
+  does the same with the board closed: it ships without a key, for you to give it one in
+  Configure Controls.
+
 ### Changed
 
 - **"Reveal all" asks first, and has left the footer.** It sat one button from "Hide all",

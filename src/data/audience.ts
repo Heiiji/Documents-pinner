@@ -185,6 +185,19 @@ export function wouldReveal(
   );
 }
 
+/**
+ * Whether a pin's location may be shown to every client — pulsed on every map, or every
+ * view pulled to it.
+ *
+ * Only for everyone. A core ping reaches every connected client whoever the pin is for,
+ * so pinging a pin for the rogue shows the rest of the table where the rogue's clue lies,
+ * and pulling them to it walks them there. `discovered` is as narrow as `selected`: who
+ * has found it is exactly what the others do not know.
+ */
+export function pingsEveryone(audience: DpAudience): boolean {
+  return audience.kind === "everyone";
+}
+
 /** The same people, the same way: kind, list and memory. The order of a list is not news. */
 export function sameAudience(a: DpAudience, b: DpAudience): boolean {
   return a.kind === b.kind && sameUsers(a.users, b.users) && sameRestore(a.restore, b.restore);

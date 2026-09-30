@@ -5,6 +5,7 @@ import {
   focusIndex,
   fold,
   levelsIn,
+  nextToReveal,
   planReorder,
   rangeSelect,
   summarise,
@@ -19,6 +20,7 @@ function row(overrides: Partial<PinboardRow> = {}): PinboardRow {
     breadcrumb: "Ashen Keep › Letters",
     mode: "prop",
     visible: true,
+    hidden: false,
     effectId: "aged-parchment",
     effectLabel: "Aged Parchment",
     sort: 0,
@@ -246,5 +248,66 @@ describe("dropIndex", () => {
   it("lands exactly where the line was whichever direction the row came from", () => {
     expect(order("a", "c", false)).toEqual(["b", "a", "c"]);
     expect(order("c", "b", false)).toEqual(["a", "c", "b"]);
+  });
+});
+
+/**
+ * Reveal next: the script's play button. The first HIDDEN row in the order the GM
+ * arranged, under the view they are looking at — never a row that is merely not
+ * visible, which a reveal would reveal to the same nobody.
+ */
+describe("nextToReveal", () => {
+  const shown = (id: string, over: Partial<PinboardRow> = {}) =>
+    row({ id, visible: true, hidden: false, ...over });
+  const hidden = (id: string, over: Partial<PinboardRow> = {}) =>
+    row({ id, visible: false, hidden: true, ...over });
+  const ids = (result: { next: PinboardRow | null; left: number }) => [
+    result.next?.id ?? null,
+    result.left,
+  ];
+
+  it("takes the first hidden row in order, and counts the hidden ones after it", () => {
+    const rows = [shown("a"), hidden("b"), shown("c"), hidden("d"), hidden("e")];
+    expect(ids(nextToReveal(rows, q()))).toEqual(["b", 2]);
+  });
+
+  it("steps past a selection naming nobody: not visible, and not hidden either", () => {
+    const nobody = row({ id: "nobody", visible: false, hidden: false });
+    expect(ids(nextToReveal([nobody, hidden("b")], q()))).toEqual(["b", 0]);
+    expect(ids(nextToReveal([nobody], q()))).toEqual([null, 0]);
+  });
+
+  it("follows the board's level, search and filter", () => {
+    const rows = [
+      hidden("low", { elevation: 0, name: "Cellar key" }),
+      hidden("high", { elevation: 20, name: "Tower ledger" }),
+      hidden("high2", { elevation: 20, name: "Tower map" }),
+    ];
+    expect(ids(nextToReveal(rows, q({ level: 20 })))).toEqual(["high", 1]);
+    expect(ids(nextToReveal(rows, q({ search: "map" })))).toEqual(["high2", 0]);
+    expect(ids(nextToReveal(rows, q({ filter: "hidden" })))).toEqual(["low", 2]);
+    // Nothing hidden shows under "Visible", so there is nothing next in that view.
+    expect(ids(nextToReveal(rows, q({ filter: "visible" })))).toEqual([null, 0]);
+  });
+
+  it("has nothing next on an empty or fully revealed scene", () => {
+    expect(ids(nextToReveal([], q()))).toEqual([null, 0]);
+    expect(ids(nextToReveal([shown("a"), shown("b")], q()))).toEqual([null, 0]);
+  });
+
+  it("takes any row that carries the facts, not only the board's own", () => {
+    const facts = [
+      {
+        id: "x",
+        name: "X",
+        breadcrumb: "",
+        mode: "pin" as const,
+        visible: false,
+        hidden: true,
+        elevation: 0,
+        users: [],
+      },
+    ];
+    expect(nextToReveal(facts, q()).next).toBe(facts[0]);
   });
 });

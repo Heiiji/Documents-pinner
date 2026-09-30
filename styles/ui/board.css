@@ -308,6 +308,24 @@
   margin-inline-start: auto;
 }
 
+/* "Reveal next: The Ledger" names a GM's own title, of any length. */
+.dp-board__next {
+  max-inline-size: 18em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+
+  &[disabled] {
+    opacity: 0.55;
+    cursor: default;
+  }
+}
+
+.dp-board__status {
+  font-size: 0.85em;
+  opacity: 0.85;
+}
+
 .dp-board__totals {
   margin-inline-start: auto;
   font-size: 0.85em;
