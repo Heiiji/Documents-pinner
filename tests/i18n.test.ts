@@ -23,7 +23,7 @@ function referencedKeys(): Map<string, string> {
   const found = new Map<string, string>();
   const dirs = [join(ROOT, "src"), join(ROOT, "templates")];
   for (const dir of dirs) {
-    let files: string[] = [];
+    let files: string[];
     try {
       files = sourceFiles(dir);
     } catch {
