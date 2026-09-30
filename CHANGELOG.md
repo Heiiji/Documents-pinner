@@ -9,6 +9,92 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Nothing yet.
 
+## [0.3.3] — 2026-09-30
+
+A UX pass. A review of every surface — the HUD, the Pinboard, both Studios, placement, the
+reader and the hover tooltip — found places where the module's own rules were applied in
+one window and not the next. This release fixes the medium and minor findings, and one
+of the serious ones.
+
+### Fixed
+
+- **"Some players" chosen in Pin Studio with nobody picked hid the pin from everyone,
+  while the Pinboard said it was visible.** The pin reached no one; the Pinboard counted
+  it as visible, the HUD's eye stayed open, and every chip under it was hollow. The HUD
+  always refused this. The Studio now does too: it asks for a player, or takes back the
+  selection the pin remembers from before it was hidden. A pin already in that state now
+  shows as hidden everywhere.
+- **Pin Studio and Preset Studio lost the keyboard focus after every change.** A slider
+  moved with the arrow keys could be moved one step; a GM tabbing down the form was sent
+  back to the window after each field. The focus now stays where it was, and a half-typed
+  label survives a change made elsewhere. Only the Studio of the pin that changed
+  re-renders now, not every open one.
+- **You could not zoom or pan while placing.** The wheel rotated and every right press
+  cancelled, and a right-drag is how Foundry pans. `Ctrl`/`⌘`+wheel (or a trackpad pinch)
+  zooms, a right-drag pans, and a right click still cancels.
+- **Holding Shift for a fine rotation turned the next click into "keep placing".** A
+  Shift already used on the wheel, or to step back through the effects, now places once.
+- **The reader closed at the start of every pan.** It closed on any press beside it,
+  including the right-drag that pans and a drag of a token. It closes on a click now.
+- **The reader opened at the angle the prop lay at.** A letter dropped at 20° was read
+  at 20°. The reader now turns upright as it opens and back as it closes.
+- **Glitch, jitter, flicker and the moving scanlines kept running in the reader.**
+  Glitch's colour fringe doubled every letter. In the reader the motion stops, the fringe
+  goes, and the textures and the projected overlay sit at half strength. The prop keeps
+  the full effect.
+- **An open Pinboard kept the last scene's pins.** It now follows the scene being viewed
+  and drops the old selection. Pin Studio's "Find on the map" for a pin on another scene
+  views that scene first, instead of panning this one to the other's coordinates.
+- **Flash and Locate were hidden under text props.** A ping is drawn inside the canvas
+  and a text prop's card is drawn over it. The card now pulses on the GM's screen.
+- **"Show to players" said nothing.** On a hidden pin it did nothing at all; now it says
+  there is nobody to show it to, and says how many players it reached when it works.
+- **The Pinboard's shortcut line printed ⌥ ⇧ ⌃ to everyone.** It now names the keys as
+  the keyboard does, and says ⌘ on a Mac, where ⌃-click is a right-click. The placement
+  legend says ⌘ there too.
+- **The picker's hint said Enter takes the first match.** It takes the highlighted row.
+- **Page types showed untranslated** ("text", "pdf") in the picker and in Pin Studio.
+- **The welcome dialog's "Later" never came back.** It says "Not now", and where the
+  tools are.
+
+### Added
+
+- **A pin's icon.** Every document pin was the same book. Pin Studio offers core's
+  map-note icons or any image, and the icon survives pointing the pin at another
+  document.
+- **Hovering a pin names it**, as a map note shows its label, and tells a player whether
+  it opens on a click or a double-click.
+- **A one-time tip for players** about holding `Alt` to see through props — the one key
+  they have, which nothing in the game mentioned.
+- **"Use on this pin" in the Preset Studio**, when it was opened from a pin. A preset
+  duplicated and tuned from a pin's gallery can now be put on that pin from where it was
+  made.
+
+### Changed
+
+- **"Show to players" in the Pinboard is `Shift+S`.** It is the one verb there that
+  reaches the players' screens and cannot be taken back, and a bare `S` is what a GM
+  types expecting to jump to a row.
+- **The Pinboard's effect button opens a menu** of every preset, drawn as itself. It used
+  to step to the next preset per click, a save each time, visible to the table on a
+  revealed prop. Menus near the foot of the list open upward and scroll.
+- **The Preset Studio groups its parameters by layer** — paper, edges, glow, lens,
+  scanlines, overlay — each open when the preset uses it.
+- **Sliders say their unit.** Intensity and the faded opacity are percentages in the
+  Studio as in the HUD; text size, margins and speed say px, em and ×.
+- **Pin Studio's title names the pin**, and its tabs are one tab stop moved with the
+  arrows.
+- **Tooltips are Foundry's own** instead of the browser's, on the HUD, the Pinboard and
+  the chips.
+- **The mismatch badge is a Font Awesome key.** The ⚿ character is missing from most
+  interface fonts.
+- **Pinboard rows show what they point at** — a journal, a page, a PDF, an image, or a
+  missing document — instead of the same book on every row. Their avatar chips are 24 px,
+  and the list is a grid a screen reader can move through.
+- **The HUD's eye states itself in its label only**, not also as "pressed".
+- **Accent and warning text is derived from the theme's text colour**, so it keeps its
+  contrast in Foundry's light theme.
+
 ## [0.3.2] — 2026-09-30
 
 A reliability pass. Three audits: one checked every Foundry API the module relies on
@@ -654,7 +740,10 @@ occluded. The module detects this at startup rather than failing visibly.
 
 The full list is in the README and in `docs/DESIGN.md` §10.
 
-[Unreleased]: https://github.com/Heiiji/Documents-pinner/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/Heiiji/Documents-pinner/compare/v0.3.3...HEAD
+[0.3.3]: https://github.com/Heiiji/Documents-pinner/compare/v0.3.2...v0.3.3
+[0.3.2]: https://github.com/Heiiji/Documents-pinner/compare/v0.3.1...v0.3.2
+[0.3.1]: https://github.com/Heiiji/Documents-pinner/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/Heiiji/Documents-pinner/compare/v0.2.2...v0.3.0
 [0.2.2]: https://github.com/Heiiji/Documents-pinner/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/Heiiji/Documents-pinner/compare/v0.2.0...v0.2.1

@@ -50,11 +50,11 @@ follows the cursor; click to place. It stays hidden from players until you revea
 
 | Placing | |
 |---|---|
-| wheel | rotate 15° · `Shift` 1° · `Alt` scale the box · `Shift+Alt` text size |
+| wheel | rotate 15° · `Shift` 1° · `Alt` scale the box · `Shift+Alt` text size · `Ctrl`/`⌘` zoom |
 | `Space` | pin ↔ prop |
 | `E` / `V` / `R` / `F` | effect · audience · reset rotation · fit height to content |
-| `Ctrl` | free placement (no grid snap) |
-| click | place · `Shift+click` keeps placing · `Esc` cancels |
+| `Ctrl`/`⌘` | free placement (no grid snap) |
+| click | place · `Shift+click` keeps placing · `Esc` or right-click cancels · right-drag pans |
 
 | Anywhere | |
 |---|---|
@@ -68,8 +68,8 @@ follows the cursor; click to place. It stays hidden from players until you revea
 |---|---|
 | `↑↓` `Space` | move · reveal |
 | `Alt+↑↓` | reorder — row order is reveal order |
-| `Enter` `L` `O` `S` `F` `M` | studio · locate · open · show to audience · flash · shape |
-| `…` | every verb the row has, in a menu |
+| `Enter` `L` `O` `Shift+S` `F` `M` | studio · locate · open · show to audience · flash · shape |
+| effect · `…` | choose an effect · every verb the row has, each in a menu |
 | `/` `Esc` | search · clear |
 
 **Click a pin on the Notes layer to grab it.** Pins are Tiles, and Foundry only lets you
@@ -82,7 +82,8 @@ what you drag is the paper. The Pinboard's `L` (locate) does the same from a dis
 the same text size; text that does not fit fades out at the bottom edge. *Fit to content*
 (Pin Studio, the HUD, `Alt+Shift+F`, or `F` while placing) sets the height so the whole
 page shows at the current width. *Text size* and *Margins* are in Pin Studio, with the
-width and height in grid squares and a ratio lock.
+width and height in grid squares and a ratio lock. So is a pin's **icon** — one of core's
+map-note icons or any image — and hovering a pin names it.
 
 Also: a journal sheet header button, the Notes scene controls, sidebar context menus, a
 checkbox on any tile's config sheet to adopt it, and a button on a map note to convert it.
@@ -221,11 +222,11 @@ ce que vous le révéliez.
 
 | Placement | |
 |---|---|
-| molette | pivoter 15° · `Maj` 1° · `Alt` redimensionner le cadre · `Maj+Alt` taille du texte |
+| molette | pivoter 15° · `Maj` 1° · `Alt` redimensionner le cadre · `Maj+Alt` taille du texte · `Ctrl`/`⌘` zoom |
 | `Espace` | épingle ↔ accessoire |
 | `E` / `V` / `R` / `F` | effet · public · réinitialiser la rotation · ajuster la hauteur au contenu |
-| `Ctrl` | placement libre (sans aimantation) |
-| clic | poser · `Maj+clic` enchaîne · `Échap` annule |
+| `Ctrl`/`⌘` | placement libre (sans aimantation) |
+| clic | poser · `Maj+clic` enchaîne · `Échap` ou clic droit annule · glisser clic droit déplace la vue |
 
 | Partout | |
 |---|---|
@@ -239,8 +240,8 @@ ce que vous le révéliez.
 |---|---|
 | `↑↓` `Espace` | se déplacer · révéler |
 | `Alt+↑↓` | réordonner — l'ordre des lignes est l'ordre de révélation |
-| `Entrée` `L` `O` `S` `F` `M` | studio · localiser · ouvrir · montrer au public · faire clignoter · forme |
-| `…` | tous les verbes de la ligne, dans un menu |
+| `Entrée` `L` `O` `Maj+S` `F` `M` | studio · localiser · ouvrir · montrer au public · faire clignoter · forme |
+| effet · `…` | choisir un effet · tous les verbes de la ligne, chacun dans un menu |
 | `/` `Échap` | rechercher · effacer |
 
 **Cliquez une épingle sur le calque Notes pour la saisir.** Les épingles sont des tuiles,
@@ -256,7 +257,8 @@ moins de la page à la même taille de texte ; le texte qui ne tient pas s'estom
 inférieur. *Ajuster au contenu* (Pin Studio, le HUD, `Alt+Maj+F`, ou `F` pendant le
 placement) règle la hauteur pour que toute la page tienne à la largeur actuelle. *Taille
 du texte* et *Marges* sont dans Pin Studio, avec la largeur et la hauteur en cases et un
-verrou de ratio.
+verrou de ratio. L'**icône** d'une épingle aussi — une icône de note de carte de Foundry
+ou n'importe quelle image — et survoler une épingle affiche son nom.
 
 Également : un bouton dans l'en-tête d'une fiche de journal, les contrôles de scène Notes,
 les menus contextuels de la barre latérale, une case sur la fiche de n'importe quelle tuile
