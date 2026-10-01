@@ -149,7 +149,7 @@ describe("measuring in the chosen face", () => {
     vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({
       height: 512,
     } as DOMRect);
-    const { FONT_LOAD_TIMEOUT_MS, measureCardHeight } = await import("../src/render/measure");
+    const { MEASURE_DEADLINE_MS, measureCardHeight } = await import("../src/render/measure");
 
     let result: number | null | undefined;
     void measureCardHeight(
@@ -157,11 +157,11 @@ describe("measuring in the chosen face", () => {
       300
     ).then((height) => (result = height));
 
-    await vi.advanceTimersByTimeAsync(FONT_LOAD_TIMEOUT_MS - 1);
+    await vi.advanceTimersByTimeAsync(MEASURE_DEADLINE_MS - 1);
     expect(result).toBeUndefined();
     await vi.advanceTimersByTimeAsync(1);
     expect(result).toBe(512);
-    expect(FONT_LOAD_TIMEOUT_MS).toBeLessThanOrEqual(1500);
+    expect(MEASURE_DEADLINE_MS).toBeLessThanOrEqual(1500);
   });
 
   it("loads the house face for a card with none of its own, and measures anyway when it fails", async () => {

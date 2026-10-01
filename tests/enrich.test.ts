@@ -277,4 +277,16 @@ describe("when enrichment throws", () => {
     const { html } = await enrichFor({ isOwner: false }, text);
     expect(html).toContain("<em>dead</em>");
   });
+
+  // The card cache keeps a body only when this is false: the raw text is safe to show
+  // once and wrong to keep, since a retry may enrich it.
+  it("says when it fell back, and only then", async () => {
+    withEnricher(async () => {
+      throw new Error("a module's enricher broke");
+    });
+    expect((await enrichFor({ isOwner: false }, text)).fellBack).toBe(true);
+
+    withEnricher(async (input: string) => input);
+    expect((await enrichFor({ isOwner: false }, text)).fellBack).toBe(false);
+  });
 });

@@ -35,6 +35,7 @@ import { tileChangeHandler } from "./canvas/tile-hooks";
 import { propManager, teardownProps } from "./canvas/PropManager";
 import { probeRasterisation } from "./render/Rasterizer";
 import { clearPdfCache } from "./render/PdfPage";
+import { clearResolved, forgetSource } from "./render/card-cache";
 import { warmFontCache } from "./render/AssetInliner";
 import { definePinHUD, refreshPinHUD } from "./apps/PinHUD";
 import { openStudio, refreshStudios, resumeEditHolds } from "./apps/PinStudio";
@@ -93,9 +94,9 @@ Hooks.once("ready", () => {
     // cards until something unrelated scheduled another pass.
     propManager().refresh();
     // The rasteriser's fonts, encoded as data URIs, are for the canvas path only — and
-    // the probe decodes from a `blob:` URL, which taints, so it answers `false` on every
-    // supported browser today (DESIGN A29). Encoding every face for a path that will
-    // never run cost each client its idle time at load for nothing.
+    // the probe decodes from a `blob:` URL, which taints, so it answers `false` wherever
+    // it has been measured (DESIGN A29). Encoding every face for a path that will not run
+    // cost each client its idle time at load for nothing.
     if (canRasterise) warmFontCache();
   });
   void reconcile().catch((error) => log.warn("the ready sweep of the grants failed", error));
@@ -134,6 +135,8 @@ Hooks.on("canvasTearDown", () => {
   teardownProps();
   destroyOverlay();
   clearPdfCache();
+  // What was kept of the cards goes with the scene, as the textures and the pages do.
+  clearResolved();
 });
 
 Hooks.on("canvasPan", () => {
@@ -251,6 +254,7 @@ for (const hook of ["updateToken", "createToken", "deleteToken"]) {
 // Every type of document a pin can show: an edit to one may rename a pin, change who holds
 // it, or change what its card says — and for an actor, mostly does none of these.
 const onSourceUpdated = sourceUpdateHandler({
+  forget: forgetSource,
   rebase: onSourceOwnershipEdited,
   rename: onSourceRenamed,
   invalidate: (uuid) => propManager().invalidate(uuid),
@@ -259,6 +263,7 @@ const onSourceUpdated = sourceUpdateHandler({
 // And one created or deleted: a deleted journal, page or actor drew on until the next canvas
 // draw, and a page added to a journal a pin shows whole never appeared.
 const onSourceCameOrWent = sourceLifecycleHandler({
+  forget: forgetSource,
   invalidate: (uuid) => propManager().invalidate(uuid),
   refresh: refreshPinboard,
   revalidate: revalidateReader,

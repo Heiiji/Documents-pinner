@@ -4,11 +4,13 @@
  * IMPURE. Foundry ships pdf.js — `scripts/pdfjs/build/pdf.mjs`, confirmed present on a
  * live v14.365 server — and this is the one content type that can reach the canvas tier.
  *
- * **Why PDFs are special, and it is not a small thing.** DESIGN A10 established that the
- * canvas tier cannot work for journal HTML: rendering HTML means an SVG `foreignObject`,
- * that taints the canvas in every current browser, and a tainted canvas is refused by
- * `texImage2D`. pdf.js does not use `foreignObject` at all — it paints with ordinary
- * Canvas2D calls — so its output canvas stays origin-clean. Measured in a live world:
+ * **Why PDFs are special, and it is not a small thing.** The module's HTML rasteriser
+ * decodes its `foreignObject` SVG from a `blob:` URL, which taints the canvas — measured
+ * in Chromium — and a tainted canvas is refused by `texImage2D`, so journal HTML never
+ * reaches the canvas tier today (DESIGN A10; A29 found that the same SVG decoded
+ * from a `data:` URL does not taint, which is the 0.5 lead). pdf.js does not go near an
+ * SVG at all — it paints with ordinary Canvas2D calls — so its output canvas stays
+ * origin-clean. Measured in a live world:
  *
  *     pdf.js -> canvas -> getImageData   clean, 561697 painted pixels
  *     pdf.js -> canvas -> texImage2D     OK
@@ -19,7 +21,10 @@
  *
  * Two bounds, because a PDF is the heaviest thing this module will ever draw:
  *
- * - **One render per (file, page, size tier)**, cached, because a LOD change asks again.
+ * - **One render per (file, page, long edge)**, cached, because a LOD change asks again.
+ *   Every caller asks at a SNAPPED edge — the canvas tier at its resolution tiers, a DOM
+ *   card at a power of two (`ContentResolver`) — so a zoom or a resize inside one tier
+ *   draws nothing new. The DOM card's data URL is kept beside it, in the card cache.
  * - **One in-flight load per file**, shared, so eight props of the same document parse it
  *   once. Parsing a 32-page PDF is not cheap and the result is immutable.
  */

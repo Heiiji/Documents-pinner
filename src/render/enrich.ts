@@ -229,6 +229,11 @@ export interface EnrichedContent {
   html: string;
   /** Whether this client's user owns the source, which is what gates secrets. */
   isOwner: boolean;
+  /**
+   * Enrichment threw and this is the raw text, scrubbed. Safe to show, wrong to keep: the
+   * card cache must not hold the unenriched words of a card a retry might enrich.
+   */
+  fellBack: boolean;
 }
 
 /**
@@ -242,7 +247,7 @@ export async function enrichFor(source: any, text: string): Promise<EnrichedCont
   const isOwner = source?.isOwner === true;
   const TextEditor = ns("applications.ux.TextEditor.implementation");
 
-  const html = await enrichOrRaw(TextEditor, text ?? "", {
+  const { html, fellBack } = await enrichOrRaw(TextEditor, text ?? "", {
     // NEVER game.user.isGM, and never a value from another client. See rule 2.
     secrets: isOwner,
     documents: true,
@@ -253,7 +258,7 @@ export async function enrichFor(source: any, text: string): Promise<EnrichedCont
     rollData: rollDataOf(source),
   });
 
-  return { html: sanitise(html, isOwner), isOwner };
+  return { html: sanitise(html, isOwner), isOwner, fellBack };
 }
 
 /**
@@ -278,19 +283,28 @@ function rollDataOf(source: any): Record<string, unknown> {
 /**
  * Enrich, or hand back the text as it is when enrichment throws.
  *
- * Core does not catch an enricher that throws — a module's custom `@Tag` pattern, an
- * embed of a document that fails to render — so one broken enricher rejected the whole
- * card: the prop on the map stayed blank and the reader's click did nothing at all. The
- * raw text is a safe fallback because it is never shown as it is: it goes through the
+ * Core catches an enricher's own throw, one match at a time (`_replaceTextContent`,
+ * foundry.mjs 14.368 ~35597), but not what runs around the enrichers: priming a
+ * compendium's documents is a request that can fail, and `_finalizeEnrichedHTML` and a
+ * system's own `TextEditor` subclass run outside that catch. Any of those rejected the
+ * whole card: the prop on the map stayed blank and the reader's click did nothing at all.
+ * The raw text is a safe fallback because it is never shown as it is: it goes through the
  * SAME `sanitise` as enriched output, which scrubs it and strips the secrets.
+ *
+ * No `TextEditor` at all is not a fallback — there is nothing to retry — so only a throw
+ * reports one.
  */
-async function enrichOrRaw(TextEditor: any, text: string, options: any): Promise<string> {
-  if (!TextEditor?.enrichHTML) return text;
+async function enrichOrRaw(
+  TextEditor: any,
+  text: string,
+  options: any
+): Promise<{ html: string; fellBack: boolean }> {
+  if (!TextEditor?.enrichHTML) return { html: text, fellBack: false };
   try {
-    return await TextEditor.enrichHTML(text, options);
+    return { html: await TextEditor.enrichHTML(text, options), fellBack: false };
   } catch (error) {
     log.warn(`enrichment failed; showing the text unenriched`, error);
-    return text;
+    return { html: text, fellBack: true };
   }
 }
 

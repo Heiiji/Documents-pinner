@@ -3,8 +3,8 @@
  * document an adapter answers for.
  *
  * IMPURE through the effects it is handed, and through nothing else: the ledger, the
- * labels, the textures and the Pinboard belong to modules a test may mock with a partial
- * factory, and `sources/` imports none of them. `main.ts` wires the four in.
+ * labels, the card cache, the textures and the Pinboard belong to modules a test may mock
+ * with a partial factory, and `sources/` imports none of them. `main.ts` wires them in.
  *
  * Filtered before any work (DESIGN A28, P5). An actor's update hook fires on every
  * hit-point change in combat, and each one that reached the textures would re-enrich and
@@ -15,6 +15,13 @@
  * and a pin on the scene being viewed shows the document. Every journal edit anywhere used
  * to cost every client an LOD pass, and the GM a Pinboard render, and a stream of them kept
  * postponing the pass a reveal had asked for.
+ *
+ * One effect runs BEFORE those filters: `forget`, which drops what the card cache kept of
+ * the document (DESIGN A29). It costs a walk of a few hundred keys, and the filters answer
+ * a different question — whether a card on the viewed scene must be redrawn NOW. A body
+ * kept for a pin on another scene, or an actor whose hit points an inline roll reads, is
+ * stale after the edit whether or not anything redraws; skipping the forget would serve
+ * the old words the next time the card resolved for any reason.
  */
 
 import { cv, isOurs } from "../fvtt";
@@ -40,6 +47,11 @@ function shownOnViewedScene(uuid: unknown): boolean {
 
 /** What an edit can set in motion, each a door into a module `sources/` does not import. */
 export interface SourceUpdateEffects {
+  /**
+   * Forget what was kept of this document's cards. Synchronous, and before `invalidate`:
+   * the redraw that follows must not be served the body from before the edit.
+   */
+  forget(uuid: string): void;
   /** Fold a GM's manual permission edit into the ownership ledger. */
   rebase(doc: any, change: any, options: any, userId: string): unknown;
   /** Redraw the label of every pin that follows this document's name. */
@@ -56,6 +68,7 @@ export function sourceUpdateHandler(effects: SourceUpdateEffects) {
     if (isOurs(options)) return;
     const adapter = adapterForDoc(doc);
     if (!adapter.isSource(doc)) return;
+    if (typeof doc?.uuid === "string") effects.forget(doc.uuid);
 
     if (change?.ownership !== undefined) void effects.rebase(doc, change, options, userId);
     if (change?.name !== undefined) effects.rename(doc, change, options);
@@ -67,6 +80,8 @@ export function sourceUpdateHandler(effects: SourceUpdateEffects) {
 
 /** What a source coming or going sets in motion. */
 export interface SourceLifecycleEffects {
+  /** Forget what was kept of this document's cards, as an edit does. */
+  forget(uuid: string): void;
   /** Drop this document's cards, so the next frame draws them again. */
   invalidate(uuid: string): void;
   /** Bring the Pinboard's rows in line. */
@@ -88,6 +103,7 @@ export interface SourceLifecycleEffects {
 export function sourceLifecycleHandler(effects: SourceLifecycleEffects) {
   return (doc: any, options: any): void => {
     if (isOurs(options) || !adapterForDoc(doc).isSource(doc)) return;
+    if (typeof doc?.uuid === "string") effects.forget(doc.uuid);
     if (!shownOnViewedScene(doc?.uuid)) return;
     effects.invalidate(doc.uuid);
     effects.refresh();
