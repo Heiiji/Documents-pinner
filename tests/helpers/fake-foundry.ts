@@ -250,6 +250,14 @@ export function fakeDoc(options: FakeDocOptions = {}): any {
     applyUpdate(doc, changes);
     return doc;
   };
+  // `DataModel#updateSource` (TYPES common/abstract/data.d.mts; LIVE foundry.mjs 14.368,
+  // 14164-14196): the same diff-and-merge as an update, on this client's copy only, with no
+  // hook and no server. What a `preCreate` hook calls on the pending document. Returns the
+  // diff in core; the change here.
+  doc.updateSource = (changes: Record<string, unknown>) => {
+    applyUpdate(doc, changes);
+    return changes;
+  };
   doc.delete = async () => {
     doc.deleted = true;
     return doc;
@@ -1084,6 +1092,12 @@ export interface FakePackEntry {
   /** An Actor's or an Item's artwork and system subtype, which its index entry carries. */
   img?: string;
   type?: string;
+  /**
+   * An Actor's prototype token texture, which its loaded document carries and its index
+   * entry does not (TYPES actor.d.mts:40, the index fields; the document's
+   * `prototypeToken.texture.src`).
+   */
+  token?: string;
   /** An Actor's or an Item's system data, once loaded. */
   system?: Record<string, unknown>;
 }
@@ -1156,6 +1170,7 @@ export function fakePack(options: FakePackOptions): any {
         type: entry.type ?? "base",
         img: entry.img,
         system: entry.system ?? {},
+        ...(entry.token === undefined ? {} : { prototypeToken: { texture: { src: entry.token } } }),
         pack: options.id,
         // Pack documents answer by ROLE, through the pack (document.d.mts:342-358).
         permission: (user: any, level: unknown) => pack.testUserPermission(user, level),

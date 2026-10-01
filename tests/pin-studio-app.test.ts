@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FLAGS, MODULE_ID } from "../src/const";
 import { defaultPin } from "../src/data/pin-schema";
 import { settled } from "../src/data/PinStore";
+import { readPin } from "../src/data/PinData";
 import { contentOf, fakeTile, installWorld, uninstallWorld } from "./helpers/fake-foundry";
 
 vi.mock("../src/data/ownership-sync", () => ({
@@ -18,6 +19,7 @@ vi.mock("../src/data/ownership-sync", () => ({
 }));
 
 let tile: any;
+let installed: ReturnType<typeof installWorld>;
 
 beforeEach(() => {
   vi.resetModules();
@@ -32,7 +34,7 @@ beforeEach(() => {
       },
     },
   };
-  installWorld({ isGM: true, tiles: [tile] });
+  installed = installWorld({ isGM: true, tiles: [tile] });
 });
 
 afterEach(() => uninstallWorld());
@@ -76,6 +78,37 @@ describe("the type-size and margin sliders", () => {
     const display = tile.flags[MODULE_ID][FLAGS.PIN].display;
     expect(display.typeSize).toBe(20);
     expect(display.margin).toBe(1);
+  });
+});
+
+/**
+ * A 0.1.x pin stored `interaction.clickThrough`, which the normaliser reads as `open:
+ * "never"`. Every whole-payload write — the Studio's, the migration's — merged into the stored
+ * payload on v14 and never removed it, so the Open control looked as if it saved and
+ * snapped back to "never".
+ */
+describe("the Open control on a pin from 0.1.x", () => {
+  it.each([
+    ["before the migration has run", false],
+    ["once the migration has run", true],
+  ])("keeps what the GM chose, %s", async (_when, migrated) => {
+    const pin = tile.flags[MODULE_ID][FLAGS.PIN];
+    pin.v = 1;
+    pin.interaction = { open: "double", tooltip: "", openPage: true, clickThrough: true };
+    if (migrated) {
+      const scene = (globalThis as any).canvas.scene;
+      scene.updateEmbeddedDocuments = async (_type: string, updates: any[]) => {
+        for (const { _id, ...change } of updates) if (_id === tile.id) await tile.update(change);
+        return updates;
+      };
+      const { migrateScene } = await import("../src/data/migrations");
+      await migrateScene(scene);
+    }
+    const studio = await studioOn("content");
+    change(studio, "interaction.open", "double");
+    await settled();
+
+    expect(readPin(tile)?.interaction.open).toBe("double");
   });
 });
 
@@ -181,10 +214,67 @@ describe("which Studios a change re-renders", () => {
     await tick();
     const before = studio.renderCount;
 
-    refreshStudios(["another-pin"]);
+    refreshStudios(["Scene.s2.Tile.t1"]);
     expect(studio.renderCount).toBe(before);
-    refreshStudios(["t1"]);
+    refreshStudios(["Scene.s1.Tile.t1"]);
     expect(studio.renderCount).toBe(before + 1);
+  });
+});
+
+/**
+ * The Studio's buttons fire a write and move on. One core refused was an "Uncaught (in
+ * promise)" in the console, and the render meant to follow never ran.
+ */
+describe("a change Foundry refuses", () => {
+  it("is said, and the Studio still renders after it", async () => {
+    const studio = await studioOn("content");
+    const before = studio.renderCount;
+    tile.update = async () => {
+      throw new Error("refused");
+    };
+
+    studio.dispatch("resetSize");
+    await settled();
+    await tick();
+
+    expect(installed.notifications).toEqual([{ type: "error", message: "DP.notice.writeFailed" }]);
+    expect(studio.renderCount).toBe(before + 1);
+  });
+});
+
+describe("a Studio over a pin deleted elsewhere", () => {
+  it("says the pin is gone, rather than offering controls that can only fail", async () => {
+    const scene = (globalThis as any).canvas.scene;
+    tile.parent = scene;
+    const { openStudio, refreshStudios } = await import("../src/apps/PinStudio");
+    const studio = openStudio(tile);
+    await tick();
+
+    scene.tiles.contents.splice(0);
+    refreshStudios([tile.uuid]);
+    await tick();
+
+    expect(contentOf(studio).querySelector(".dp-studio__gone")).not.toBeNull();
+    expect(contentOf(studio).querySelector("[name]")).toBeNull();
+  });
+});
+
+/**
+ * A duplicated scene keeps every tile's id. The Studio was found by id, so opening it for a
+ * pin on the copy brought forward the original's, and every edit went to the other scene.
+ */
+describe("the Studio of a pin on a duplicated scene", () => {
+  it("is its own window, editing its own pin", async () => {
+    const twin = fakeTile({ id: "t1", uuid: "Scene.s2.Tile.t1", width: 400, height: 560 });
+    twin.flags = structuredClone(tile.flags);
+    const { openStudio } = await import("../src/apps/PinStudio");
+
+    const day = openStudio(tile);
+    const night = openStudio(twin);
+
+    expect(night).not.toBe(day);
+    expect(day.doc).toBe(tile);
+    expect(night.doc).toBe(twin);
   });
 });
 

@@ -229,6 +229,29 @@ describe("the card of an actor or an item", () => {
   });
 });
 
+/**
+ * A player's client may not hold a world actor it cannot see at all (probe D1), and actor
+ * access starts off: such a player was told the wanted man "no longer exists".
+ */
+describe("a world actor this client cannot find", () => {
+  it.each([
+    ["is not available, for a player", "ali", "unavailable", "DP.card.unavailable"],
+    [
+      "no longer exists, for the GM, who holds every actor",
+      undefined,
+      "missing",
+      "DP.card.missing",
+    ],
+  ])("%s", async (_who, userId, reason, title) => {
+    const tile = pinTile({ uuid: "Actor.jack" });
+    install({ tiles: [tile], userId });
+
+    const { card } = await cardOf(tile);
+
+    expect(card).toMatchObject({ missing: true, reason, title });
+  });
+});
+
 describe("the text an actor's or an item's card shows", () => {
   const actorWith = (system: Record<string, unknown>) => () =>
     jack({ system, img: "portraits/jack.webp" });
@@ -380,16 +403,10 @@ describe("revealing an actor or an item", () => {
   it.each([
     ["an actor: Limited at most, and only once the GM switches access on", "Actor.jack", false, 1],
     ["an item: the level the pin asks for", "Item.amulet", true, 2],
-    ["an item an actor owns: nothing, on it or on the actor", "Actor.jack.Item.knife", true, null],
   ])("grants %s, and releasing gives it all back", async (_what, uuid, synced, level) => {
     const actor = jack();
-    const knife = fakeItem({ id: "knife", name: "Knife", parent: actor });
     install({ actors: [actor], items: [amulet()] });
-    const doc = {
-      "Actor.jack": actor,
-      "Item.amulet": world.game.items.get("amulet"),
-      "Actor.jack.Item.knife": knife,
-    }[uuid];
+    const doc = uuid === "Actor.jack" ? actor : world.game.items.get("amulet");
     const { setAudience, deletePin } = await import("../src/api");
 
     const anchor = await place(uuid);
@@ -399,12 +416,39 @@ describe("revealing an actor or an item", () => {
       kind: "everyone",
       ownershipSync: { enabled: true, level: 2 },
     });
-    expect(doc.ownership).toEqual(level === null ? {} : { default: level });
+    expect(doc.ownership).toEqual({ default: level });
     expect(actor.ownership).toEqual(uuid === "Actor.jack" ? { default: 1 } : {});
 
     await deletePin(anchor);
     expect(doc.ownership).toEqual({});
     expect(actor.ownership).toEqual({});
+  });
+});
+
+/**
+ * D3 held at the drop, the header and the picker, and not for an API caller: `pinAt` drew a
+ * card of an item an actor owns, and `adoptTile` adopted a token's actor.
+ */
+describe("an API caller pinning an item an actor owns, or a token's actor", () => {
+  it.each([
+    ["pinAt", "Actor.jack.Item.knife"],
+    ["adoptTile", "Scene.s1.Token.tok.Actor.jack"],
+  ])("is refused by %s, as a drop is, and nothing is written", async (verb, uuid) => {
+    const tile = fakeTile({ id: "plain", uuid: "Scene.s1.Tile.plain" });
+    install({ tiles: [tile], actors: [jack()] });
+    const created = vi.spyOn(world.canvas.scene, "createEmbeddedDocuments");
+    const api = await import("../src/api");
+    const source = { ...pinOf(pinTile({})).source, uuid };
+
+    const result =
+      verb === "pinAt"
+        ? await api.pinAt(world.canvas.scene, source, { x: 0, y: 0 })
+        : await api.adoptTile(tile, source);
+
+    expect(result ?? null).toBeNull();
+    expect(created).not.toHaveBeenCalled();
+    expect(tile.updates).toEqual([]);
+    expect(world.notifications.map((n) => n.message)).toEqual(["DP.notice.embeddedRefused"]);
   });
 });
 

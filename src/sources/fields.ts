@@ -170,9 +170,10 @@ export function fieldsFor(documentName: string, type: unknown, doc?: any): Field
 
   const HTMLField = ns("data.fields.HTMLField");
   const SchemaField = ns("data.fields.SchemaField");
+  const classes = typeof HTMLField === "function" && typeof SchemaField === "function";
   const schema = cfg()?.[documentName]?.dataModels?.[kind]?.schema ?? doc?.system?.schema ?? null;
   let found: FoundField[] = [];
-  if (schema && typeof HTMLField === "function" && typeof SchemaField === "function") {
+  if (schema && classes) {
     found = discoverHtmlFields(
       schema,
       (field) => field instanceof HTMLField,
@@ -192,6 +193,9 @@ export function fieldsFor(documentName: string, type: unknown, doc?: any): Field
       path: field.path,
       label: localize(field.label) || readableLabel(field.path),
     }));
+  // A schema read without the classes to read it with is no answer about the type: it is
+  // asked again next time rather than kept, empty, for the whole session.
+  if (schema && !classes) return fields;
   discovered.set(key, fields);
   return fields;
 }

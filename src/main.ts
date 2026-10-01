@@ -16,8 +16,14 @@ import { cv, g } from "./fvtt";
 import { publicApi } from "./api";
 import * as settings from "./settings";
 import { concernsPins, definePinData } from "./data/PinData";
-import { onPreDeleteTile, onSourceOwnershipEdited, reconcile } from "./data/ownership-sync";
+import {
+  onCreateTile,
+  onPreDeleteTile,
+  onSourceOwnershipEdited,
+  reconcile,
+} from "./data/ownership-sync";
 import { onCanvasReady as migrateOnCanvasReady } from "./data/migrations";
+import { onPreCreateTile, onPreUpdateTile, syncAfterCoreHidden } from "./data/core-hidden";
 import {
   checkTileGeometry,
   definePinnedTile,
@@ -50,7 +56,7 @@ import {
 } from "./ui/entry-points";
 import { flashDomProp, setDomPropHover, syncSceneDim } from "./canvas/DomPropTier";
 import { onboardingReady } from "./ui/onboarding";
-import { sourceUpdateHandler } from "./sources/hooks";
+import { sourceLifecycleHandler, sourceUpdateHandler } from "./sources/hooks";
 import { hookedDocumentNames } from "./sources/index";
 
 const log = logger("boot");
@@ -58,19 +64,20 @@ const log = logger("boot");
 declare const Hooks: any;
 
 /**
- * Context-menu hooks core has used across generations, for every directory a pin's source
- * can be listed in: journals, actors, items — the sidebar's and a compendium window's,
- * which fire the same family. Unknown names never fire.
+ * The context-menu hooks of every directory a pin's source can be listed in — journals,
+ * actors, items, the sidebar's and a compendium window's alike — and of a journal sheet's
+ * pages. A v14 directory fires `get${documentName}ContextOptions` (foundry.mjs 14.368,
+ * 131819), and a sheet's pages `getJournalEntryPageContextOptions` (101133); the 14.366
+ * types name the journal sidebar's `getJournalContextOptions`, so that one is registered too,
+ * and `addContextOption` adds its entry once however many of them fire. The AppV1 names
+ * (`get…DirectoryEntryContext`, `getJournalSheetPageContextOptions`) cannot fire on 14.
  */
 const CONTEXT_HOOKS = [
   "getJournalEntryContextOptions",
-  "getJournalDirectoryEntryContext",
-  "getJournalSheetPageContextOptions",
+  "getJournalContextOptions",
   "getJournalEntryPageContextOptions",
   "getActorContextOptions",
-  "getActorDirectoryEntryContext",
   "getItemContextOptions",
-  "getItemDirectoryEntryContext",
 ];
 
 Hooks.once("init", () => {
@@ -104,8 +111,8 @@ Hooks.once("ready", () => {
     propManager().refresh();
   });
   warmFontCache();
-  void reconcile();
-  void onboardingReady();
+  void reconcile().catch((error) => log.warn("the ready sweep of the grants failed", error));
+  void onboardingReady().catch((error) => log.warn("the welcome could not be shown", error));
   // A pin hidden with "Hide while I edit" in a Studio this reload closed without asking.
   void resumeEditHolds().catch((error) => log.warn("could not resume the edit holds", error));
 
@@ -122,7 +129,7 @@ Hooks.on("canvasReady", () => {
   // The one assumption every placement rests on, checked against core's own bounds.
   checkTileGeometry();
   syncHitLayer();
-  void migrateOnCanvasReady(cv()?.scene);
+  void migrateOnCanvasReady(cv()?.scene).catch((error) => log.warn("migration failed", error));
   // An open Pinboard is about the scene being viewed; it used to keep listing the last
   // one's pins until a tile happened to change.
   refreshPinboard();
@@ -215,6 +222,14 @@ Hooks.on(`${MODULE_ID}.peek`, (active: boolean) => propManager().setPeeking(acti
 // A pin can be deleted by any core gesture — the Tiles layer, Ctrl+Z, the Placeables
 // sidebar — and every one of those must give back the ownership it granted.
 Hooks.on("preDeleteTile", onPreDeleteTile);
+// And brought back by one, revealed, with nothing in the ledger.
+Hooks.on("createTile", onCreateTile);
+
+// And hidden or shown by one — the Tiles layer's HUD, TileConfig, the Placeables sidebar, a
+// paste — which completes the audience in the same update, and moves the grant after it.
+Hooks.on("preUpdateTile", onPreUpdateTile);
+Hooks.on("preCreateTile", onPreCreateTile);
+Hooks.on("updateTile", syncAfterCoreHidden);
 
 /**
  * Tile changes, coalesced.
@@ -229,18 +244,19 @@ Hooks.on("preDeleteTile", onPreDeleteTile);
  * The ids are gathered and the refresh runs ONCE from a microtask, so a batch of any size
  * costs one pass. Everything here was already idempotent; only the arithmetic changes.
  */
-const changedTiles = new Set<string>();
+const changedTiles = new Map<string, string>();
 let tileRefreshQueued = false;
 
 function onTileChanged(doc: any, changed?: any): void {
   if (!concernsPins(doc, changed)) return;
-  if (doc?.id) changedTiles.add(doc.id);
+  if (doc?.id) changedTiles.set(doc.uuid ?? doc.id, doc.id);
   if (tileRefreshQueued) return;
   tileRefreshQueued = true;
 
   void Promise.resolve().then(() => {
     tileRefreshQueued = false;
-    const ids = [...changedTiles];
+    const uuids = [...changedTiles.keys()];
+    const ids = [...new Set(changedTiles.values())];
     changedTiles.clear();
 
     // Core re-tests a tile's visibility only when `hidden`, `sort` or `locked` change.
@@ -255,7 +271,7 @@ function onTileChanged(doc: any, changed?: any): void {
     for (const id of ids) refreshPinHUD({ id });
     // Only the Studios showing a pin that changed: re-rendering every open Studio on any
     // pin's change threw away the focus — and a half-typed label — in all of them.
-    refreshStudios(ids);
+    refreshStudios(uuids);
     refreshPinboard();
   });
 }
@@ -276,7 +292,18 @@ const onSourceUpdated = sourceUpdateHandler({
   invalidate: (uuid) => propManager().invalidate(uuid),
   refresh: refreshPinboard,
 });
-for (const type of hookedDocumentNames()) Hooks.on(`update${type}`, onSourceUpdated);
+// And one created or deleted: a deleted journal, page or actor drew on until the next canvas
+// draw, and a page added to a journal a pin shows whole never appeared.
+const onSourceCameOrWent = sourceLifecycleHandler({
+  invalidate: (uuid) => propManager().invalidate(uuid),
+  refresh: refreshPinboard,
+  revalidate: revalidateReader,
+});
+for (const type of hookedDocumentNames()) {
+  Hooks.on(`update${type}`, onSourceUpdated);
+  Hooks.on(`create${type}`, onSourceCameOrWent);
+  Hooks.on(`delete${type}`, onSourceCameOrWent);
+}
 
 // A user connecting or disconnecting changes who is in an audience, and therefore what
 // every chip shows and which props this client should be drawing at all.

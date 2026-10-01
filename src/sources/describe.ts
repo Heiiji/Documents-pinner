@@ -74,12 +74,16 @@ const keyOf = (source: DpSource) => `${source.uuid ?? ""}#${source.pageId ?? ""}
  */
 export function rememberShown(source: DpSource, shown: any): void {
   if (source.kind !== "document" || !isPackUuid(source.uuid) || !shown) return;
+  // The token's art too, which the pack's index does not carry: an actor whose own image is
+  // a default is pictured by it, on its card and — once loaded — in the Pinboard.
+  const token = shown.prototypeToken?.texture?.src;
   remembered.set(keyOf(source), {
     name: typeof shown.name === "string" ? shown.name : "",
     documentName: typeof shown.documentName === "string" ? shown.documentName : null,
     type: typeof shown.type === "string" ? shown.type : null,
     src: typeof shown.src === "string" ? shown.src : null,
     img: typeof shown.img === "string" ? shown.img : null,
+    prototypeToken: typeof token === "string" ? { texture: { src: token } } : null,
   });
 }
 

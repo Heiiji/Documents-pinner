@@ -107,12 +107,19 @@ export function onGetHeaderControls(app: any, controls: any[]): void {
   const source = api.sourceFromDocument(doc);
   if (!source) return;
 
+  // `action` is required of a header control (TYPES application.d.mts:259-267), and is
+  // what core and other modules key on; `onClick` is what core calls when it is there
+  // (foundry.mjs 14.368, 30784 and 30903), since no sheet defines this action.
   controls.push({
+    action: "documentsPinnerPinThis",
     icon: "fa-solid fa-thumbtack",
     label: "DP.controls.pinThis",
     onClick: () => armAt(source, viewportCentre()),
   });
 }
+
+/** The menu entry's label, which is also how a menu that already has it is told. */
+const PIN_THIS = "DP.controls.pinThis";
 
 /**
  * Sidebar, page and compendium-window context menus — journals', actors' and items'. The
@@ -122,11 +129,13 @@ export function onGetHeaderControls(app: any, controls: any[]): void {
  */
 export function addContextOption(options: any[], app?: any): void {
   if (!isGM()) return;
+  // Once per menu: two of the hook names may fire for the same one.
+  if (options.some((option) => option?.label === PIN_THIS)) return;
 
   // v14's entry shape. `name`, `condition` and `callback` still work, each with a
   // compatibility warning, until v16 (foundry.mjs 14.367, 29368-29380 and 29616).
   options.push({
-    label: "DP.controls.pinThis",
+    label: PIN_THIS,
     icon: '<i class="fa-solid fa-thumbtack"></i>',
     visible: () => isGM(),
     onClick: (_event: Event, target: any) => {
@@ -266,10 +275,12 @@ export function onRenderConfig(app: any, element: HTMLElement): void {
       // Unpinning drops the payload and releases the ownership grant, and the sheet is
       // still holding the pre-toggle data — so this one asks, and puts the switch back
       // when the answer is no.
-      void confirmUnpin().then((ok) => {
-        if (ok) void api.unpin(doc);
-        else input.checked = true;
-      });
+      api.fireAndReport(
+        confirmUnpin().then((ok) => {
+          if (ok) return api.unpin(doc);
+          input.checked = true;
+        })
+      );
       return;
     }
     // Adopting needs a source, and the sheet is the wrong place to choose one — but the
@@ -298,12 +309,14 @@ function noteSection(doc: any): HTMLElement {
     `<p class="dp-config__hint">${t("DP.config.adoptNoteHint")}</p>`;
 
   section.querySelector(".dp-config__adopt")?.addEventListener("click", () => {
-    void confirmAdoptNote().then((ok) => {
-      if (!ok) return;
-      // A note that links a journal already knows its source; one that does not asks.
-      if (api.sourceFromNote(doc)) void api.adoptNote(doc);
-      else openPicker({ adopt: doc });
-    });
+    api.fireAndReport(
+      confirmAdoptNote().then((ok) => {
+        if (!ok) return;
+        // A note that links a journal already knows its source; one that does not asks.
+        if (api.sourceFromNote(doc)) return api.adoptNote(doc);
+        openPicker({ adopt: doc });
+      })
+    );
   });
   return section;
 }

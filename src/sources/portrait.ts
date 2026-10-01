@@ -207,6 +207,6 @@ export function portraitAdapter(kind: PortraitKind): SourceAdapter {
       return [{ doc: named, level: Math.min(level, kind.maxGrant) }];
     },
     family: (doc) => (isSource(doc) && !doc.pack ? [doc] : []),
-    open: (shown) => shown.sheet?.render?.(true),
+    open: (shown) => shown.sheet?.render?.({ force: true }),
   };
 }

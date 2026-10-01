@@ -1277,7 +1277,7 @@ export function openPinboard(): any {
   const Board = definePinboard();
   if (!Board) return null;
   instance ??= new Board();
-  instance.render(true);
+  instance.render({ force: true });
   return instance;
 }
 

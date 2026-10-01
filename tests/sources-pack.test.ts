@@ -17,6 +17,7 @@ import { defaultPin } from "../src/data/pin-schema";
 import type { DpSource } from "../src/types/dp";
 import {
   contentOf,
+  DEFAULT_TOKEN,
   fakePack,
   fakeTile,
   installSources,
@@ -133,6 +134,37 @@ describe("what a compendium pin says it is", () => {
       });
     }
   );
+});
+
+describe("a compendium actor whose own portrait is a default", () => {
+  it("has its token's art as its Pinboard thumbnail once it has loaded", async () => {
+    const BESTIARY = "Compendium.world.bestiary.Actor.knight";
+    const tile = pinTile({ uuid: BESTIARY });
+    install(
+      tile,
+      fakePack({
+        id: "world.bestiary",
+        label: "Bestiary",
+        documentName: "Actor",
+        entries: [
+          {
+            _id: "knight",
+            name: "Black Knight",
+            type: "npc",
+            img: DEFAULT_TOKEN,
+            token: "tokens/knight.webp",
+          },
+        ],
+      })
+    );
+    const { rowsFor } = await import("../src/apps/Pinboard");
+    const { resolveSource } = await import("../src/api");
+    expect(rowsFor(world.canvas.scene)[0].thumbnail).toBeNull();
+
+    await resolveSource(pinOf(tile));
+
+    expect(rowsFor(world.canvas.scene)[0].thumbnail).toBe("tokens/knight.webp");
+  });
 });
 
 describe("the key glyph on a compendium pin", () => {

@@ -49,7 +49,27 @@ import type { DpNotice, DpPinFlags, DpSource } from "../types/dp";
 const log = logger("studio");
 
 let StudioClass: any = null;
+/**
+ * The open Studios, by their pin's UUID. Not its id: a duplicated scene — and one imported
+ * twice from a compendium — keeps every tile's id, so opening the Studio for a pin on
+ * "Tavern (night)" brought forward the one for its twin on "Tavern (day)", and every edit
+ * went to the other scene's pin.
+ */
 const open = new Map<string, any>();
+
+/** Whether a pin's tile is still on its scene. Where the scene cannot say, it is. */
+function placed(doc: any): boolean {
+  const tiles = doc?.parent?.tiles;
+  if (typeof tiles?.get !== "function") return true;
+  return tiles.get(doc.id) !== undefined && tiles.get(doc.id) !== null;
+}
+
+/** A pin's key in `open`. */
+const keyOf = (doc: any): string => String(doc?.uuid ?? doc?.id ?? "");
+
+/** An id for the window, and the stem of the ids inside it, unique per pin across scenes. */
+const studioId = (doc: any): string =>
+  `dp-studio-${String(doc?.uuid ?? doc?.id ?? "pin").replace(/[^\w-]/g, "-")}`;
 
 type TabId = "content" | "appearance" | "audience";
 
@@ -715,7 +735,7 @@ export function studioMarkup(
 ): string {
   const grid = gridOf(doc);
   // Ids unique per window: two Studios can be open at once, one per pin.
-  const base = `dp-studio-${String(doc?.id ?? "pin").replace(/[^\w-]/g, "")}`;
+  const base = studioId(doc);
   const tabId = (id: TabId) => `${base}-tab-${id}`;
   const panelId = `${base}-panel`;
   // A real tab pattern: one tab stop for the row, the arrows move along it, and the
@@ -986,7 +1006,10 @@ export function definePinStudio(): any {
     }
 
     async _renderHTML() {
-      const pin = readPin(this.doc);
+      // A deleted tile keeps its data, flag and all, so a Studio left open over a pin deleted
+      // elsewhere — the Pinboard, the Tiles layer, Ctrl+Z, another GM — rendered every
+      // control, and every change then failed against a document that no longer exists.
+      const pin = placed(this.doc) ? readPin(this.doc) : null;
       // Every audience change reaches an open Studio as a render — `refreshStudios` on the
       // tile's update, or the chip handler's own — so the first render that finds the pin
       // showing, outside the hide's own write, is where a hold learns it is over.
@@ -1055,7 +1078,7 @@ export function definePinStudio(): any {
       root.addEventListener("change", (event) => {
         const target = event.target as HTMLInputElement;
         if (!target?.name) return;
-        void this.#apply(target);
+        api.fireAndReport(this.#apply(target));
       });
 
       root.addEventListener("input", (event) => {
@@ -1101,7 +1124,7 @@ export function definePinStudio(): any {
         const change = (event as MouseEvent).shiftKey
           ? api.soloUser(this.doc, userId)
           : api.setUserVisible(this.doc, userId, chip.getAttribute("aria-checked") !== "true");
-        void change?.then(() => this.render());
+        api.fireAndReport(change, () => this.render());
       });
     }
 
@@ -1207,7 +1230,7 @@ function onSetTab(this: any, _event: Event, target: HTMLElement) {
 function onSetEffect(this: any, _event: Event, target: HTMLElement) {
   const id = target.dataset.dpPreset;
   if (!id) return;
-  void api.setEffect(this.doc, id)?.then(() => this.render());
+  api.fireAndReport(api.setEffect(this.doc, id), () => this.render());
 }
 
 function onLocate(this: any) {
@@ -1215,7 +1238,7 @@ function onLocate(this: any) {
 }
 
 function onFitHeight(this: any) {
-  void api.fitToContent(this.doc).then(() => this.render());
+  api.fireAndReport(api.fitToContent(this.doc), () => this.render());
 }
 
 /** The pin rides along, so the Preset Studio can offer to put a new preset on it. */
@@ -1231,8 +1254,8 @@ function onBrowseIcon(this: any) {
   new FilePicker({
     type: "image",
     current: doc?.texture?.src,
-    callback: (path: string) => void api.setPinIcon(doc, path),
-  }).render(true);
+    callback: (path: string) => api.fireAndReport(api.setPinIcon(doc, path)),
+  }).render({ force: true });
 }
 
 /**
@@ -1297,7 +1320,7 @@ function noteIcons(): { label: string; src: string }[] {
 }
 
 function onResetSize(this: any) {
-  void api.resetSize(this.doc).then(() => this.render());
+  api.fireAndReport(api.resetSize(this.doc), () => this.render());
 }
 
 /**
@@ -1306,7 +1329,11 @@ function onResetSize(this: any) {
  * The only action in the Studio that does. Everything else here is one change to undo;
  * this one is not, and it is sitting next to controls a GM is clicking quickly.
  */
-async function onDeletePin(this: any) {
+function onDeletePin(this: any) {
+  api.fireAndReport(deleteAfterAsking(this));
+}
+
+async function deleteAfterAsking(app: any): Promise<void> {
   const DialogV2 = ns("applications.api.DialogV2");
   const confirmed = DialogV2?.confirm
     ? await DialogV2.confirm({
@@ -1316,8 +1343,8 @@ async function onDeletePin(this: any) {
     : false;
   if (!confirmed) return;
 
-  await api.deletePin(this.doc);
-  this.close();
+  await api.deletePin(app.doc);
+  app.close();
 }
 
 function onHoldForEdit(this: any) {
@@ -1414,9 +1441,7 @@ function onRetargetSource(this: any) {
   const doc = this.doc;
   openPicker({
     onChoose: (source) => {
-      void confirmRetarget(source).then((ok) => {
-        if (ok) void api.retarget(doc, source);
-      });
+      api.fireAndReport(confirmRetarget(source).then((ok) => ok && api.retarget(doc, source)));
     },
   });
 }
@@ -1431,33 +1456,42 @@ async function confirmRetarget(source: DpSource): Promise<boolean> {
   }).catch(() => false);
 }
 
-/** Open the Studio for a pin, reusing the window already showing it. */
+/**
+ * Open the Studio for a pin, reusing the window already showing it — that pin's, and no
+ * other's. A window still holding another copy of the document is replaced, never edited
+ * through.
+ */
 export function openStudio(doc: any, tab: TabId = "content"): any {
   const Studio = definePinStudio();
   if (!Studio || !doc) return null;
 
-  let app = open.get(doc.id);
+  const key = keyOf(doc);
+  let app = open.get(key);
+  if (app && app.doc !== doc) {
+    void app.close();
+    app = null;
+  }
   if (!app) {
-    app = new Studio({ id: `dp-studio-${doc.id}` });
+    app = new Studio({ id: studioId(doc) });
     app.doc = doc;
-    open.set(doc.id, app);
+    open.set(key, app);
   }
   app.tab = tab;
-  app.render(true);
+  app.render({ force: true });
   return app;
 }
 
 /**
- * Re-render the open Studios for these pins, or every one when no ids are given. Wired to
- * the tile hooks, which pass the pins that changed.
+ * Re-render the open Studios for these pins, by UUID, or every one when none are given.
+ * Wired to the tile hooks, which pass the pins that changed.
  */
-export function refreshStudios(ids?: readonly string[]): void {
-  for (const [id, app] of open) {
+export function refreshStudios(uuids?: readonly string[]): void {
+  for (const [key, app] of open) {
     if (!app.rendered) {
-      open.delete(id);
+      open.delete(key);
       continue;
     }
-    if (!ids || ids.includes(id)) app.render();
+    if (!uuids || uuids.includes(key)) app.render();
   }
 }
 

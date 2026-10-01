@@ -43,10 +43,14 @@ import * as settings from "../settings";
 import { pdfSourceForPin } from "../sources/describe";
 import { docPositionFor } from "../canvas/transform";
 import { freezeMetrics, validatePin } from "./pin-schema";
+import { rawPinFlag } from "./PinData";
+import { enqueueAll, payloadWrite } from "./PinStore";
 import type { DpPinFlags } from "../types/dp";
 
 /** The payload version from which a document's point is stored as the tile's centre. */
 const CENTRE_VERSION = 3;
+
+const PIN_PATH = `flags.${MODULE_ID}.${FLAGS.PIN}`;
 
 const log = logger("migrate");
 
@@ -99,7 +103,7 @@ export function planMigration(
 
     updates.push({
       _id: tile.id,
-      [`flags.${MODULE_ID}.${FLAGS.PIN}`]: pin,
+      [PIN_PATH]: pin,
       ...(moved ?? {}),
     });
   }
@@ -172,11 +176,39 @@ export function pendingCount(scene: any): number {
   return planMigration(scene?.tiles?.contents ?? [], { drawnAsCard }).length;
 }
 
-/** Migrate one scene. Returns the number of anchors rewritten. */
+/**
+ * Migrate one scene. Returns the number of anchors rewritten.
+ *
+ * The plan names the payload each pin should have; the write also deletes every key its
+ * stored payload has and the plan's does not (`payloadWrite`). Without that, v14 merged the
+ * plan into the stored payload, the retired keys survived, and the same pins were planned —
+ * and the world sweep offered — again every session.
+ *
+ * Planned and written inside the per-anchor queue, like every other write of a payload. On
+ * the primary GM, `canvasReady` runs this just before `ready` resumes the edit holds, and
+ * both used to write a whole payload from the same pre-migration copy: whichever landed
+ * second won, and a frozen type size could be written back to null under a current `v`.
+ */
 export async function migrateScene(scene: any): Promise<number> {
-  const updates = planMigration(scene?.tiles?.contents ?? [], { drawnAsCard });
-  if (!updates.length) return 0;
+  const pins = (scene?.tiles?.contents ?? []).filter((tile: any) => rawPinFlag(tile) !== null);
+  if (!pins.length) return 0;
+  return enqueueAll(
+    pins.map((tile: any) => tile.id),
+    () => writeMigration(scene)
+  );
+}
 
+/** Planned from the scene as it is once the queue reaches it, not as it was when asked. */
+async function writeMigration(scene: any): Promise<number> {
+  const tiles = scene?.tiles?.contents ?? [];
+  const planned = planMigration(tiles, { drawnAsCard });
+  if (!planned.length) return 0;
+
+  const updates = planned.map(({ _id, [PIN_PATH]: pin, ...fields }) => ({
+    _id,
+    ...fields,
+    ...payloadWrite(rawPinFlag(tiles.find((tile: any) => tile?.id === _id)), pin as DpPinFlags),
+  }));
   await scene.updateEmbeddedDocuments("Tile", updates, internal());
   const moved = updates.filter((update) => "x" in update).length;
   log.info(
@@ -194,13 +226,31 @@ export async function migrateScene(scene: any): Promise<number> {
  *
  * Sequential on purpose: each scene is one server round trip, and firing them all at
  * once on a world with fifty scenes is how a migration turns into a timeout.
+ *
+ * One scene core refuses does not stop the rest. It used to abort the sweep in silence, the
+ * GM who had just said yes heard nothing, and the version was never written. The scenes
+ * that failed are named once, and the version waits until they have all been updated, so
+ * the offer comes back for them.
  */
 export async function migrateWorld(): Promise<number> {
   let total = 0;
+  const failed: string[] = [];
   for (const scene of g()?.scenes?.contents ?? []) {
-    total += await migrateScene(scene);
+    try {
+      total += await migrateScene(scene);
+    } catch (error) {
+      log.warn(`could not migrate the pins on "${scene?.name}"`, error);
+      failed.push(String(scene?.name ?? scene?.id ?? ""));
+    }
   }
-  await settings.set("schemaVersion", SCHEMA_VERSION);
+  if (failed.length) {
+    notify(
+      { key: "DP.migration.failed", data: { count: failed.length, scenes: failed.join(", ") } },
+      "error"
+    );
+  } else {
+    await settings.set("schemaVersion", SCHEMA_VERSION);
+  }
   return total;
 }
 

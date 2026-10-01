@@ -14,7 +14,7 @@
  */
 
 import { MODULE_ID, PLACEHOLDER_TEXTURE } from "./const";
-import { cfg, cv, g, isGM, notify, playerIds, resolveUuid } from "./fvtt";
+import { cfg, cv, g, isGM, notify, ns, playerIds, resolveUuid } from "./fvtt";
 import { logger } from "./log";
 import * as audience from "./data/audience";
 import * as store from "./data/PinStore";
@@ -44,12 +44,30 @@ import {
   type Refusal,
 } from "./sources/index";
 import { packFacts, packLockedHere, packOf, packReadableBy, playersCanRead } from "./sources/packs";
-import { isPackUuid } from "./sources/uuid";
+import { isPackUuid, parseSourceUuid } from "./sources/uuid";
 import type { DpAudience, DpMode, DpPinFlags, DpSource } from "./types/dp";
 
 declare const Hooks: any;
 
 const log = logger("api");
+
+/**
+ * Run a change nobody awaits, and say when it fails.
+ *
+ * Pin Studio's controls and buttons, and the config sheet's switch, fire a write and move
+ * on. One that rejected — the pin deleted under the gesture by another GM or by Ctrl+Z, an
+ * update core refused — surfaced only as "Uncaught (in promise)" in the console, and the
+ * render meant to follow it never ran, so the window went on showing the change as made.
+ * The failure is logged and the GM told, and `after` runs either way.
+ */
+export function fireAndReport(task: unknown, after?: () => unknown): void {
+  void Promise.resolve(task)
+    .catch((error: unknown) => {
+      log.warn("a change could not be saved", error);
+      notify({ key: "DP.notice.writeFailed" }, "error");
+    })
+    .finally(() => void after?.());
+}
 
 // ---------------------------------------------------------------------------
 // Sources
@@ -285,7 +303,7 @@ export interface PinPlacement {
  * the note in `pin-schema.ts`.
  */
 export async function pinAt(scene: any, source: DpSource, at: PinPlacement): Promise<any> {
-  if (!isGM() || !scene) return null;
+  if (!isGM() || !scene || refused(source)) return null;
 
   const mode = at.mode ?? settings.get("defaultMode");
   const grid = scene.grid?.size ?? 100;
@@ -340,6 +358,21 @@ export async function pinAt(scene: any, source: DpSource, at: PinPlacement): Pro
     warnIfPlayersCannotRead(source);
   }
   return anchor;
+}
+
+/**
+ * D3 at every door: an item an actor owns, or a token's own actor, is refused to an API
+ * caller as its drop, its header and the picker refuse it — with the same notice, and
+ * nothing written. Their ownership is their parent's, so no grant could follow, and a card
+ * of an owned item was drawn all the same.
+ */
+function refused(source: DpSource): boolean {
+  if (source?.kind !== "document") return false;
+  const name = parseSourceUuid(source.uuid)?.documentName;
+  const outcome = name ? adapterFor(name)?.fromDrop({ type: name, uuid: source.uuid }) : null;
+  if (!isRefusal(outcome)) return false;
+  notify({ key: outcome.refused }, "info");
+  return true;
 }
 
 /** New pins land at the end of the reveal order, which is where a GM expects them. */
@@ -598,9 +631,9 @@ export async function showToAudience(anchorDoc: any): Promise<void> {
     recipients = readers;
   }
 
-  // The namespaced class first: reading the bare global logs a compatibility warning.
-  const Journal =
-    (globalThis as any).foundry?.documents?.collections?.Journal ?? (globalThis as any).Journal;
+  // The namespaced class only: the bare global `Journal` is deprecated since v13 and goes
+  // in v15 (TYPES client.d.mts:2168-2172), and reading it logs a compatibility warning.
+  const Journal = ns("documents.collections.Journal");
   if (!Journal?.show) {
     notify({ key: "DP.notice.showUnavailable" }, "warn");
     return;
@@ -1075,7 +1108,7 @@ export async function unpin(anchorDoc: any): Promise<void> {
  * is still showing them.
  */
 export async function retarget(anchorDoc: any, source: DpSource): Promise<boolean> {
-  if (!isGM() || !anchorDoc) return false;
+  if (!isGM() || !anchorDoc || refused(source)) return false;
 
   const before = readPin(anchorDoc);
   if (!before) return false;
@@ -1129,7 +1162,7 @@ export async function retarget(anchorDoc: any, source: DpSource): Promise<boolea
 
 /** Adopt an existing tile as a pin — the one-click path from the Tile config sheet. */
 export async function adoptTile(tileDoc: any, source: DpSource): Promise<void> {
-  if (!isGM() || !tileDoc) return;
+  if (!isGM() || !tileDoc || refused(source)) return;
   const pin: DpPinFlags = {
     ...defaultPin(),
     // A tile big enough to read is obviously a prop; anything smaller takes the world's

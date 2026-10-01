@@ -14,6 +14,7 @@ import {
   dataModel,
   fakeActor,
   fakeItem,
+  fakeJournal,
   fakeTile,
   installSources,
   installWorld,
@@ -40,9 +41,11 @@ let world: ReturnType<typeof installWorld>;
 const registered = new Map<string, ((...args: any[]) => unknown)[]>();
 
 /** The world, then `main.ts`, with every handler it registers recorded by name. */
-async function boot(options: { isGM?: boolean; tiles?: any[]; actors?: any[] } = {}) {
+async function boot(
+  options: { isGM?: boolean; tiles?: any[]; actors?: any[]; journals?: any[] } = {}
+) {
   world = installWorld({ isGM: options.isGM ?? true, tiles: options.tiles ?? [] });
-  installSources(world, { actors: options.actors ?? [] });
+  installSources(world, { actors: options.actors ?? [], journals: options.journals ?? [] });
   registered.clear();
   (globalThis as any).Hooks.on = (name: string, fn: (...args: any[]) => unknown) =>
     registered.set(name, [...(registered.get(name) ?? []), fn]);
@@ -88,6 +91,25 @@ describe("an actor's or an item's sheet header", () => {
 
     expect(controls).toHaveLength(armed ? 1 : 0);
     expect(vi.mocked(armAt).mock.calls.map((call) => call[0].uuid)).toEqual(armed ? [armed] : []);
+  });
+});
+
+/**
+ * A v14 directory fires `get${documentName}ContextOptions`; the 14.366 types name the
+ * journal sidebar's `getJournalContextOptions`, which was not registered. Both are, and the
+ * entry is added once however many fire.
+ */
+describe("Pin to scene in the journal sidebar's menu", () => {
+  it.each([
+    ["the types' name for it", ["getJournalContextOptions"]],
+    ["both names, for one menu", ["getJournalEntryContextOptions", "getJournalContextOptions"]],
+  ])("is there once, when %s fires", async (_what, hooks) => {
+    await boot();
+    const options: any[] = [];
+
+    for (const hook of hooks) fire(hook, { collection: world.game.journal }, options);
+
+    expect(options.map((option) => option.label)).toEqual(["DP.controls.pinThis"]);
   });
 });
 
@@ -137,6 +159,12 @@ describe("an edit to an actor with a poster on the map", () => {
       { ...nothing, redrawn: true, rebased: true },
     ],
     ["to an item it owns leaves it", "updateItem", { name: "Rusty Knife" }, nothing],
+    [
+      "to a journal no pin on the scene shows leaves it",
+      "updateJournalEntry",
+      { pages: [] },
+      nothing,
+    ],
   ])("%s", async (_what, hook, change, expected) => {
     const tile = fakeTile({ id: "t1", uuid: "Scene.s1.Tile.t1" });
     tile.flags = {
@@ -149,7 +177,8 @@ describe("an edit to an actor with a poster on the map", () => {
     };
     const actor = jack();
     const knife = fakeItem({ id: "knife", name: "Knife", parent: actor });
-    await boot({ tiles: [tile], actors: [actor] });
+    const ledger = fakeJournal({ id: "ledger", name: "Ledger" });
+    await boot({ tiles: [tile], actors: [actor], journals: [ledger] });
     (globalThis as any).CONFIG.Actor.dataModels.npc = dataModel({
       details: new SchemaField({
         biography: new SchemaField({ value: new HTMLField(), public: new HTMLField() }),
@@ -160,12 +189,80 @@ describe("an edit to an actor with a poster on the map", () => {
     const invalidate = vi.spyOn(propManager(), "invalidate");
     const redraw = vi.spyOn(tile.object.renderFlags, "set");
 
-    fire(hook, hook === "updateItem" ? knife : actor, change, {}, "gm");
+    const doc = { updateActor: actor, updateItem: knife, updateJournalEntry: ledger }[hook];
+    fire(hook, doc, change, {}, "gm");
 
     expect({
-      redrawn: invalidate.mock.calls.some(([uuid]) => uuid === "Actor.jack"),
+      redrawn: invalidate.mock.calls.length > 0,
       renamed: redraw.mock.calls.length > 0,
       rebased: vi.mocked(onSourceOwnershipEdited).mock.calls.length > 0,
     }).toEqual(expected);
+  });
+});
+
+/**
+ * Only the update hooks were wired. A deleted journal, page or actor reached no handler, so
+ * every client went on drawing it until the canvas was next drawn; and a page added to a
+ * journal a pin shows whole never appeared.
+ */
+describe("a pin's source created or deleted", () => {
+  /** A prop on `uuid`, revealed, on the viewed scene. */
+  const propOn = (uuid: string) => {
+    const tile = fakeTile({ id: "t1", uuid: "Scene.s1.Tile.t1", width: 400, height: 560 });
+    tile.flags = {
+      [MODULE_ID]: {
+        [FLAGS.PIN]: {
+          ...defaultPin(),
+          mode: "prop",
+          source: { ...defaultPin().source, uuid, field: null },
+          audience: { ...defaultPin().audience, kind: "everyone" },
+        },
+      },
+    };
+    return tile;
+  };
+  const ledger = () =>
+    fakeJournal({ id: "ledger", name: "Ledger", pages: [{ id: "debts", name: "Debts" }] });
+
+  it.each([
+    ["the actor a poster shows, deleted", "deleteActor", "Actor.jack", "Actor.jack"],
+    [
+      "a page of the journal a pin shows whole, deleted",
+      "deleteJournalEntryPage",
+      "JournalEntry.ledger",
+      "JournalEntry.ledger.JournalEntryPage.debts",
+    ],
+    [
+      "a page added to that journal",
+      "createJournalEntryPage",
+      "JournalEntry.ledger",
+      "JournalEntry.ledger.JournalEntryPage.debts",
+    ],
+  ])("redraws the pin: %s", async (_what, hook, shown, uuid) => {
+    const journal = ledger();
+    const jack = fakeActor({ id: "jack", name: "Black Jack" });
+    await boot({ tiles: [propOn(shown)], actors: [jack], journals: [journal] });
+    const { propManager } = await import("../src/canvas/PropManager");
+    const invalidate = vi.spyOn(propManager(), "invalidate");
+    const doc = uuid === "Actor.jack" ? jack : journal.pages.get("debts");
+
+    fire(hook, doc, {}, "gm");
+
+    expect(invalidate.mock.calls).toEqual([[uuid]]);
+  });
+
+  it("closes the reader of a journal the GM deletes, and says why", async () => {
+    const journal = ledger();
+    const tile = propOn("JournalEntry.ledger");
+    await boot({ tiles: [tile], journals: [journal] });
+    const { openReader, isReaderOpen } = await import("../src/apps/ReaderOverlay");
+    await openReader(tile);
+    expect(isReaderOpen()).toBe(true);
+
+    world.game.journal.delete("ledger");
+    fire("deleteJournalEntry", journal, {}, "gm");
+
+    expect(isReaderOpen()).toBe(false);
+    expect(world.notifications.map((n) => n.message)).toContain("DP.notice.sourceMissing");
   });
 });

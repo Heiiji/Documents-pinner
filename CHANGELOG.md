@@ -195,6 +195,57 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **The Audience tab said revealing a compendium document "shares the whole journal".** A
   compendium's permissions are per role and pack-wide, so a reveal grants nothing and adds
   nothing to anyone's sidebar, and the tab now says so.
+- **The offer to update older pins came back every session, and a pin from 0.1 stayed
+  *Not interactive* whatever you chose.** Foundry 14 merges what the module writes into a
+  pin with what is already stored, so the four settings 0.2 retired were never removed:
+  the same pins were updated on every load, and one that used to click through snapped
+  back from any *Opening* you picked. A write now removes what it no longer stores; the
+  next load updates those pins one last time.
+- **A pin hidden with Foundry's own controls came back at the next edit — to everyone.**
+  Hiding a pin from the Tiles layer's HUD, the tile's configuration or the Placeables
+  sidebar told Foundry and not the pin: the eye still offered to reveal it, every chip
+  looked empty, and the next slider, label or chip click — even one player's — put it back
+  on the whole table's screen. Those controls now hide a pin as the eye does, remembering
+  who it was for, and show it again to the same players, access and all; a pin pasted
+  hidden is hidden from its players too.
+- **A revealed pin brought back with Ctrl+Z would not open for its players.** Deleting it
+  gave back the access it had granted, and the undo restored the pin without it; nothing
+  noticed until its audience next changed. A pin Foundry brings back revealed — an undo, a
+  paste — is granted again.
+- **Pin Studio on a duplicated scene edited the original's pin.** A copied scene keeps its
+  tiles' ids, and the Studio was found by id: opening it for a pin on the copy brought
+  forward the window of its twin on the other scene, where every change then went. Each
+  pin now has its own Studio.
+- **Pin Studio went on offering every control over a pin deleted elsewhere**, from the
+  Pinboard, the Tiles layer, Ctrl+Z or another GM, and each change then failed. It says the
+  pin no longer exists.
+- **A pin on a whole journal showed its players the GM's notes.** It drew the first page
+  ever written, not the first in the journal's order, and never asked that page's own
+  permission. It now shows the first page in the journal's order that is not hidden from
+  the players — the same page on your screen as on theirs — and an empty sheet when every
+  page is; Pin Studio lists the pages in that order too.
+- **A deleted journal or actor stayed on the map, readable, until the scene was drawn
+  again.** Deleting a pin's journal, page or actor reached the module nowhere: every
+  player's screen went on showing it, and a player could go on reading it, while a click
+  said it was missing. The pin now turns to its placeholder at once, an open reader closes
+  and says why, and a page added to a journal pinned whole shows up.
+- **Updating older pins across the world stopped at the first scene Foundry refused, and
+  said nothing.** The scenes after it were never updated and the offer never came back
+  for them. Every scene that can be updated now is, the ones that could not are named,
+  and you are offered them again next session.
+- **A compendium actor with no portrait of its own had no picture in the Pinboard**, even
+  once its poster had loaded and showed its token. The Pinboard now shows the token too.
+- **A macro could pin an item an actor owns, or a token's own actor**, which every other
+  way of pinning refuses. The module API's `pinAt`, `adoptTile` and `retarget` refuse them
+  too now, with the same notice.
+- **A player could be told a wanted man "no longer exists" while he sat in your sidebar.**
+  A player's client may not be sent an actor or item they have no permission to see, and a
+  poster's access starts off, so their card said the document was deleted. It now says the
+  document is not available to them; you still see "no longer exists" when it really is
+  gone.
+- **A change Pin Studio could not save failed in silence**, and the window went on
+  showing it as made. The Studio's controls and buttons, and the tile configuration's
+  *Pin* switch, now say when Foundry refuses a change, and the Studio redraws either way.
 
 ## [0.3.3] — 2026-09-30
 
