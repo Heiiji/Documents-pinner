@@ -143,7 +143,7 @@ export interface SourceAdapter {
 const adapters = new Map<string, SourceAdapter>();
 
 /** Answer for every `documentName` the adapter names. A later registration wins. */
-export function register(adapter: SourceAdapter): void {
+function register(adapter: SourceAdapter): void {
   for (const name of adapter.names) adapters.set(name, adapter);
 }
 

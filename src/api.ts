@@ -83,7 +83,6 @@ export {
   pageChoices,
   pageChoicesFor,
   resolveSource,
-  resolveSourceSync,
   shownSource,
   sourceFromDocument,
   sourceFromDropData,
@@ -467,7 +466,7 @@ export function canUserOpen(anchorDoc: any, userId: string): boolean {
  * and so does a pin set to read in place. One definition, because the opening itself and
  * the badge that predicts it must never disagree.
  */
-export function readsInPlace(pin: DpPinFlags): boolean {
+function readsInPlace(pin: DpPinFlags): boolean {
   return pin.mode === "prop" || pin.interaction.open === "readInPlace";
 }
 

@@ -142,13 +142,11 @@ function writeLedger(
   if (doc?.flags?.[MODULE_ID]?.[FLAGS.GRANTS] !== undefined) data[path] = forcedDeletion() ?? null;
 }
 
-export type { GrantTarget } from "../sources/index";
-
 /**
  * Where one anchor's grant lands, and at what level: the source's adapter says (for a
  * journal, the page the pin shows and LIMITED on its journal beside it — DESIGN A22).
  */
-export function grantTargets(named: any, pageId: string | null, level: number): GrantTarget[] {
+function grantTargets(named: any, pageId: string | null, level: number): GrantTarget[] {
   return adapterForDoc(named).grantTargets(named, pageId, level);
 }
 

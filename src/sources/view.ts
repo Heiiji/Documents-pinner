@@ -97,7 +97,7 @@ export async function resolveSource(pin: DpPinFlags): Promise<any> {
  * always for a compendium source, whatever core's cache happens to hold: see
  * `describeSource`, which this reads.
  */
-export function resolveSourceSync(pin: DpPinFlags): any {
+function resolveSourceSync(pin: DpPinFlags): any {
   if (pin.source.kind !== "document") return null;
   return describeSource(pin.source).shown;
 }
