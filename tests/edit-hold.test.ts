@@ -107,6 +107,38 @@ describe("Hide while I edit", () => {
     expect(banner()!.nextElementSibling?.classList.contains("dp-studio__tabs")).toBe(true);
   });
 
+  // The hide was decided from the audience read before the hold's settings write: a chip
+  // click landing during that round trip was hidden over, and the close restored the
+  // audience from before it (A29).
+  it("keeps a chip click that lands while the hold is being written", async () => {
+    await openStudio();
+    let land!: () => void;
+    const landed = new Promise<void>((resolve) => (land = resolve));
+    const set = world.game.settings.set;
+    world.game.settings.set = async (scope: string, key: string, value: unknown) => {
+      if (key === "editHolds") await landed;
+      return set(scope, key, value);
+    };
+    const api = await import("../src/api");
+
+    const holding = studio.dispatch("holdForEdit");
+    // Ben too: with Ali and Ben the only players, that is everyone.
+    await api.setUserVisible(tile, "ben", true);
+    const clicked = { kind: stored().kind, users: [...stored().users] };
+    expect(clicked.kind).not.toBe("selected");
+    land();
+    await holding;
+    await settle();
+
+    expect(stored()).toMatchObject({ kind: "hidden", restore: clicked });
+    expect(holds()).toEqual([{ anchor: UUID, world: null, restore: clicked }]);
+
+    await studio.close();
+    await vi.waitFor(() => expect(holds()).toEqual([]));
+    expect(stored()).toMatchObject({ ...clicked, restore: null });
+    expect(tile.hidden).toBe(false);
+  });
+
   it("writes the hold, THEN hides the pin, and reveals it again to the same players on close", async () => {
     await openStudio();
     await studio.dispatch("holdForEdit");
