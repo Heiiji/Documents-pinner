@@ -50,9 +50,12 @@ export async function importForPin(uuid: string): Promise<DpSource | null> {
 
   try {
     const folder = await importFolder(documentName);
+    // Nested, not a dotted key: core applies this through a clone of the pack document
+    // (TYPES `world-collection.d.mts:52-53`), and nothing here should rest on that clone
+    // expanding paths the way an update does.
     const copy = await collection.importFromCompendium(pack, parsed.rootId, {
       ...(folder?.id ? { folder: folder.id } : {}),
-      [`flags.${MODULE_ID}.importedFrom`]: uuid,
+      flags: { [MODULE_ID]: { importedFrom: uuid } },
     });
     if (typeof copy?.uuid !== "string") return failed();
     notify(

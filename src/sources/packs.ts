@@ -81,9 +81,11 @@ export function packLevelFor(ownership: unknown, role: number): number {
 /**
  * Whether this user can open documents from this pack: OBSERVER for their role.
  *
- * A GM always can. Otherwise the pack is asked — `testUserPermission`, then
- * `getUserLevel`, then its ownership record read by hand — and an answer that cannot be
- * had is "no": the conservative mistake costs a warning, the other one a blank card.
+ * A GM always can: a pack's ownership schema fixes the GAMEMASTER role at OWNER, with no
+ * other choice (TYPES `compendium-collection.d.mts:393`). Otherwise the pack is asked —
+ * `testUserPermission`, then `getUserLevel`, then its ownership record read by hand — and
+ * an answer that cannot be had is "no": the conservative mistake costs a warning, the
+ * other one a blank card.
  */
 export function packReadableBy(pack: any, user: any): boolean {
   if (!pack || !user) return false;
