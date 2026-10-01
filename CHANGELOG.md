@@ -209,6 +209,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **A macro could pin an item an actor owns, or a token's own actor**, which every other
   way of pinning refuses. The module API's `pinAt`, `adoptTile` and `retarget` refuse them
   too now, with the same notice.
+- **A player could be told a wanted man "no longer exists" while he sat in your sidebar.**
+  A player's client may not be sent an actor or item they have no permission to see, and a
+  poster's access starts off, so their card said the document was deleted. It now says the
+  document is not available to them; you still see "no longer exists" when it really is
+  gone.
 
 ## [0.3.3] — 2026-09-30
 

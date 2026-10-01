@@ -16,7 +16,7 @@
  * on the map is indistinguishable from a rendering bug.
  */
 
-import { g } from "../fvtt";
+import { g, isGM } from "../fvtt";
 import { t } from "../i18n";
 import { escapeHtml } from "../html";
 import * as api from "../api";
@@ -32,6 +32,7 @@ import { measureCardHeight } from "./measure";
 import { cardMetrics } from "../data/pin-schema";
 import { adapterForDoc } from "../sources/index";
 import { packLockedHere } from "../sources/packs";
+import { isPackUuid, parseSourceUuid } from "../sources/uuid";
 import type { DpPinFlags } from "../types/dp";
 
 export interface ResolvedCard {
@@ -43,16 +44,19 @@ export interface ResolvedCard {
   contentHash: string;
   missing: boolean;
   /**
-   * Why a placeholder is one: the document is gone, or it is in a compendium this
-   * client's role cannot read. Absent on a card that drew its source.
+   * Why a placeholder is one: the document is gone, it is in a compendium this client's
+   * role cannot read, or it is a world actor or item this player's client does not hold.
+   * Absent on a card that drew its source.
    */
-  reason?: "missing" | "packLocked";
+  reason?: Reason;
   /**
    * The height at which the whole content fits at this width, type size and margin —
    * what "fit to content" writes — or `null` when it cannot be measured.
    */
   naturalHeight: number | null;
 }
+
+type Reason = "missing" | "packLocked" | "unavailable";
 
 export interface ResolveOptions {
   /** Which rung this is being drawn for. Decides the effect's strength. */
@@ -124,7 +128,7 @@ export async function resolveCard(
   // read the pack gets a placeholder that says so, and no load is attempted (R2).
   if (packLockedHere(pin.source.uuid)) return placeholder(common, "packLocked");
   const source = await api.resolveSource(pin);
-  if (!source) return placeholder(common, "missing");
+  if (!source) return placeholder(common, unresolved(pin));
 
   // Dispatched on the document's TYPE first. A journal page's `type` says text, image or
   // PDF; an Actor's or an Item's is a system subtype (`npc`, `weapon`), which read as a
@@ -194,8 +198,29 @@ export async function resolveCard(
   };
 }
 
-function placeholder(common: any, reason: "missing" | "packLocked"): ResolvedCard {
-  const title = t(reason === "packLocked" ? "DP.card.packLocked" : "DP.card.missing");
+/**
+ * Why a document source this client could not find draws a placeholder.
+ *
+ * "No longer exists" is the truth for the GM, whose client holds every world document. A
+ * player's client may not be sent a world actor or item it has no permission to see at all
+ * (unmeasured, probe D1), and actor access starts off (A28): telling that player the
+ * wanted man was deleted, when he is in the GM's sidebar, is a lie. They are told it is not
+ * available to them instead.
+ */
+function unresolved(pin: DpPinFlags): Reason {
+  if (isGM() || isPackUuid(pin.source.uuid)) return "missing";
+  const name = parseSourceUuid(pin.source.uuid)?.documentName;
+  return name === "Actor" || name === "Item" ? "unavailable" : "missing";
+}
+
+const PLACEHOLDER_TITLE: Record<Reason, string> = {
+  missing: "DP.card.missing",
+  packLocked: "DP.card.packLocked",
+  unavailable: "DP.card.unavailable",
+};
+
+function placeholder(common: any, reason: Reason): ResolvedCard {
+  const title = t(PLACEHOLDER_TITLE[reason]);
   return {
     html: cardHtml({ ...common, title, bodyHtml: "", missing: true, showTitle: false }),
     title,

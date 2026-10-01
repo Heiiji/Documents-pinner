@@ -229,6 +229,29 @@ describe("the card of an actor or an item", () => {
   });
 });
 
+/**
+ * A player's client may not hold a world actor it cannot see at all (probe D1), and actor
+ * access starts off: such a player was told the wanted man "no longer exists".
+ */
+describe("a world actor this client cannot find", () => {
+  it.each([
+    ["is not available, for a player", "ali", "unavailable", "DP.card.unavailable"],
+    [
+      "no longer exists, for the GM, who holds every actor",
+      undefined,
+      "missing",
+      "DP.card.missing",
+    ],
+  ])("%s", async (_who, userId, reason, title) => {
+    const tile = pinTile({ uuid: "Actor.jack" });
+    install({ tiles: [tile], userId });
+
+    const { card } = await cardOf(tile);
+
+    expect(card).toMatchObject({ missing: true, reason, title });
+  });
+});
+
 describe("the text an actor's or an item's card shows", () => {
   const actorWith = (system: Record<string, unknown>) => () =>
     jack({ system, img: "portraits/jack.webp" });

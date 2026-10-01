@@ -34,7 +34,7 @@ import {
   stageMatrix,
   tileRect,
 } from "../canvas/transform";
-import { resolveCard } from "../render/ContentResolver";
+import { resolveCard, type ResolvedCard } from "../render/ContentResolver";
 import { propManager } from "../canvas/PropManager";
 import { describeSource } from "../sources/describe";
 import { leave, mount, write } from "./OverlayRoot";
@@ -237,10 +237,7 @@ export async function openReader(tileDoc: any): Promise<void> {
   // The refusal belongs to a source that is genuinely gone, and that one says so — or to
   // one in a compendium this player's role cannot open, which says that instead.
   if (card.missing) {
-    notify(
-      { key: card.reason === "packLocked" ? "DP.notice.packLocked" : "DP.notice.sourceMissing" },
-      "warn"
-    );
+    notify({ key: REFUSAL[card.reason ?? "missing"] }, "warn");
     return;
   }
 
@@ -277,6 +274,13 @@ export async function openReader(tileDoc: any): Promise<void> {
   element.focus({ preventScroll: true });
   Hooks.callAll(`${MODULE_ID}.readerOpened`, tileDoc);
 }
+
+/** What a reader that cannot open says, by why its card is a placeholder. */
+const REFUSAL: Record<NonNullable<ResolvedCard["reason"]>, string> = {
+  missing: "DP.notice.sourceMissing",
+  packLocked: "DP.notice.packLocked",
+  unavailable: "DP.notice.sourceUnavailable",
+};
 
 export function closeReader(): void {
   // Supersede any open still in flight, so it cannot mount after this.
