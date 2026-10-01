@@ -91,7 +91,7 @@ export function enqueueAll<T>(anchorIds: readonly string[], task: () => Promise<
   return run;
 }
 
-/** Resolves once every queued write has settled. Used by tests and the ready sweep. */
+/** Resolves once every queued write has settled. A test seam. */
 export async function settled(): Promise<void> {
   await Promise.allSettled([...queues.values()]);
 }

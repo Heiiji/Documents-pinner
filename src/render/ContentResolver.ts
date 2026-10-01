@@ -101,7 +101,7 @@ export async function resolveCard(
     effectStyle: dressed?.style,
     effectAttrs: dressed?.attrs,
     // The pin's own face wins, then the preset's. Read from the preset rather than from
-    // the dressing, which is empty at `off` and at the silhouette rung (K6).
+    // the dressing, which is empty at `off` and at the silhouette rung (DESIGN A26).
     font: pin.display.font ?? preset?.params.type.family ?? null,
   };
 
@@ -125,7 +125,7 @@ export async function resolveCard(
   }
 
   // Never a blank and never a request the server will refuse: a player whose role cannot
-  // read the pack gets a placeholder that says so, and no load is attempted (R2).
+  // read the pack gets a placeholder that says so, and no load is attempted (DESIGN A27).
   if (packLockedHere(pin.source.uuid)) return placeholder(common, "packLocked");
   const source = await api.resolveSource(pin);
   if (!source) return placeholder(common, unresolved(pin));
@@ -203,7 +203,7 @@ export async function resolveCard(
  *
  * "No longer exists" is the truth for the GM, whose client holds every world document. A
  * player's client may not be sent a world actor or item it has no permission to see at all
- * (unmeasured, probe D1), and actor access starts off (A28): telling that player the
+ * (unmeasured, A28's probe D1), and actor access starts off (A28): telling that player the
  * wanted man was deleted, when he is in the GM's sidebar, is a lie. They are told it is not
  * available to them instead.
  */

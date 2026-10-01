@@ -168,7 +168,7 @@ export function resolveUuidSync(uuid: string | null | undefined): any {
  * Every compendium pack this client holds, in `game.packs` order.
  *
  * Empty before `setup`, and only the packs core sends this client: a player's client may
- * not hold a pack hidden from them at all (unverified, probe C2).
+ * not hold a pack hidden from them at all (unverified, DESIGN A27's probe C2).
  */
 export function packs(): any[] {
   const all = g()?.packs;

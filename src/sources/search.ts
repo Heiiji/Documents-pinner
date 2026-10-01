@@ -10,7 +10,7 @@
  * and does not want to remember which journal they filed it in — so a journal's pages are
  * listed beside it with the journal shown as context, an actor or an item with its type.
  * Only top-level documents are listed: an item an actor owns, a token's actor, belongs
- * to its owner and cannot be pinned on its own (D3).
+ * to its owner and cannot be pinned on its own (DESIGN A28, D3).
  */
 
 import { cfg, g, packs, worldCollection } from "../fvtt";

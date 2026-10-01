@@ -160,10 +160,10 @@ export function portraitAdapter(kind: PortraitKind): SourceAdapter {
     isSource,
 
     /**
-     * P5. An actor's update hook fires on every hit-point change in combat, and each one
-     * that passed would re-enrich and re-rasterise a wanted poster. So: only for a pin on
-     * the scene being viewed, and only when the change reaches its name, its pictures, its
-     * ownership, this module's flags, or the very field the pin shows.
+     * DESIGN A28, P5. An actor's update hook fires on every hit-point change in combat, and
+     * each one that passed would re-enrich and re-rasterise a wanted poster. So: only for a
+     * pin on the scene being viewed, and only when the change reaches its name, its
+     * pictures, its ownership, this module's flags, or the very field the pin shows.
      */
     redrawsOn(doc, change) {
       if (!isSource(doc) || !change || typeof change !== "object") return false;

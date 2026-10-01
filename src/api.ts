@@ -162,8 +162,9 @@ const pagesOf = (named: any): PageChoice[] => adapterForDoc(named).pages(named);
  *
  * Empty when there is no choice to make: an image source, a pin whose uuid already names
  * one page (`doc.pages` is undefined on a JournalEntryPage, so that falls out with no
- * type check), a source that no longer resolves, or a single-page journal — which is one
- * thing to a GM, the same rule `pickerEntries` applies in the picker.
+ * type check), a source that no longer resolves, or a single-page journal, where there is
+ * nothing to choose. (The picker's rule differs: it lists such a journal once only when its
+ * page shares its name.)
  *
  * Reads the NAMED document rather than `resolveSourceSync`'s: that one already returns
  * the chosen page, which is the wrong document to enumerate siblings of. World sources
@@ -361,10 +362,10 @@ export async function pinAt(scene: any, source: DpSource, at: PinPlacement): Pro
 }
 
 /**
- * D3 at every door: an item an actor owns, or a token's own actor, is refused to an API
- * caller as its drop, its header and the picker refuse it — with the same notice, and
- * nothing written. Their ownership is their parent's, so no grant could follow, and a card
- * of an owned item was drawn all the same.
+ * DESIGN A28's D3 at every door: an item an actor owns, or a token's own actor, is refused
+ * to an API caller as its drop, its header and the picker refuse it — with the same notice,
+ * and nothing written. Their ownership is their parent's, so no grant could follow, and a
+ * card of an owned item was drawn all the same.
  */
 function refused(source: DpSource): boolean {
   if (source?.kind !== "document") return false;
@@ -820,11 +821,11 @@ export function flash(anchorDoc: any): void {
  * second spotlight on a revealed pin points at it again and hides nothing — and it lands
  * before anything points: a player pulled to the spot finds the pin already there.
  *
- * Every view is pulled only for a pin for everyone (K1). A core ping reaches every client
- * whoever the pin is for, so pulling the table to the rogue's note walks everyone else to
- * where it lies. For a narrower audience the GM's own screen is pointed at, and they are
- * told, once, why nobody's view moved. A pin on a scene the GM is not viewing is revealed
- * and not pointed at: its coordinates here would point at the wrong map.
+ * Every view is pulled only for a pin for everyone (DESIGN A25). A core ping reaches every
+ * client whoever the pin is for, so pulling the table to the rogue's note walks everyone
+ * else to where it lies. For a narrower audience the GM's own screen is pointed at, and
+ * they are told, once, why nobody's view moved. A pin on a scene the GM is not viewing is
+ * revealed and not pointed at: its coordinates here would point at the wrong map.
  */
 export async function spotlight(anchorDoc: any): Promise<{ revealed: boolean; pulled: boolean }> {
   const outcome = { revealed: false, pulled: false };
@@ -1130,9 +1131,10 @@ export async function retarget(anchorDoc: any, source: DpSource): Promise<boolea
   // part of the pin, like its size and its effect.
   const keepIcon = before.source.kind === "document" && source.kind === "document";
   // A pin that comes to show an actor starts with access off, as one placed on it does
-  // (D2): a journal shared with access on, retargeted onto an NPC, would otherwise list
-  // the NPC in every sidebar its audience reaches at the very next sync. Switching off
-  // never widens anything. A pin already on an actor keeps what the GM chose for it.
+  // (DESIGN A28, D2): a journal shared with access on, retargeted onto an NPC, would
+  // otherwise list the NPC in every sidebar its audience reaches at the very next sync.
+  // Switching off never widens anything. A pin already on an actor keeps what the GM chose
+  // for it.
   const syncOff =
     before.audience.ownershipSync.enabled &&
     adapterOf(before.source).syncOnCreate &&
