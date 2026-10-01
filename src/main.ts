@@ -89,10 +89,11 @@ Hooks.once("ready", () => {
         `${settings.get("rendering") === "dom" ? " (chosen in settings)" : ""}`
     );
     // AND recompute. Core awaits the canvas before `ready`, so `canvasReady` always runs
-    // its first LOD pass before this answer exists. That pass now draws text props as DOM
-    // cards while the answer is `null` (`PropManager`'s policy); a `true` moves them to
-    // the canvas, and before the policy read `null` as DOM, a fresh load showed zero
-    // cards until something unrelated scheduled another pass.
+    // its first LOD pass before this answer exists. That pass draws text props as DOM
+    // cards while the answer is `null` (`PropManager`'s policy), and this one moves them
+    // to the canvas if the answer is `true`. (While the policy read `null` as "canvas",
+    // the first pass held every text prop on an invisible mesh, and a fresh load showed
+    // no card at all until this recompute.)
     propManager().refresh();
     // The rasteriser's fonts, encoded as data URIs, are for the canvas path only — and
     // the probe decodes from a `blob:` URL, which taints, so it answers `false` wherever
@@ -143,8 +144,8 @@ Hooks.on("canvasTearDown", () => {
 Hooks.on("canvasPan", () => {
   // Cheap and idempotent, and both dirty-checked: the overlay compares the stage's six
   // matrix components and writes only when they moved — at once, inside the ticker's
-  // frame — and the reader re-places itself only when its rectangle changed, which in
-  // scene space a pan never does. This hook fires every tick of an animated pan.
+  // frame — and the reader writes only when its scene-space rectangle changed, which a
+  // pan never does. This hook fires every tick of an animated pan.
   syncTransform();
   repositionReader();
 });
