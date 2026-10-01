@@ -8,10 +8,10 @@
  *
  * The interaction model is the point:
  *
- * - **No Save button.** `submitOnChange` with `closeOnSubmit: false` means every change
- *   lands on the canvas as it is made. A GM adjusting an effect against a specific map
- *   is asking "does this read *here*", and a dialog that answers only after you commit
- *   and reopen cannot answer it at all.
+ * - **No Save button.** One `change` listener writes each control as it commits, so every
+ *   change lands on the canvas as it is made. A GM adjusting an effect against a specific
+ *   map is asking "does this read *here*", and a dialog that answers only after you
+ *   commit and reopen cannot answer it at all.
  * - **Three tabs, one question each.** Content is what it says, Appearance is what it
  *   looks like, Audience is who gets it. Nothing that belongs to one appears in another.
  * - **The audience tab is the same chip widget as the HUD and the Pinboard.** A GM
@@ -111,7 +111,11 @@ export function definePinStudio(): any {
       // Tall enough for the Appearance tab's gallery to show without a scroll on a
       // laptop; the window is resizable for anything narrower.
       position: { width: 500, height: 700 },
-      form: { submitOnChange: true, closeOnSubmit: false },
+      // A `<form>`, so core counts a focused button here as a field (`hasFocus`, foundry.mjs
+      // 133689) and its keys stay the Studio's. No `submitOnChange`: with no handler it
+      // did nothing but build a `FormDataExtended` of the whole form on every change
+      // (`_onSubmitForm`, 32124); the change listener below is what writes.
+      form: { closeOnSubmit: false },
       actions: {
         setTab: onSetTab,
         browseIcon: onBrowseIcon,
@@ -330,8 +334,8 @@ export function definePinStudio(): any {
     }
 
     #wire(root: HTMLElement) {
-      // One listener for every control: `submitOnChange` fires on the form, and going
-      // through it keeps the whole form on one code path rather than one per field.
+      // One listener for every control: each `change` bubbles here, and going through it
+      // keeps the whole form on one code path rather than one per field.
       root.addEventListener("change", (event) => {
         const target = event.target as HTMLInputElement;
         if (!target?.name) return;

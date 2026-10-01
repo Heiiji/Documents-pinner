@@ -261,6 +261,13 @@ export function definePinHUD(): any {
       id: "dp-pin-hud",
       classes: ["dp-scope", "dp-hud-app"],
       window: { frame: false, positioned: true },
+      // Still a `<form>`, from the base: that is what makes core count a focused HUD
+      // button as a field (`hasFocus`, foundry.mjs 133689), so a key on one is not also a
+      // core binding. Not its submit-on-change: every slider and checkbox commit ran core's
+      // `_onSubmit` (98041), which updated the tile with the named fields that changed —
+      // none here, so `update({})` — and every module's `preUpdateTile` with it. Each
+      // control writes through its own verb.
+      form: { ...(Base.DEFAULT_OPTIONS?.form ?? {}), submitOnChange: false },
       actions: {
         toggleVisibility: onToggleVisibility,
         togglePalette: onTogglePalette,
