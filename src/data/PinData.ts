@@ -105,7 +105,10 @@ export function readPin(doc: any): DpPinFlags | null {
   return validatePin(raw).pin;
 }
 
-/** As `readPin`, but keeping the notices, for the surfaces that report them to a GM. */
+/**
+ * As `readPin`, but keeping the normaliser's notices. No surface reports them to a GM yet;
+ * the tests read them to prove a payload reads clean.
+ */
 export function readPinResult(doc: any): PinValidationResult | null {
   const raw = rawPinFlag(doc);
   if (raw === null || raw === undefined) return null;
