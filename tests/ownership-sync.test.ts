@@ -382,6 +382,119 @@ describe("reconcile", () => {
 });
 
 /**
+ * The sweep asked whether a holder's anchor still pointed at the document, never whether it
+ * still WANTED the key (DESIGN A29). A reload in the middle of "Hide all" — the tiles written
+ * hidden, their releases not yet landed — left the players holding OBSERVER on documents
+ * behind hidden pins, and every sweep after kept the grants, their anchors being alive and
+ * pointing here. Each case below is a pin written without the sync that should follow it.
+ */
+describe("reconcile, for a pin that no longer asks for its grant", () => {
+  let world: ReturnType<typeof installWorld>;
+  const said = (key: string) => world.notifications.filter((n) => n.message === key).length;
+
+  beforeEach(async () => {
+    world = installWorld({ isGM: true, tiles: [anchorA, anchorB] });
+    (globalThis as any).foundry.utils.fromUuid = async (uuid: string) =>
+      uuid === "JournalEntry.j" ? journal : null;
+    (globalThis as any).game.journal.contents = [journal];
+  });
+
+  it("takes back the grant of a pin hidden while its release was interrupted", async () => {
+    const sync = await import("../src/data/ownership-sync");
+    await sync.syncAnchor(anchorA);
+    setAudience(anchorA, "hidden", []);
+    anchorA.hidden = true;
+
+    expect(await sync.reconcile()).toBe(0);
+
+    expect(ledger()).toBeUndefined();
+    expect(journal.ownership).toEqual({ default: 0 });
+    expect(said("DP.notice.grantsRevoked")).toBe(1);
+    expect(said("DP.notice.ledgerRepaired")).toBe(0);
+  });
+
+  it("releases every grant of a pin whose access was switched off", async () => {
+    const sync = await import("../src/data/ownership-sync");
+    await sync.syncAnchor(anchorA);
+    anchorA.flags["documents-pinner"].pin.audience.ownershipSync.enabled = false;
+
+    await sync.reconcile();
+
+    expect(ledger()).toBeUndefined();
+    expect(journal.ownership).toEqual({ default: 0 });
+  });
+
+  it("moves an everyone grant to the one player a narrowed pin is now for", async () => {
+    const sync = await import("../src/data/ownership-sync");
+    setAudience(anchorA, "everyone", []);
+    await sync.syncAnchor(anchorA);
+    expect(journal.ownership.default).toBe(2);
+    setAudience(anchorA, "selected", ["ali"]);
+
+    await sync.reconcile();
+
+    expect(ledger().holders).toEqual({ ali: { "Scene.s1.Tile.a": 2 } });
+    expect(journal.ownership).toEqual({ default: 0, ali: 2 });
+  });
+
+  it("restores the baseline and leaves a GM's own edit where it is", async () => {
+    const sync = await import("../src/data/ownership-sync");
+    // Ben could already see the journal before any pin; the GM then raised Ali by hand.
+    journal.ownership = { default: 0, ben: 1 };
+    setAudience(anchorA, "selected", ["ali", "ben"]);
+    await sync.syncAnchor(anchorA);
+    journal.ownership.ali = 3;
+    await sync.onSourceOwnershipEdited(journal, { ownership: { ali: 3 } }, {}, "gm");
+    setAudience(anchorA, "hidden", []);
+
+    await sync.reconcile();
+
+    expect(journal.ownership).toEqual({ default: 0, ali: 3, ben: 1 });
+    expect(ledger()).toBeUndefined();
+  });
+
+  it("takes back the grant of a player who has left the world", async () => {
+    const sync = await import("../src/data/ownership-sync");
+    setAudience(anchorA, "selected", ["ali", "ben"]);
+    await sync.syncAnchor(anchorA);
+    const users = world.game.users.contents;
+    users.splice(
+      users.findIndex((u: any) => u.id === "ben"),
+      1
+    );
+
+    await sync.reconcile();
+
+    expect(ledger().holders).toEqual({ ali: { "Scene.s1.Tile.a": 2 } });
+    expect(journal.ownership).toEqual({ default: 0, ali: 2 });
+  });
+
+  it("leaves alone a pin that still wants what it holds", async () => {
+    const sync = await import("../src/data/ownership-sync");
+    await sync.syncAnchor(anchorA);
+    const writes = journal.updates.length;
+
+    expect(await sync.reconcile()).toBe(0);
+
+    expect(journal.updates.length).toBe(writes);
+    expect(world.notifications).toEqual([]);
+  });
+
+  it("finds nothing to fight for a compendium pin, whose access is the pack's", async () => {
+    const sync = await import("../src/data/ownership-sync");
+    const packPin = pinned("c", "everyone", []);
+    packPin.flags["documents-pinner"].pin.source.uuid = "Compendium.world.lore.JournalEntry.x";
+    (globalThis as any).game.scenes.contents[0].tiles.contents = [packPin];
+    await sync.syncAnchor(packPin);
+
+    expect(await sync.reconcile()).toBe(0);
+
+    expect(journal.updates).toEqual([]);
+    expect(world.notifications).toEqual([]);
+  });
+});
+
+/**
  * v14 corrupted every ledger it stored: the anchor-UUID keys under `holders` were expanded
  * into nesting, so a release never found its anchor and the player kept the permission.
  * A world upgraded to 0.3.2 already holds ledgers in that shape; they must still release.

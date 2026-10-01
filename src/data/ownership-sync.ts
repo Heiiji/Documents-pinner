@@ -449,17 +449,28 @@ export function ownershipChange(
  * holds grants made the old way, and a pin whose audience is never touched again would
  * keep handing out the whole journal forever — so a holder recorded above the level its
  * anchor's target asks for is re-synced, which moves the grant where it belongs.
+ *
+ * And it REVOKES (A29). It used to ask only whether a holder's anchor still pointed here,
+ * never whether the anchor still wanted that key. A reload in the middle of "Hide all" —
+ * the tiles written hidden, their releases not yet landed — left players holding OBSERVER
+ * on documents behind hidden pins, and every sweep after found the holders' anchors alive
+ * and pointing here, and kept them. A holder whose key its anchor no longer asks for
+ * (`wantedKeys`: hidden, access off, a narrower list, a user deleted or made a GM) is now
+ * re-synced too, which releases it with the ledger's own rules: the baseline comes back,
+ * and a GM's hand edit stands (A25: hiding was always meant to release). A compendium pin
+ * holds no ledger, so there is nothing of its to find.
  */
 export async function reconcile(): Promise<number> {
   if (!isPrimaryGM()) return 0;
 
-  // Anchor uuid -> the tile, and the level it may hold on each document it targets. A
-  // live anchor is not enough; what matters is whether it still points at the document
-  // holding the grant. Resolved synchronously: a grant never sits in a compendium, and
-  // loading packs to learn that at `ready` would cost more than the sweep.
+  // Anchor uuid -> the tile, the level it may hold on each document it targets, and the
+  // keys it asks to hold. A live anchor is not enough; what matters is whether it still
+  // points at the document holding the grant, and still wants it. Resolved synchronously:
+  // a grant never sits in a compendium, and loading packs to learn that at `ready` would
+  // cost more than the sweep.
   const anchors = new Map<
     string,
-    { tile: any; source: string | null; levels: Map<string, number> }
+    { tile: any; source: string | null; levels: Map<string, number>; keys: Set<string> }
   >();
   for (const scene of g()?.scenes?.contents ?? []) {
     for (const tile of scene.tiles?.contents ?? []) {
@@ -477,18 +488,20 @@ export async function reconcile(): Promise<number> {
         tile,
         source: pin.source.uuid,
         levels: new Map(targets.map((target) => [target.doc.uuid, target.level])),
+        keys: new Set(wantedKeys(pin)),
       });
     }
   }
 
   let repaired = 0;
   const narrow = new Set<string>();
+  const revoke = new Set<string>();
   for (const source of sourcesWithLedger()) {
     const stored = ledgerOf(source);
     if (!stored) continue;
 
     const orphans = new Set<string>();
-    for (const holders of Object.values(stored.holders ?? {})) {
+    for (const [key, holders] of Object.entries(stored.holders ?? {})) {
       for (const [anchorUuid, level] of Object.entries(holders)) {
         const anchor = anchors.get(anchorUuid);
         // The document the pin names is always its own, as it always was; a page or a
@@ -496,6 +509,8 @@ export async function reconcile(): Promise<number> {
         const target = anchor?.levels.get(source.uuid);
         if (!anchor || (target === undefined && anchor.source !== source.uuid)) {
           orphans.add(anchorUuid);
+        } else if (!anchor.keys.has(key)) {
+          revoke.add(anchorUuid);
         } else if (target !== undefined && level > target) {
           narrow.add(anchorUuid);
         }
@@ -520,12 +535,17 @@ export async function reconcile(): Promise<number> {
     notify({ key: "DP.notice.ledgerRepaired", data: { count: repaired } }, "warn");
   }
 
-  for (const anchorUuid of narrow) {
+  // One sync per anchor, whichever of the two brought it here: a sync grants what the pin
+  // asks for, where it asks for it, and releases the rest.
+  for (const anchorUuid of new Set([...revoke, ...narrow])) {
     const tile = anchors.get(anchorUuid)?.tile;
     if (tile) await syncAnchor(tile);
   }
   if (narrow.size) {
     notify({ key: "DP.notice.grantsNarrowed", data: { count: narrow.size } }, "info");
+  }
+  if (revoke.size) {
+    notify({ key: "DP.notice.grantsRevoked", data: { count: revoke.size } }, "warn");
   }
   return repaired;
 }
