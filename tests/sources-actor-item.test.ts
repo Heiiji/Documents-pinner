@@ -121,6 +121,7 @@ let sources: InstalledSources;
 function install(
   options: {
     tiles?: any[];
+    journals?: any[];
     actors?: any[];
     items?: any[];
     userId?: string;
@@ -135,6 +136,7 @@ function install(
     settings: options.settings,
   });
   sources = installSources(world, {
+    journals: options.journals ?? [],
     actors: options.actors ?? [],
     items: options.items ?? [],
     model: options.model,
@@ -366,6 +368,64 @@ describe("revealing an actor or an item", () => {
     await deletePin(anchor);
     expect(doc.ownership).toEqual({});
     expect(actor.ownership).toEqual({});
+  });
+});
+
+describe("retargeting a pin onto another actor", () => {
+  const rook = () =>
+    fakeActor({
+      id: "rook",
+      name: "Rook",
+      type: "npc",
+      system: {
+        details: {
+          biography: {
+            value: "<p>ROOK GM NOTES: he is the spy.</p>",
+            public: "<p>Wanted on sight.</p>",
+          },
+        },
+      },
+    });
+
+  it.each([
+    [
+      "from an actor whose text was chosen, the choice stays behind",
+      "Actor.jack",
+      { field: "details.biography.value", sync: false },
+      { field: null, synced: false, notices: [], listed: {} },
+    ],
+    [
+      "from an actor the GM opened access on, access stays on",
+      "Actor.jack",
+      { field: null, sync: true },
+      { field: null, synced: true, notices: [], listed: { default: 1 } },
+    ],
+  ])("%s", async (_what, from, before, expected) => {
+    const tile = pinTile({ uuid: from, field: before.field });
+    pinOf(tile).audience.ownershipSync.enabled = before.sync;
+    const target = rook();
+    install({ tiles: [tile], actors: [jack(), target] });
+    const { retarget } = await import("../src/api");
+
+    // The source the picker, a menu and `/pin` hand over: it names no field.
+    await retarget(tile, {
+      kind: "document",
+      uuid: "Actor.rook",
+      src: null,
+      pageId: null,
+      pdfPage: null,
+      followName: true,
+    });
+    const { body } = await cardOf(tile);
+
+    expect({
+      field: pinOf(tile).source.field,
+      synced: pinOf(tile).audience.ownershipSync.enabled,
+      notices: world.notifications.map((n) => n.message),
+      listed: target.ownership,
+    }).toEqual(expected);
+    expect(body).toContain("Wanted on sight.");
+    expect(body).not.toContain("he is the spy");
   });
 });
 

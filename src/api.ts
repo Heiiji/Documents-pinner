@@ -1089,12 +1089,16 @@ export async function retarget(anchorDoc: any, source: DpSource): Promise<boolea
 
   // The WHOLE source object, never a partial patch: `mergePin` deep-merges, so omitting
   // `pageId` would leave a page id of the OLD journal pointing into the new one. The
-  // texture follows only when the KIND changes: from one document to another, the icon
-  // the GM chose for this pin is part of the pin, like its size and its effect.
+  // same for `field`, which a source built by the picker, a menu or `/pin` does not name:
+  // left out, the text the GM chose for one actor would be read off the next — whatever
+  // that path holds there, a private biography included — and the automatic choice,
+  // which never picks GM text, would never be asked. The texture follows only when the
+  // KIND changes: from one document to another, the icon the GM chose for this pin is
+  // part of the pin, like its size and its effect.
   const keepIcon = before.source.kind === "document" && source.kind === "document";
   await store.update(
     anchorDoc,
-    { source },
+    { source: { ...source, field: source.field ?? null } },
     keepIcon ? {} : { "texture.src": anchorTexture(source) }
   );
 
