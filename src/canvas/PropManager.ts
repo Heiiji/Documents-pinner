@@ -183,6 +183,17 @@ class Manager {
   #globalDemotions = 0;
   /** What each user preset said when the props last drew from it. See `onSettingChanged`. */
   #presets = presetSnapshot();
+  /**
+   * The alpha each prop's mesh was last sent towards, by tile id.
+   *
+   * `#writeMeshAlpha` decided "unchanged" against the mesh's CURRENT alpha, which in the
+   * middle of an animation is wherever the animation has got to. So every later
+   * `applyAlpha` — the next texture bind, any token moving — found a running reveal
+   * changed and replaced it, under the one name all three alpha animations share, with a
+   * 120 ms ease to the very value it was already heading for: a one-second reveal cut to a
+   * blink. Forgotten with the record.
+   */
+  #alphaTargets = new Map<string, number>();
 
   #isPdf(pin: DpPinFlags): boolean {
     return isPdfPin(pin);
@@ -221,6 +232,7 @@ class Manager {
 
     for (const record of this.#records.values()) this.#restore(record);
     this.#records.clear();
+    this.#alphaTargets.clear();
     this.#cache.clear();
     this.#queue = [];
     this.#failedKeys.clear();
@@ -259,6 +271,7 @@ class Manager {
       if (live.has(id)) continue;
       this.#restore(record);
       this.#records.delete(id);
+      this.#alphaTargets.delete(id);
     }
 
     this.#scheduleLod(0);
@@ -412,11 +425,29 @@ class Manager {
    * hold or an arrival, and those belong to `#arrive`; everything in between eases at
    * the state duration under the one alpha channel, so a peek during a reveal simply
    * takes over and the release eases back.
+   *
+   * A mesh already moving towards this same target is left to arrive: a reveal or a
+   * draw-in is not a state change, and replacing it with the state ease cut it short. Only
+   * while it moves — once it has arrived, core's own state refresh may have written over
+   * it, and the comparison with the mesh puts it back. A value written directly stops
+   * whatever was still moving under the name, or its next tick would carry the mesh off
+   * the value just written: a hold during a reveal faded the placeholder in regardless.
    */
   #writeMeshAlpha(tile: any, target: number): void {
     const mesh = tile.mesh;
-    const from = mesh.alpha ?? 1;
+    const name = alphaAnimation(tile.id);
     const CanvasAnimation = ns("canvas.animation.CanvasAnimation");
+    const heading = this.#alphaTargets.get(tile.id);
+    if (
+      heading !== undefined &&
+      Math.abs(heading - target) < 0.01 &&
+      CanvasAnimation?.getAnimation?.(name)
+    ) {
+      return;
+    }
+    this.#alphaTargets.set(tile.id, target);
+
+    const from = mesh.alpha ?? 1;
     if (
       this.#level !== "full" ||
       !CanvasAnimation?.animate ||
@@ -424,12 +455,13 @@ class Manager {
       target <= 0 ||
       Math.abs(from - target) < 0.01
     ) {
+      CanvasAnimation?.terminateAnimation?.(name);
       mesh.alpha = target;
       return;
     }
     void CanvasAnimation.animate([{ parent: mesh, attribute: "alpha", to: target }], {
       duration: MOTION.state,
-      name: `${MODULE_ID}.alpha.${tile.id}`,
+      name,
     });
   }
 
@@ -746,6 +778,7 @@ class Manager {
 
     const duration = Math.max(0, preset?.reveal.durationMs ?? MOTION.reveal);
     mesh.alpha = 0;
+    this.#alphaTargets.set(tile.id, target);
     void CanvasAnimation.animate([{ parent: mesh, attribute: "alpha", to: target }], {
       duration,
       // `materialise` and `fade` were the same linear alpha ramp, so half the shipped
@@ -754,7 +787,7 @@ class Manager {
       // materialise eases in and out and reads as something resolving rather than
       // something being turned up.
       easing: animation === "materialise" ? CanvasAnimation.easeInOutCosine : undefined,
-      name: `${MODULE_ID}.alpha.${tile.id}`,
+      name: alphaAnimation(tile.id),
     });
   }
 
@@ -1031,9 +1064,10 @@ class Manager {
     if (!CanvasAnimation?.animate) return;
 
     mesh.alpha = 0;
+    this.#alphaTargets.set(tile.id, target);
     void CanvasAnimation.animate([{ parent: mesh, attribute: "alpha", to: target }], {
       duration: MOTION.enter,
-      name: `${MODULE_ID}.alpha.${tile.id}`,
+      name: alphaAnimation(tile.id),
     });
   }
 
@@ -1150,6 +1184,14 @@ export function teardownProps(): void {
 /** Each user preset as it stands, by id, to tell which ones a save changed. */
 function presetSnapshot(): Map<string, string> {
   return new Map(userPresets().map((preset) => [preset.id, JSON.stringify(preset)]));
+}
+
+/**
+ * The one name every alpha animation of a prop's mesh runs under — the reveal, the draw-in
+ * and the state ease — so that core's `CanvasAnimation` ends one when the next begins.
+ */
+function alphaAnimation(id: string): string {
+  return `${MODULE_ID}.alpha.${id}`;
 }
 
 /** What the DOM tier needs to play a reveal: the preset's animation and duration. */

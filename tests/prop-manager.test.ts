@@ -458,3 +458,99 @@ describe("peek on the canvas tier", () => {
     expect(tiles[0].object.mesh.alpha).toBe(0);
   });
 });
+
+/**
+ * A CanvasAnimation whose animations stay in flight until they are ended, as core's do over
+ * their duration. The shared fake lands every animation at once, which is exactly what hid
+ * a reveal being cut short: by the time anything looked, it had already arrived.
+ */
+function holdAnimations() {
+  const running = new Map<string, { to: number; duration: number }>();
+  const started: { name: string; to: number; duration: number }[] = [];
+  (globalThis as any).foundry.canvas.animation.CanvasAnimation = {
+    easeInOutCosine: () => 0,
+    // Core ends a running animation of the same name before it starts the next.
+    animate: (attributes: any[], options: any) => {
+      const entry = { to: attributes[0].to, duration: options.duration };
+      running.set(options.name, entry);
+      started.push({ name: options.name, ...entry });
+      return new Promise(() => {});
+    },
+    getAnimation: (name: string) => running.get(name),
+    terminateAnimation: (name: string) => running.delete(name),
+  };
+  return { running, started };
+}
+
+/**
+ * "Unchanged" was measured against the mesh's CURRENT alpha, which mid-animation is wherever
+ * the animation has got to — so the next texture bind or token move replaced a running
+ * reveal, under the shared name, with a 120 ms ease to the value it was already heading for.
+ */
+describe("the canvas tier's alpha, while it is moving", () => {
+  const NAME = "documents-pinner.alpha.t1";
+
+  /** Hide the prop and show it again: a reveal of a texture already in the cache. */
+  async function revealed() {
+    const object = tiles[0].object;
+    object.isVisible = false;
+    manager.refresh();
+    await settle();
+    const held = holdAnimations();
+    object.isVisible = true;
+    manager.refresh();
+    await settle();
+    return { object, ...held };
+  }
+
+  it("lets a reveal run to its end when a later pass asks for the alpha it is heading to", async () => {
+    const { object, running, started } = await revealed();
+    const reveal = running.get(NAME);
+    expect(reveal).toMatchObject({ to: 1 });
+    // Partway through.
+    object.mesh.alpha = 0.4;
+    const before = started.length;
+
+    // A token moved, or another prop's texture landed: nothing about this one changed.
+    manager.applyAlpha();
+
+    expect(started.length).toBe(before);
+    expect(running.get(NAME)).toBe(reveal);
+    expect(object.mesh.alpha).toBe(0.4);
+  });
+
+  it("still eases to a new target in the middle of one: a peek takes over", async () => {
+    const { object, running } = await revealed();
+    object.mesh.alpha = 0.4;
+    manager.setPeeking(true);
+    expect(running.get(NAME)).toMatchObject({ to: 0.15 });
+  });
+
+  it("stops a reveal when the mesh is held for a texture, rather than fading the placeholder in", async () => {
+    const { object, running } = await revealed();
+    object.mesh.alpha = 0.4;
+
+    manager.invalidate("JournalEntry.j");
+    manager.applyAlpha();
+
+    expect(object.mesh.alpha).toBe(0);
+    // Left running, its next tick carried the mesh — and the book now bound to it — up.
+    expect(running.has(NAME)).toBe(false);
+  });
+
+  it("puts the alpha back once nothing is moving it, after core wrote over it", async () => {
+    const { object, running, started } = await revealed();
+    object.mesh.alpha = 0.4;
+    manager.setPeeking(true);
+    // The ease to the peek has arrived...
+    running.delete(NAME);
+    object.mesh.alpha = 0.15;
+    // ...and core's state refresh, on a hover, wrote the placeable's own alpha over it.
+    object.mesh.alpha = 1;
+    const before = started.length;
+
+    manager.applyAlpha();
+
+    expect(started.slice(before)).toEqual([expect.objectContaining({ name: NAME, to: 0.15 })]);
+  });
+});
