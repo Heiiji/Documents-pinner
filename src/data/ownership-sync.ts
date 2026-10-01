@@ -518,15 +518,12 @@ export async function reconcile(): Promise<number> {
     }
     if (!orphans.size) continue;
 
-    // Release one orphan at a time so each sees the state the previous one left.
+    // Release one orphan at a time so each sees the state the previous one left — in the
+    // document's own queue, read inside it, like every other ledger write. The sweep runs
+    // at `ready` beside the edit holds' resume, whose syncs write these same ledgers, and a
+    // release planned from a ledger read before one of their grants landed wrote over it.
     for (const anchorUuid of orphans) {
-      const plan = planRelease(
-        { ...(source.ownership ?? {}) },
-        ledgerOf(source),
-        anchorUuid,
-        keysHeldBy(ledgerOf(source), anchorUuid)
-      );
-      await applyPlan(source, plan);
+      await releaseOn(source, anchorUuid);
       repaired++;
     }
   }

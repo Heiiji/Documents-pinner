@@ -379,6 +379,34 @@ describe("reconcile", () => {
     expect(await sync.reconcile()).toBe(1);
     expect(journal.flags["documents-pinner"]?.grants ?? null).toBeNull();
   });
+
+  it("releases an orphan after a grant still landing on the same journal, not over it", async () => {
+    const sync = await import("../src/data/ownership-sync");
+    anchorA.flags["documents-pinner"].pin.source.uuid = "JournalEntry.other";
+    setAudience(anchorB, "selected", ["ben"]);
+    // Anchor B's grant — an edit hold resumed at `ready` — is slow to land.
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const write = journal.update;
+    let held = false;
+    journal.update = async (...args: [any, any]) => {
+      if (!held) {
+        held = true;
+        await gate;
+      }
+      return write(...args);
+    };
+
+    const granting = sync.syncAnchor(anchorB);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const sweeping = sync.reconcile();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    release();
+    await Promise.all([granting, sweeping]);
+
+    expect(ledger().holders).toEqual({ ben: { "Scene.s1.Tile.b": 2 } });
+    expect(journal.ownership).toEqual({ default: 0, ben: 2 });
+  });
 });
 
 /**
