@@ -22,7 +22,8 @@ let world: ReturnType<typeof installWorld>;
 let peek: { onDown: () => boolean; onUp: () => boolean };
 
 beforeEach(() => {
-  document.body.innerHTML = '<div id="ui"><div id="board"></div></div>';
+  document.body.innerHTML =
+    '<div id="ui"><div id="board"></div><div id="documents-pinner-overlay"></div></div>';
   world = installWorld({ isGM: false });
   registerKeybindings();
   peek = world.game.keybindings.registered.find((r: any) => r.key === "peek").options;
@@ -30,11 +31,26 @@ beforeEach(() => {
 
 afterEach(() => uninstallWorld());
 
-const peeking = () => document.getElementById("ui")!.classList.contains(PEEK_CLASS);
+const peeking = () =>
+  document.getElementById("documents-pinner-overlay")!.classList.contains(PEEK_CLASS);
 const lastPeekHook = () =>
   world.hooks.filter((h) => h.name === "documents-pinner.peek").at(-1)?.args[0];
 
 describe("the peek", () => {
+  /**
+   * The overlay holds the DOM cards and the reader, which is all `.dp-peeking` styles.
+   * The class used to land on `#board`'s parent too, an element of core's.
+   */
+  it("marks the overlay, and nothing of core's", () => {
+    peek.onDown();
+    expect(peeking()).toBe(true);
+    expect(document.getElementById("ui")!.classList.contains(PEEK_CLASS)).toBe(false);
+    expect(document.body.classList.contains(PEEK_CLASS)).toBe(false);
+
+    peek.onUp();
+    expect(peeking()).toBe(false);
+  });
+
   it.each([
     ["the window loses focus", () => window.dispatchEvent(new Event("blur"))],
     ["the tab is hidden", () => document.dispatchEvent(new Event("visibilitychange"))],
