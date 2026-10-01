@@ -12,6 +12,7 @@
  * range selection follows what the GM can see rather than the underlying list.
  */
 
+import { fold } from "../normalise";
 import type { DpMode } from "../types/dp";
 import type { ChipUser } from "./chips";
 
@@ -67,18 +68,8 @@ export interface PinboardQuery {
   level: number | null;
 }
 
-/**
- * Fold case and diacritics so a French GM typing "epee" finds "Épée".
- *
- * Search that only matches the exact accents is search that fails precisely when
- * someone is in a hurry, which is the only time this box gets used.
- */
-export function fold(value: string): string {
-  return String(value ?? "")
-    .normalize("NFD")
-    .replace(/\p{Diacritic}/gu, "")
-    .toLowerCase();
-}
+/** Case and diacritics folded, for search: shared with the picker's (`normalise.ts`). */
+export { fold };
 
 function matchesFilter(row: RowFacts, filter: PinboardFilter): boolean {
   switch (filter) {

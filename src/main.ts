@@ -56,12 +56,20 @@ const log = logger("boot");
 
 declare const Hooks: any;
 
-/** Context-menu hooks core has used across generations. Unknown names never fire. */
+/**
+ * Context-menu hooks core has used across generations, for every directory a pin's source
+ * can be listed in: journals, actors, items — the sidebar's and a compendium window's,
+ * which fire the same family. Unknown names never fire.
+ */
 const CONTEXT_HOOKS = [
   "getJournalEntryContextOptions",
   "getJournalDirectoryEntryContext",
   "getJournalSheetPageContextOptions",
   "getJournalEntryPageContextOptions",
+  "getActorContextOptions",
+  "getActorDirectoryEntryContext",
+  "getItemContextOptions",
+  "getItemDirectoryEntryContext",
 ];
 
 Hooks.once("init", () => {

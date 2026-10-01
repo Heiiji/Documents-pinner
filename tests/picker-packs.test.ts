@@ -12,6 +12,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MODULE_ID } from "../src/const";
 import {
   contentOf,
+  fakeActor,
+  fakeItem,
   fakeJournal,
   fakePack,
   installSources,
@@ -48,7 +50,7 @@ const handouts = (over: Partial<FakePackOptions> = {}) =>
 let world: ReturnType<typeof installWorld>;
 let sources: InstalledSources;
 
-function install(packs: any[], journals: any[] = []) {
+function install(packs: any[], journals: any[] = [], more: { actors?: any[]; items?: any[] } = {}) {
   world = installWorld({
     isGM: true,
     players: [
@@ -59,6 +61,7 @@ function install(packs: any[], journals: any[] = []) {
   sources = installSources(world, {
     packs,
     journals: [fakeJournal({ id: "mayor", name: "Letter to the Mayor" }), ...journals],
+    ...more,
   });
 }
 
@@ -264,6 +267,32 @@ describe("/pin and the compendium window's menu", () => {
       { pageId: "baron" },
       `${ENTRY}.JournalEntryPage.baron`,
     ],
+    [
+      "the actor sidebar",
+      "getActorContextOptions",
+      () => {
+        world.game.actors.set("jack", fakeActor({ id: "jack", name: "Black Jack" }));
+        return { collection: world.game.actors };
+      },
+      entryRow("jack"),
+      "Actor.jack",
+    ],
+    [
+      "an item compendium's window",
+      "getItemContextOptions",
+      () => {
+        const loot = fakePack({
+          id: "world.loot",
+          label: "Loot",
+          documentName: "Item",
+          entries: [{ _id: "lotus", name: "Black Lotus" }],
+        });
+        world.game.packs.set(loot.collection, loot);
+        return { collection: loot };
+      },
+      entryRow("lotus"),
+      "Compendium.world.loot.Item.lotus",
+    ],
   ])("Pin to scene in %s arms the row's document", async (_where, hook, app, dataset, uuid) => {
     install([handouts()]);
     const registered = new Map<string, ((...args: any[]) => void)[]>();
@@ -279,4 +308,93 @@ describe("/pin and the compendium window's menu", () => {
 
     expect(vi.mocked(armAt).mock.calls.map((call) => call[0].uuid)).toEqual([uuid]);
   });
+});
+
+describe("actors and items in the picker and /pin", () => {
+  const bestiary = (ownership?: Record<string, string>) =>
+    fakePack({
+      id: "world.bestiary",
+      label: "Bestiary",
+      documentName: "Actor",
+      ownership,
+      entries: [{ _id: "knight", name: "Black Knight", type: "npc" }],
+    });
+  const loot = (ownership?: Record<string, string>) =>
+    fakePack({
+      id: "world.loot",
+      label: "Loot",
+      documentName: "Item",
+      ownership,
+      entries: [{ _id: "lotus", name: "Black Lotus", type: "loot" }],
+    });
+  const world3 = () =>
+    install(
+      [handouts(), bestiary(), loot()],
+      [fakeJournal({ id: "letter", name: "Black Letter" })],
+      {
+        actors: [fakeActor({ id: "jack", name: "Black Jack", type: "npc" })],
+        items: [
+          fakeItem({ id: "pearl", name: "Black Pearl", type: "loot" }),
+          fakeItem({ id: "knife", name: "Jack's Knife", type: "weapon" }),
+        ],
+      }
+    );
+
+  it("lists one kind of document per chip, the world's before the compendiums'", async () => {
+    world3();
+    const app = await picker("black");
+    const shown: Record<string, string[]> = {};
+    for (const kind of ["JournalEntry", "Actor", "Item", "all"]) {
+      app.dispatch("kind", contentOf(app).querySelector(`[data-dp-kind="${kind}"]`));
+      await flush();
+      shown[kind] = rows(app).map(([name, context]) => `${name} (${context})`);
+    }
+
+    expect(shown).toEqual({
+      JournalEntry: ["Black Letter ()"],
+      Actor: ["Black Jack (npc)", "Black Knight (Bestiary)"],
+      Item: ["Black Pearl (loot)", "Black Lotus (Loot)"],
+      all: [
+        "Black Letter ()",
+        "Black Jack (npc)",
+        "Black Pearl (loot)",
+        "Black Knight (Bestiary)",
+        "Black Lotus (Loot)",
+      ],
+    });
+  });
+
+  it.each([
+    ["a journal, before an actor", "black", "JournalEntry.letter"],
+    ["an actor, before an item", "jack", "Actor.jack"],
+    ["an item, before a compendium", "pearl", "Item.pearl"],
+    ["a compendium's item", "lotus", "Compendium.world.loot.Item.lotus"],
+  ])("/pin takes %s", async (_what, query, uuid) => {
+    world3();
+    const { onChatMessage } = await import("../src/ui/entry-points");
+
+    expect(onChatMessage(null, `/pin ${query}`)).toBe(false);
+
+    expect(vi.mocked(armAt).mock.calls.map((call) => call[0].uuid)).toEqual([uuid]);
+  });
+
+  it.each([
+    ["an actor", () => bestiary(TRUSTED_ONLY), "knight", "Actor", "actors"],
+    ["an item", () => loot(TRUSTED_ONLY), "lotus", "Item", "items"],
+  ])(
+    "imports %s from a compendium a player cannot read into its own type's folder, and pins the copy",
+    async (_what, pack, id, type, collection) => {
+      install([pack()]);
+      const app = await picker(id);
+
+      contentOf(app).querySelector<HTMLElement>(".dp-picker__item--locked")!.click();
+      await flush();
+
+      const copy = world.game[collection].get(`copy-${id}`);
+      const folder = world.game.folders.contents[0];
+      expect(vi.mocked(arm).mock.calls[0][0]).toMatchObject({ uuid: `${type}.copy-${id}` });
+      expect(folder).toMatchObject({ type, flags: { [MODULE_ID]: { imports: true } } });
+      expect(copy.folder).toBe(folder.id);
+    }
+  );
 });
