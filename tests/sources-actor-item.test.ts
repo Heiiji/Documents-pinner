@@ -503,13 +503,22 @@ describe("an actor's icon, for a player", () => {
 });
 
 describe("Show to players on an actor", () => {
-  it("says it shows journals only, and claims nothing", async () => {
+  it("is not offered in the Pinboard's row menu, and where it is asked for says it shows journals only, claiming nothing", async () => {
     const tile = pinTile({ uuid: "Actor.jack" });
     install({ tiles: [tile], actors: [jack()] });
     const { showToAudience } = await import("../src/api");
+    const { definePinboard } = await import("../src/apps/Pinboard");
+    const board = new (definePinboard())();
+    await board.render();
 
+    const content = board.content as HTMLElement;
+    await board.dispatch("rowMenu", content.querySelector<HTMLElement>('[data-action="rowMenu"]')!);
+    await board.render();
+    const acts = [...content.querySelectorAll<HTMLElement>(".dp-menu [data-dp-act]")];
     await showToAudience(tile);
 
+    expect(acts.map((button) => button.dataset.dpAct)).not.toContain("show");
+    expect(acts.length).toBeGreaterThan(0);
     expect(sources.shown).toEqual([]);
     expect(world.notifications.map((n) => n.message)).toEqual(["DP.notice.showJournalsOnly"]);
   });

@@ -46,6 +46,11 @@ export interface PinboardRow {
   thumbnail: string | null;
   /** What the row points at, as a Font Awesome icon, shown when there is no picture. */
   icon?: string;
+  /**
+   * Whether *Show to players* can put it on a player's screen: core shows journals only.
+   * Absent means yes, which is every row before actors and items could be pinned.
+   */
+  canShow?: boolean;
   users: ChipUser[];
 }
 
