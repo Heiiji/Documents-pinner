@@ -251,40 +251,44 @@ export async function migrateWorld(): Promise<number> {
   return total;
 }
 
-/** Scenes other than `active` that still hold un-migrated payloads. */
-export function scenesNeedingMigration(active: any): any[] {
-  return (g()?.scenes?.contents ?? []).filter(
-    (scene: any) => scene?.id !== active?.id && pendingCount(scene) > 0
-  );
+/** Scenes other than `active` that still hold un-migrated payloads, each with its count. */
+export function scenesNeedingMigration(active: any): { scene: any; pending: number }[] {
+  return (g()?.scenes?.contents ?? [])
+    .filter((scene: any) => scene?.id !== active?.id)
+    .map((scene: any) => ({ scene, pending: pendingCount(scene) }))
+    .filter(({ pending }: { pending: number }) => pending > 0);
 }
 
 /**
  * The `canvasReady` entry point.
  *
- * Silent for the scene being drawn; an offer for the rest. The offer is made once per
- * session rather than once per scene change, because a GM flipping between scenes
- * during prep should not be asked the same question every time.
+ * Silent for the scene being drawn; an offer for the rest. The world is looked at once per
+ * session rather than once per scene change, because a GM flipping between scenes during
+ * prep should not be asked the same question every time — and should not pay for it
+ * either. The flag used to be set only when an offer was MADE, so a world with nothing to
+ * migrate, which is every world after its first session on a version, re-planned every pin
+ * of every scene on every scene change, two or three times over. One scan, one plan per
+ * scene, and the count of each comes from that same plan.
  */
-let offeredThisSession = false;
+let checkedThisSession = false;
 
 export async function onCanvasReady(scene: any): Promise<void> {
   if (!isPrimaryGM() || !scene) return;
 
   await migrateScene(scene);
 
-  if (offeredThisSession) return;
-  if (settings.get("schemaVersion") >= SCHEMA_VERSION && !scenesNeedingMigration(scene).length) {
-    return;
-  }
+  if (checkedThisSession) return;
+  checkedThisSession = true;
 
   const outstanding = scenesNeedingMigration(scene);
   if (!outstanding.length) {
-    await settings.set("schemaVersion", SCHEMA_VERSION);
+    if (settings.get("schemaVersion") < SCHEMA_VERSION) {
+      await settings.set("schemaVersion", SCHEMA_VERSION);
+    }
     return;
   }
 
-  offeredThisSession = true;
-  const total = outstanding.reduce((sum, s) => sum + pendingCount(s), 0);
+  const total = outstanding.reduce((sum, { pending }) => sum + pending, 0);
   const confirmed = await confirmSweep(outstanding.length, total);
   if (confirmed) {
     const migrated = await migrateWorld();

@@ -313,3 +313,77 @@ describe("the world sweep", () => {
     expect(world.game.settings.get("documents-pinner", "schemaVersion")).toBeUndefined();
   });
 });
+
+/**
+ * The world is looked at once a session (DESIGN A29). The "asked this session" flag was set
+ * only when an offer was made, so a world with nothing to migrate — every world after its
+ * first session on a version — re-planned every pin of every other scene at every scene
+ * change on the primary GM's client, and the scenes that did need it were planned three
+ * times to be counted once.
+ */
+describe("the canvasReady check", () => {
+  afterEach(() => uninstallWorld());
+
+  /** Another scene, counting how often its pins are planned (each plan reads its tiles). */
+  function countedScene(id: string, pin: unknown) {
+    const tiles = [tile(`${id}-pin`, pin)];
+    const scene = { id, name: id, planned: 0, tiles: {} as any };
+    Object.defineProperty(scene.tiles, "contents", {
+      get() {
+        scene.planned++;
+        return tiles;
+      },
+    });
+    return scene;
+  }
+
+  async function worldWith(other: ReturnType<typeof countedScene>, settings = {}) {
+    vi.resetModules();
+    const world = installWorld({ isGM: true, settings });
+    world.game.scenes.contents = [world.canvas.scene, other];
+    const offers: unknown[] = [];
+    (globalThis as any).foundry.applications.api.DialogV2.confirm = async (options: unknown) => {
+      offers.push(options);
+      return false;
+    };
+    const { onCanvasReady } = await import("../src/data/migrations");
+    return { world, offers, onCanvasReady };
+  }
+
+  it("does not plan the other scenes of a migrated world again at the next scene change", async () => {
+    const other = countedScene("other", cleanPin());
+    const { world, offers, onCanvasReady } = await worldWith(other, {
+      schemaVersion: SCHEMA_VERSION,
+    });
+
+    await onCanvasReady(world.canvas.scene);
+    expect(other.planned).toBe(1);
+
+    await onCanvasReady(world.canvas.scene);
+    await onCanvasReady(world.canvas.scene);
+    expect(other.planned).toBe(1);
+    expect(offers).toEqual([]);
+  });
+
+  it("plans a scene that needs it once to offer it, and asks once a session", async () => {
+    const other = countedScene("other", v1Pin());
+    const { world, offers, onCanvasReady } = await worldWith(other);
+
+    await onCanvasReady(world.canvas.scene);
+    expect(other.planned).toBe(1);
+    expect(offers).toHaveLength(1);
+
+    await onCanvasReady(world.canvas.scene);
+    expect(other.planned).toBe(1);
+    expect(offers).toHaveLength(1);
+  });
+
+  it("records the version for a world it finds already migrated", async () => {
+    const other = countedScene("other", cleanPin());
+    const { world, onCanvasReady } = await worldWith(other, { schemaVersion: 1 });
+
+    await onCanvasReady(world.canvas.scene);
+
+    expect(world.game.settings.get("documents-pinner", "schemaVersion")).toBe(SCHEMA_VERSION);
+  });
+});
