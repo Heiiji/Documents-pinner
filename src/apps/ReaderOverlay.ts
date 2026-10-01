@@ -36,6 +36,7 @@ import {
 } from "../canvas/transform";
 import { resolveCard } from "../render/ContentResolver";
 import { propManager } from "../canvas/PropManager";
+import { describeSource } from "../sources/describe";
 import { leave, mount, write } from "./OverlayRoot";
 import type { DpPinFlags } from "../types/dp";
 
@@ -314,6 +315,14 @@ export function revalidateReader(): void {
   const doc = cv()?.scene?.tiles?.get(openId);
   if (doc?.object?.isVisible === false) {
     closeReader();
+    return;
+  }
+  // Its document deleted: the reader says so, as an open on it would have, rather than go on
+  // showing text the GM has just deleted.
+  const source = doc ? readPin(doc)?.source : null;
+  if (source?.kind === "document" && source.uuid && describeSource(source).origin === "missing") {
+    closeReader();
+    notify({ key: "DP.notice.sourceMissing" }, "warn");
     return;
   }
   repositionReader();

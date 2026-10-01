@@ -64,3 +64,33 @@ export function sourceUpdateHandler(effects: SourceUpdateEffects) {
     effects.refresh();
   };
 }
+
+/** What a source coming or going sets in motion. */
+export interface SourceLifecycleEffects {
+  /** Drop this document's cards, so the next frame draws them again. */
+  invalidate(uuid: string): void;
+  /** Bring the Pinboard's rows in line. */
+  refresh(): void;
+  /** Close a reader whose source is gone. */
+  revalidate(): void;
+}
+
+/**
+ * The `create<Document>` and `delete<Document>` handler for every source type.
+ *
+ * Only the update hooks were wired. A journal, a page or a wanted man's actor deleted reached
+ * no handler, so every client went on drawing — and a player could go on reading — what the
+ * GM had deleted until the canvas was next drawn, while a click on it said "missing". A page
+ * created in, or deleted from, a journal a pin shows whole never redrew it either: an embedded
+ * page fires its own hooks, not its journal's update. The same filter as an edit: a pin on
+ * the viewed scene that shows the document.
+ */
+export function sourceLifecycleHandler(effects: SourceLifecycleEffects) {
+  return (doc: any, options: any): void => {
+    if (isOurs(options) || !adapterForDoc(doc).isSource(doc)) return;
+    if (!shownOnViewedScene(doc?.uuid)) return;
+    effects.invalidate(doc.uuid);
+    effects.refresh();
+    effects.revalidate();
+  };
+}

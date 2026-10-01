@@ -195,6 +195,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   permission. It now shows the first page in the journal's order that is not hidden from
   the players — the same page on your screen as on theirs — and an empty sheet when every
   page is; Pin Studio lists the pages in that order too.
+- **A deleted journal or actor stayed on the map, readable, until the scene was drawn
+  again.** Deleting a pin's journal, page or actor reached the module nowhere: every
+  player's screen went on showing it, and a player could go on reading it, while a click
+  said it was missing. The pin now turns to its placeholder at once, an open reader closes
+  and says why, and a page added to a journal pinned whole shows up.
 
 ## [0.3.3] — 2026-09-30
 

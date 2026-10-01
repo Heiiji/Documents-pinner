@@ -56,7 +56,7 @@ import {
 } from "./ui/entry-points";
 import { flashDomProp, setDomPropHover, syncSceneDim } from "./canvas/DomPropTier";
 import { onboardingReady } from "./ui/onboarding";
-import { sourceUpdateHandler } from "./sources/hooks";
+import { sourceLifecycleHandler, sourceUpdateHandler } from "./sources/hooks";
 import { hookedDocumentNames } from "./sources/index";
 
 const log = logger("boot");
@@ -291,7 +291,18 @@ const onSourceUpdated = sourceUpdateHandler({
   invalidate: (uuid) => propManager().invalidate(uuid),
   refresh: refreshPinboard,
 });
-for (const type of hookedDocumentNames()) Hooks.on(`update${type}`, onSourceUpdated);
+// And one created or deleted: a deleted journal, page or actor drew on until the next canvas
+// draw, and a page added to a journal a pin shows whole never appeared.
+const onSourceCameOrWent = sourceLifecycleHandler({
+  invalidate: (uuid) => propManager().invalidate(uuid),
+  refresh: refreshPinboard,
+  revalidate: revalidateReader,
+});
+for (const type of hookedDocumentNames()) {
+  Hooks.on(`update${type}`, onSourceUpdated);
+  Hooks.on(`create${type}`, onSourceCameOrWent);
+  Hooks.on(`delete${type}`, onSourceCameOrWent);
+}
 
 // A user connecting or disconnecting changes who is in an audience, and therefore what
 // every chip shows and which props this client should be drawing at all.

@@ -180,3 +180,70 @@ describe("an edit to an actor with a poster on the map", () => {
     }).toEqual(expected);
   });
 });
+
+/**
+ * Only the update hooks were wired. A deleted journal, page or actor reached no handler, so
+ * every client went on drawing it until the canvas was next drawn; and a page added to a
+ * journal a pin shows whole never appeared.
+ */
+describe("a pin's source created or deleted", () => {
+  /** A prop on `uuid`, revealed, on the viewed scene. */
+  const propOn = (uuid: string) => {
+    const tile = fakeTile({ id: "t1", uuid: "Scene.s1.Tile.t1", width: 400, height: 560 });
+    tile.flags = {
+      [MODULE_ID]: {
+        [FLAGS.PIN]: {
+          ...defaultPin(),
+          mode: "prop",
+          source: { ...defaultPin().source, uuid, field: null },
+          audience: { ...defaultPin().audience, kind: "everyone" },
+        },
+      },
+    };
+    return tile;
+  };
+  const ledger = () =>
+    fakeJournal({ id: "ledger", name: "Ledger", pages: [{ id: "debts", name: "Debts" }] });
+
+  it.each([
+    ["the actor a poster shows, deleted", "deleteActor", "Actor.jack", "Actor.jack"],
+    [
+      "a page of the journal a pin shows whole, deleted",
+      "deleteJournalEntryPage",
+      "JournalEntry.ledger",
+      "JournalEntry.ledger.JournalEntryPage.debts",
+    ],
+    [
+      "a page added to that journal",
+      "createJournalEntryPage",
+      "JournalEntry.ledger",
+      "JournalEntry.ledger.JournalEntryPage.debts",
+    ],
+  ])("redraws the pin: %s", async (_what, hook, shown, uuid) => {
+    const journal = ledger();
+    const jack = fakeActor({ id: "jack", name: "Black Jack" });
+    await boot({ tiles: [propOn(shown)], actors: [jack], journals: [journal] });
+    const { propManager } = await import("../src/canvas/PropManager");
+    const invalidate = vi.spyOn(propManager(), "invalidate");
+    const doc = uuid === "Actor.jack" ? jack : journal.pages.get("debts");
+
+    fire(hook, doc, {}, "gm");
+
+    expect(invalidate.mock.calls).toEqual([[uuid]]);
+  });
+
+  it("closes the reader of a journal the GM deletes, and says why", async () => {
+    const journal = ledger();
+    const tile = propOn("JournalEntry.ledger");
+    await boot({ tiles: [tile], journals: [journal] });
+    const { openReader, isReaderOpen } = await import("../src/apps/ReaderOverlay");
+    await openReader(tile);
+    expect(isReaderOpen()).toBe(true);
+
+    world.game.journal.delete("ledger");
+    fire("deleteJournalEntry", journal, {}, "gm");
+
+    expect(isReaderOpen()).toBe(false);
+    expect(world.notifications.map((n) => n.message)).toContain("DP.notice.sourceMissing");
+  });
+});
