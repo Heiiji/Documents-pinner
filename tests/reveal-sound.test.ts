@@ -221,7 +221,8 @@ describe("playing it", () => {
 describe("a reveal pass", () => {
   let tiles: any[];
   let manager: any;
-  const settle = () => new Promise((resolve) => setTimeout(resolve, 300));
+  /** The LOD debounce and the generation queue's idle shim, run on fake timers. */
+  const settle = () => vi.runAllTimersAsync();
 
   function propTile(id: string, effect: Record<string, unknown> = {}) {
     const tile = fakeTile({ id, uuid: `Scene.s1.Tile.${id}`, width: 400, height: 560 });
@@ -249,6 +250,7 @@ describe("a reveal pass", () => {
 
   async function sceneWith(...placed: any[]) {
     vi.resetModules();
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     tiles = placed;
     installWorld({
       isGM: false,
@@ -277,6 +279,7 @@ describe("a reveal pass", () => {
 
   afterEach(() => {
     manager?.stop();
+    vi.useRealTimers();
     uninstallWorld();
   });
 

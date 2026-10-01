@@ -71,14 +71,19 @@ function propTile(id: string) {
   return tile;
 }
 
-/** Let the debounced LOD pass and the concurrency-1 generation queue drain. */
-const settle = () => new Promise((resolve) => setTimeout(resolve, 400));
+/**
+ * Let the debounced LOD pass and the concurrency-1 generation queue drain. The timers are
+ * fake, so this runs every pending timeout — the 250 ms edit debounce, the idle shim the
+ * queue pumps on — and the promises between them, without waiting on the clock.
+ */
+const settle = () => vi.runAllTimersAsync();
 
 let tiles: any[];
 let manager: any;
 
 beforeEach(async () => {
   vi.resetModules();
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   resolved.hash = "h1";
   tiles = [propTile("t1")];
   installWorld({
@@ -97,6 +102,7 @@ beforeEach(async () => {
 
 afterEach(async () => {
   manager?.stop();
+  vi.useRealTimers();
   uninstallWorld();
   // A mock implementation survives `vi.resetModules()`, so a test that made the
   // rasteriser hang would starve every test after it of a texture.
@@ -137,27 +143,35 @@ describe("the texture cache key", () => {
 });
 
 /**
- * The type size is drawn INTO the pixels, so it belongs in the key for the same reason
- * the preset does. Geometry was already there; now that a resize means "show more of
- * the page" rather than "the same page, larger", both have to stay a cache miss.
+ * Everything drawn INTO the pixels belongs in the key, for the same reason the preset does:
+ * a change the key does not carry hits the cache, binds the old texture and returns before
+ * ever resolving — the GM picks another page, size or typeface and nothing happens, forever.
+ *
+ * - **The type size and the pin's own typeface.** Geometry was already there; now that a
+ *   resize means "show more of the page" rather than "the same page, larger", both have to
+ *   stay a cache miss.
+ * - **The chosen page, PDF page or text field.** The provisional key is built from the
+ *   PREVIOUS draw's content hash, so these have to be in it. And they sit in the docHash
+ *   rather than the uuid, because `TextureCache.keysFor` prefix-matches `${uuid}|`: folding
+ *   them into the uuid would break `invalidate` for every prop at once.
  */
-describe("the texture cache key and the type size", () => {
-  it("is a cache miss when the type size changes", async () => {
+describe("the texture cache key and what is drawn into the pixels", () => {
+  const pinOf = () => tiles[0].flags["documents-pinner"].pin;
+
+  it.each([
+    ["the type size", () => (pinOf().display.typeSize = 12)],
+    ["the pin's own typeface", () => (pinOf().display.font = "monospace")],
+    ["the journal page", () => (pinOf().source.pageId = "aBcD1234eFgH5678")],
+    ["the PDF page", () => (pinOf().source.pdfPage = 4)],
+    [
+      "the text an actor or an item shows",
+      () => (pinOf().source.field = "details.biography.public"),
+    ],
+  ])("is a cache miss when %s changes", async (_what, change) => {
     const { resolveCard } = await import("../src/render/ContentResolver");
     const before = vi.mocked(resolveCard).mock.calls.length;
 
-    tiles[0].flags["documents-pinner"].pin.display.typeSize = 12;
-    manager.refresh();
-    await settle();
-
-    expect(vi.mocked(resolveCard).mock.calls.length).toBeGreaterThan(before);
-  });
-
-  it("is a cache miss when the pin's own typeface changes, which is drawn into the pixels", async () => {
-    const { resolveCard } = await import("../src/render/ContentResolver");
-    const before = vi.mocked(resolveCard).mock.calls.length;
-
-    tiles[0].flags["documents-pinner"].pin.display.font = "monospace";
+    change();
     manager.refresh();
     await settle();
 
@@ -166,7 +180,7 @@ describe("the texture cache key and the type size", () => {
 
   it("is a cache miss when a prop with stored metrics is resized", async () => {
     const { resolveCard } = await import("../src/render/ContentResolver");
-    const pin = tiles[0].flags["documents-pinner"].pin;
+    const pin = pinOf();
     pin.display.typeSize = 12;
     pin.display.margin = 1.5;
     manager.refresh();
@@ -181,54 +195,10 @@ describe("the texture cache key and the type size", () => {
 
     expect(vi.mocked(resolveCard).mock.calls.length).toBeGreaterThan(before);
   });
-});
-
-/**
- * The chosen page is in the key, and in the right half of it.
- *
- * The provisional key is built from the PREVIOUS draw's content hash, so a page change
- * that is not in the key hits the cache, binds the old texture and returns before ever
- * resolving — the GM picks another page and nothing happens, forever. And it has to sit
- * in the docHash rather than the uuid, because `TextureCache.keysFor` prefix-matches
- * `${uuid}|`: folding it into the uuid would break `invalidate` for every prop at once.
- */
-describe("the texture cache key and the chosen page", () => {
-  it("is a cache miss when the journal page changes", async () => {
-    const { resolveCard } = await import("../src/render/ContentResolver");
-    const before = vi.mocked(resolveCard).mock.calls.length;
-
-    tiles[0].flags["documents-pinner"].pin.source.pageId = "aBcD1234eFgH5678";
-    manager.refresh();
-    await settle();
-
-    expect(vi.mocked(resolveCard).mock.calls.length).toBeGreaterThan(before);
-  });
-
-  it("is a cache miss when the PDF page changes", async () => {
-    const { resolveCard } = await import("../src/render/ContentResolver");
-    const before = vi.mocked(resolveCard).mock.calls.length;
-
-    tiles[0].flags["documents-pinner"].pin.source.pdfPage = 4;
-    manager.refresh();
-    await settle();
-
-    expect(vi.mocked(resolveCard).mock.calls.length).toBeGreaterThan(before);
-  });
-
-  it("is a cache miss when the text an actor or an item shows changes", async () => {
-    const { resolveCard } = await import("../src/render/ContentResolver");
-    const before = vi.mocked(resolveCard).mock.calls.length;
-
-    tiles[0].flags["documents-pinner"].pin.source.field = "details.biography.public";
-    manager.refresh();
-    await settle();
-
-    expect(vi.mocked(resolveCard).mock.calls.length).toBeGreaterThan(before);
-  });
 
   it("still invalidates by source uuid once a page is chosen", async () => {
     const { resolveCard } = await import("../src/render/ContentResolver");
-    tiles[0].flags["documents-pinner"].pin.source.pageId = "aBcD1234eFgH5678";
+    pinOf().source.pageId = "aBcD1234eFgH5678";
     manager.refresh();
     await settle();
     const before = vi.mocked(resolveCard).mock.calls.length;
