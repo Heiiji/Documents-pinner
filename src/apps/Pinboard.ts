@@ -163,17 +163,73 @@ export function definePinboard(): any {
     renderedSceneId: string | null = null;
     /** What the last Reveal next did, for the footer's status line. */
     status = "";
+    /** The rows the last render drew, or null until a render reads them (`rows`). */
+    #rows: PinboardRow[] | null = null;
+    /** A render asked for and not yet run, shared by everything that asks before its frame. */
+    #pending: Promise<void> | null = null;
+    /** Whether that render still has work to do: a render that began since did it. */
+    #wanted = false;
 
     get scene(): any {
       return cv()?.scene ?? g()?.scenes?.current ?? null;
     }
 
+    /**
+     * The rows on the board: the ones the last render drew, read once per render (A29).
+     *
+     * `rowsFor` reads every pin, its source and each player's access, and a render called
+     * it twice — once for the visible rows, once for the markup — and every arrow key a
+     * third time. The render that begins clears it and reads it afresh, so the visible rows,
+     * the markup and the keyboard until the next render all go by the same rows: the arrows
+     * move through the list the GM is looking at. A decision made after a write reads the
+     * pins as they are now instead (`rowsFor` itself), since the drawn rows are a frame
+     * behind it until the render it asked for has run.
+     */
     get rows(): PinboardRow[] {
-      return rowsFor(this.scene);
+      return (this.#rows ??= rowsFor(this.scene));
     }
 
     get visibleRows(): PinboardRow[] {
       return filterRows(this.rows, this.query);
+    }
+
+    /**
+     * Render once the board's window next paints, however many ask before then (A29).
+     *
+     * A change the board made was drawn twice: once by the verb that made it and again by
+     * the tile hook every client runs (`refreshPinboard`) — and a scene write of many pins,
+     * or a source edit, once per hook more. Core queues renders but does not merge them
+     * (its render semaphore), and every render rebuilds every row and fires every module's
+     * render hooks. Everything that redraws the board because the pins changed asks here
+     * instead, and the frame renders once with whatever is true by then: a status line or a
+     * focus a verb set before asking is read by that render, so it rides along.
+     *
+     * The frame is the board's own window's — a detached board's popup keeps painting
+     * while the main window is hidden. With no frame to wait for, a microtask. A render
+     * that begins in the meantime (an arrow key, a search) reads everything the request was
+     * for, and the frame then has nothing left to do. Resolves once the render has run.
+     */
+    requestRender(): Promise<void> {
+      this.#wanted = true;
+      if (this.#pending) return this.#pending;
+      const view = docOf(this.element)?.defaultView;
+      const pending = new Promise<void>((resolve) => {
+        const run = () => {
+          this.#pending = null;
+          if (!this.#wanted) return resolve();
+          this.#wanted = false;
+          // Caught: nothing awaits a frame, and a render core refused must not surface as
+          // an uncaught rejection in the middle of a session.
+          Promise.resolve()
+            .then(() => this.render())
+            .catch((error: unknown) => log.warn("the board could not be redrawn", error))
+            .finally(resolve);
+        };
+        if (typeof view?.requestAnimationFrame === "function") view.requestAnimationFrame(run);
+        else queueMicrotask(run);
+      });
+      this.#pending = pending;
+      return pending;
     }
 
     docFor(id: string): any {
@@ -198,6 +254,12 @@ export function definePinboard(): any {
         this.renderedSceneId = sceneId;
       }
 
+      // This render reads the pins afresh, once, and draws what it read; a render asked
+      // for and still waiting on its frame has nothing left to do (`requestRender`).
+      this.#rows = null;
+      this.#wanted = false;
+      const rows = this.rows;
+
       // Without this no row is ever tabbable — `rowMarkup` emits `tabindex="0"` only for
       // `focusedId` — so `P` opened the board with nothing focused and every one of the
       // ten advertised shortcuts was unreachable.
@@ -206,14 +268,14 @@ export function definePinboard(): any {
       // it is null: a search that excludes it leaves no row tabbable at all, and then
       // ArrowDown out of the search box has nothing to land on — which is exactly the
       // case that branch exists for.
-      const visible = this.visibleRows;
+      const visible = filterRows(rows, this.query);
       if (!this.focusedId || !visible.some((row) => row.id === this.focusedId)) {
         this.focusedId = visible[0]?.id ?? null;
       }
 
       const wrapper = (docOf(this.element) ?? document).createElement("div");
       wrapper.innerHTML = boardMarkup(
-        this.rows,
+        rows,
         this.query,
         this.selected,
         this.focusedId,
@@ -369,7 +431,8 @@ export function definePinboard(): any {
             solo: (event as MouseEvent).shiftKey,
             wasOn: chip.getAttribute("aria-checked") === "true",
           });
-          void change?.then(() => this.render());
+          // The chip keeps the focus through it: the render finds it again by its player.
+          void change?.then(() => this.requestRender());
           return;
         }
 
@@ -538,7 +601,7 @@ export function definePinboard(): any {
         if (!doc) return;
         void api
           .spotlight(doc)
-          .then(() => this.render())
+          .then(() => this.requestRender())
           .catch((error) => {
             log.warn("spotlight failed", error);
             notify({ key: "DP.notice.spotlightFailed" }, "error");
@@ -546,13 +609,15 @@ export function definePinboard(): any {
         return;
       }
 
+      // A verb that writes asks for its render (`requestRender`): the tile hook its write
+      // fires asks too, and the two are one render. The focus stays on the row meanwhile.
       const actions: Record<string, () => void> = {
-        " ": () => void api.toggleVisibility(doc)?.then(() => this.render()),
+        " ": () => void api.toggleVisibility(doc)?.then(() => this.requestRender()),
         Enter: () => Hooks.call(`${MODULE_ID}.openStudio`, doc),
         l: () => void api.locate(doc),
         o: () => void api.openLocally(doc),
         f: () => api.flash(doc),
-        m: () => void api.toggleMode(doc)?.then(() => this.render()),
+        m: () => void api.toggleMode(doc)?.then(() => this.requestRender()),
       };
       const action = actions[event.key] ?? actions[event.key.toLowerCase()];
       if (!action) return;
@@ -564,7 +629,9 @@ export function definePinboard(): any {
      * Reveal next, from N or the footer, then move the list on to what follows it.
      *
      * The focus goes to the row that is now next, so the GM's next N and the row under
-     * their eyes are the same one; with nothing left it stays where it was.
+     * their eyes are the same one; with nothing left it stays where it was. Chosen from
+     * the pins as the reveal left them, not from the rows drawn before it. The status and
+     * the focus are set before the render is asked for, which reads both when it runs.
      */
     async revealNext() {
       const { doc, left } = await api.revealNext(this.scene, this.query);
@@ -574,8 +641,8 @@ export function definePinboard(): any {
         name: pin ? api.labelFor(pin) : "",
         count: left,
       });
-      this.focusedId = nextToReveal(this.rows, this.query).next?.id ?? this.focusedId;
-      this.render();
+      this.focusedId = nextToReveal(rowsFor(this.scene), this.query).next?.id ?? this.focusedId;
+      await this.requestRender();
     }
 
     /** The fire-and-forget form every surface of the board calls. */
@@ -590,12 +657,15 @@ export function definePinboard(): any {
     async #reorder(updates: { id: string; sort: number }[]) {
       if (!updates.length) return;
       await api.reorder(this.scene, updates);
-      this.render();
+      await this.requestRender();
     }
 
-    /** Move a row one step in the full list. */
+    /**
+     * Move a row one step in the full list. The sort values written are planned from the
+     * pins as they are, which a reorder still waiting on its render has already changed.
+     */
     #move(id: string, delta: number) {
-      const rows = this.rows;
+      const rows = rowsFor(this.scene);
       const from = rows.findIndex((r) => r.id === id);
       const to = from + delta;
       if (from < 0 || to < 0 || to >= rows.length) return Promise.resolve();
@@ -661,7 +731,8 @@ export function definePinboard(): any {
 
         const after = row.dataset.dpDrop === "after";
         clearMarks();
-        const rows = this.rows;
+        // Planned from the pins as they are, as the keyboard's reorder is (`#move`).
+        const rows = rowsFor(this.scene);
         const updates = planReorder(
           rows,
           dragging,
@@ -761,7 +832,8 @@ async function onMenuAct(this: any, _event: Event, target: HTMLElement) {
       await deleteRows(this, [doc]);
       return;
   }
-  this.render();
+  // After the verb: its write's tile hook asks for the same render (`requestRender`).
+  await this.requestRender();
 }
 
 function rowIdOf(target: HTMLElement): string {
@@ -820,7 +892,7 @@ async function onRevealAll(this: any) {
  * every one of them anyway, and re-synced every one's ownership after.
  */
 async function applyVisibility(app: any, docs: any[], reveal: boolean) {
-  if (await api.setVisibilityMany(app.scene, docs, reveal)) app.render();
+  if (await api.setVisibilityMany(app.scene, docs, reveal)) await app.requestRender();
 }
 
 /**
@@ -847,7 +919,7 @@ async function deleteRows(app: any, docs: any[]) {
   await api.deletePins(app.scene, docs);
 
   app.selected = app.selected.filter((id: string) => !docs.some((doc) => doc.id === id));
-  app.render();
+  await app.requestRender();
 }
 
 function onRevealNext(this: any) {
@@ -867,9 +939,14 @@ export function openPinboard(): any {
   return instance;
 }
 
-/** Re-render the open Pinboard, if any. Wired to the document hooks in `main.ts`. */
+/**
+ * Re-render the open Pinboard, if any. Wired to the document hooks in `main.ts`.
+ *
+ * On the board's next frame (`requestRender`): a scene write fires a hook per pin, a source
+ * edit one per document, and the verb that made the change asks too — one render for all.
+ */
 export function refreshPinboard(): void {
-  if (instance?.rendered) instance.render();
+  if (instance?.rendered) void instance.requestRender();
 }
 
 declare const Hooks: any;

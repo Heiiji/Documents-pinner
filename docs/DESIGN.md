@@ -412,19 +412,20 @@ Test world: one scene at darkness 0.8, two lights, a roof tile, three tokens, fo
 src/
   main.ts            hook registration only, no logic
   const.ts  i18n.ts  api.ts  settings.ts  motion*  fvtt  html*  log  normalise*
-  data/       PinData  PinStore  audience*  ownership-plan*  ownership-sync  core-hidden
-              migrations (planMigration*)  pin-schema*
-  canvas/     PinnedTile  PropManager  PropHitLayer  DomPropTier  tile-hooks  transform
-              lod*
-  render/     ContentResolver  enrich  CardTemplate*  AssetInliner  Rasterizer  TextureCache
-              BakeEffects  PdfPage  measure
+  api/        set-audience  ping  reveal-next          (cut out of api.ts, re-exported by it)
+  data/       PinData  PinStore  access  audience*  ownership-plan*  ownership-sync
+              core-hidden  migrations (planMigration*)  pin-schema*
+  canvas/     PinnedTile  PropManager  PropHitLayer  DomPropTier  tile-hooks  user-hooks
+              transform  lod*
+  render/     ContentResolver  card-cache  enrich  CardTemplate*  AssetInliner  Rasterizer
+              TextureCache  BakeEffects  PdfPage  measure
   effects/    EffectRegistry  preset-schema*  preset-css*  preset-library  level
               reveal-sound  typeface*  textures*  presets/*
   apps/       DocumentPicker  PlacementGhost + ghost-model
               PinStudio + pin-studio-markup + edit-holds
               Pinboard + pinboard-markup + pinboard-model*
               PinHUD  PresetStudio  ReaderOverlay  PropTooltip  OverlayRoot  CheatSheet
-              chips*  focus-restore
+              chips*  focus-restore  keys
   ui/         controls  keybindings  onboarding  entry-points  cheatsheet*  modifiers
   sources/    index (the adapter registry)  journal  actor  item  portrait  fields
               describe  view  packs  uuid*  search  import  hooks
@@ -449,7 +450,21 @@ part, and say where:
 `pinboard-markup` and `ghost-model` were split from the application written beside them.
 The application re-exports every name that moved, so its callers and its tests import from
 one place. `effects/reveal-sound` was split from `PropManager` the same way, and
-`canvas/tile-hooks` from `main.ts`.
+`canvas/tile-hooks` and `canvas/user-hooks` from `main.ts`.
+
+`api.ts` was cut the same way (A29), and is now the verbs and `publicApi()`. What a user may
+do with a pin — `canUserSee`, `canUserOpen`, `isRevealed`, the questions the canvas asks of
+every prop — is `data/access`: questions, no writes, so the canvas needs none of the verbs
+to ask them. Under `api/`: the audience write every visibility verb ends in
+(`set-audience`), the one door to a ping (`ping`), and the scene's script (`reveal-next`:
+the Pinboard's row facts and Reveal next, a verb that runs with the board closed, which is
+why it is not under `apps/`). `api` re-exports every name that moved, and the public API is
+the same set of names.
+
+**Nothing under `api/` imports `api.ts`.** `api.ts` re-exports what those files hold, so one
+that reached a verb through `api` would close a runtime import cycle. What they need of the
+verbs lives beside them: `reveal-next` reveals through `set-audience` and points through
+`ping`, as the façade's own verbs do.
 
 **The import rule of `sources/`.** `sources/*` imports nothing the suite mocks with a
 partial factory: `api`, `data/ownership-sync`, `render/ContentResolver`, `apps/*` and
@@ -461,7 +476,8 @@ shares, its label — and `api` re-exports it. `ContentResolver` reads it there,
 **Layering edges kept on purpose.** `canvas/*` imports `apps/OverlayRoot` (canvas
 infrastructure in all but its path, which two tests mock), `apps/PinHUD`,
 `apps/ReaderOverlay` and `apps/PlacementGhost`. `data/PinStore` and `data/migrations`
-import `canvas/transform` for its pure geometry.
+import `canvas/transform` for its pure geometry, and `api/reveal-next` imports
+`apps/pinboard-model` for the board's pure list logic, which Reveal next plays.
 
 `styles/card.css` is both loaded normally (for the focus reader) and fetched and inlined
 into the SVG by the rasteriser, so the two rendering tiers cannot drift.

@@ -345,6 +345,39 @@ describe("the ready sweep", () => {
     expect(holds()).toEqual([]);
   });
 
+  /**
+   * Whether the pin is still as the hold left it was decided from the payload read before
+   * the resume's turn in the write queue (A29): a chip click still landing was then written
+   * over by the audience the hold remembered — the GM showed the pin to Ben, and the resume
+   * put it back to Ali.
+   */
+  it("keeps a chip click still landing as it resumes", async () => {
+    await setup(HELD, { editHolds: [hold()] });
+    // The click's write is in flight, held until the sweep has started.
+    let land!: () => void;
+    const landed = new Promise<void>((resolve) => (land = resolve));
+    const update = tile.update;
+    tile.update = async (changes: any, context?: unknown) => {
+      await landed;
+      return update(changes, context);
+    };
+    const api = await import("../src/api");
+    const { resumeEditHolds } = await import("../src/apps/PinStudio");
+
+    const click = api.setUserVisible(tile, "ben", true);
+    const resumed = resumeEditHolds();
+    land();
+    await click;
+
+    expect(await resumed).toBe(0);
+    expect(stored()).toMatchObject({ kind: "selected", users: ["ben"] });
+    expect(tile.hidden).toBe(false);
+    // One write, the click's: the resume found the pin showing and wrote nothing.
+    expect(order.filter((entry) => entry.startsWith("tile"))).toHaveLength(1);
+    expect(holds()).toEqual([]);
+    expect(world.notifications).toEqual([]);
+  });
+
   it("keeps a hold of another world for that world's sweep", async () => {
     const elsewhere = hold({ world: "another", anchor: "Scene.x.Tile.y" });
     await setup(HELD, { editHolds: [hold({ world: "this" }), elsewhere] });
