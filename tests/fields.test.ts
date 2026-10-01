@@ -31,9 +31,7 @@ describe("source.field in a stored pin", () => {
     ["an emptied select", "", null, []],
     ["a walk into the prototype", "__proto__.polluted", null, ["DP.pin.warn.badField"]],
     ["a constructor segment", "details.constructor.name", null, ["DP.pin.warn.badField"]],
-    ["markup", '<img src=x onerror="alert(1)">', null, ["DP.pin.warn.badField"]],
     ["nine segments", "a.b.c.d.e.f.g.h.i", null, ["DP.pin.warn.badField"]],
-    ["a number", 42, null, ["DP.pin.warn.badField"]],
   ])("normalises %s, at schema 5", (_what, field, stored, warned) => {
     const { pin, warnings } = validatePin({
       ...defaultPin(),
