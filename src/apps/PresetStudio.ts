@@ -39,6 +39,7 @@ import { soundPath } from "../normalise";
 import { playRevealSound } from "../effects/reveal-sound";
 import type { DpNotice } from "../types/dp";
 import { restoreFocus, snapshotFocus } from "./focus-restore";
+import { guardActivationKeys } from "./keys";
 
 const log = logger("presets");
 
@@ -621,6 +622,9 @@ export function definePresetStudio(): any {
       const focus = snapshotFocus(content);
       content.replaceChildren(result);
       restoreFocus(content, focus);
+      // A `<section>`, so a focused button or layer summary is not a field to core's
+      // keyboard: Space on one pressed it and paused the game as well.
+      guardActivationKeys(this.element ?? content);
 
       // `toggle` does not bubble, so it is caught on the way down.
       result.addEventListener(

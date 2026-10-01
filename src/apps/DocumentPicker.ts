@@ -17,6 +17,7 @@ import { browseFiles, ns } from "../fvtt";
 import { t, tOr } from "../i18n";
 import { escapeAttr, escapeHtml } from "../html";
 import { arm } from "./PlacementGhost";
+import { guardActivationKeys } from "./keys";
 import * as api from "../api";
 import { importForPin } from "../sources/import";
 import { adapterOrJournal } from "../sources/index";
@@ -208,6 +209,8 @@ export function definePicker(): any {
       // accumulate one set per render — and because these handlers trigger renders, the
       // growth compounds.
       this.#wire(result);
+      // Space on a kind chip or Browse presses it, and is not core's pause as well.
+      guardActivationKeys(this.element ?? content);
 
       const search = content.querySelector<HTMLInputElement>(".dp-picker__search");
       if (caret !== null) {
