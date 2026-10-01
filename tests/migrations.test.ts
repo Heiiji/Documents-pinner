@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { FLAGS, MODULE_ID, SCHEMA_VERSION } from "../src/const";
-import { planMigration } from "../src/data/migrations";
+import { migrateScene, planMigration } from "../src/data/migrations";
 import { cardMetrics, defaultPin, freezeMetrics, validatePin } from "../src/data/pin-schema";
+import { fakeTile } from "./helpers/fake-foundry";
 
 const FLAG_PATH = `flags.${MODULE_ID}.${FLAGS.PIN}`;
 
@@ -146,9 +147,26 @@ describe("planMigration", () => {
     expect(migrated.interaction.open).toBe("never");
   });
 
-  it("is idempotent after freezing, at any later size", () => {
-    const migrated = planMigration([tile("a", v1Pin())])[0][FLAG_PATH];
-    expect(planMigration([tile("a", migrated, { width: 900, height: 900 })])).toEqual([]);
+  // Through the write, as v14 applies it: a flag change is merged into what is stored, so
+  // feeding the plan back in as if it had replaced the payload proved nothing — the retired
+  // keys stayed, and the same pin was planned, and the sweep offered, every session.
+  it("migrates a 0.1.x pin once: the second plan is empty, at any later size", async () => {
+    const stored = fakeTile({ id: "a", width: 400, height: 560 });
+    stored.flags = { [MODULE_ID]: { [FLAGS.PIN]: v1Pin() } };
+    const scene = {
+      name: "Tavern",
+      tiles: { contents: [stored] },
+      async updateEmbeddedDocuments(_type: string, updates: any[]) {
+        for (const { _id, ...change } of updates)
+          if (_id === stored.id) await stored.update(change);
+        return updates;
+      },
+    };
+
+    expect(await migrateScene(scene)).toBe(1);
+    stored.width = 900;
+    stored.height = 900;
+    expect(planMigration([stored])).toEqual([]);
   });
 
   it("plans only the tiles that need it", () => {

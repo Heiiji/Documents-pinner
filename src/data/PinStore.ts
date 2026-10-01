@@ -26,7 +26,7 @@ import { deletionUpdate, g, internal } from "../fvtt";
 import { centreAfterResize } from "../canvas/transform";
 import type { DpMode, DpPinFlags } from "../types/dp";
 import { anchorHidden } from "./audience";
-import { readPin } from "./PinData";
+import { rawPinFlag, readPin } from "./PinData";
 import {
   defaultPin,
   freezeMetrics,
@@ -119,6 +119,54 @@ export function anchorUuid(doc: any): string {
 // Writing
 // ---------------------------------------------------------------------------
 
+const PIN_PATH = `flags.${MODULE_ID}.${FLAGS.PIN}`;
+
+/**
+ * Every key path `stored` has and `next` does not, dotted, relative to the payload. PURE.
+ *
+ * Only plain objects are walked: an array or a scalar is replaced whole by the write.
+ */
+function stalePaths(stored: unknown, next: unknown, prefix = ""): string[] {
+  if (!isRecord(stored) || !isRecord(next)) return [];
+  const out: string[] = [];
+  for (const key of Object.keys(stored)) {
+    const path = prefix ? `${prefix}.${key}` : key;
+    if (next[key] === undefined) out.push(path);
+    else out.push(...stalePaths(stored[key], next[key], path));
+  }
+  return out;
+}
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  !!value && typeof value === "object" && !Array.isArray(value);
+
+/**
+ * The whole payload as one write, AND the removal of every key the stored one has and it
+ * does not.
+ *
+ * A whole-object write was meant to be the form that "cannot leave a partially-migrated
+ * payload behind". On v14 it can: a flag change is DIFFED against the stored value and then
+ * merged (foundry.mjs 14.368, `ObjectField#_updateDiff` 10600-10625, `_diffObject`
+ * 1892-1913), and a key the new object simply lacks is not a difference. So every 0.1.x
+ * pin kept `interaction.clickThrough` — read as `open: "never"` — through every write and
+ * every migration, and the migration was offered again every session.
+ *
+ * Each stale key is deleted with the operator `unpin` and the ledger already use at a flag
+ * path, never a `ForcedReplacement` of the payload, which is unmeasured inside flags. The
+ * deletions come AFTER the payload in the update, because core expands the dotted keys in
+ * order and each one lands inside the object the payload key put there. The payload is
+ * copied first, so that expansion can never write an operator into the caller's object.
+ */
+export function payloadWrite(stored: unknown, pin: DpPinFlags): Record<string, unknown> {
+  const write: Record<string, unknown> = { [PIN_PATH]: structuredClone(pin) };
+  for (const path of stalePaths(stored, pin)) {
+    const at = path.lastIndexOf(".");
+    const parent = at < 0 ? PIN_PATH : `${PIN_PATH}.${path.slice(0, at)}`;
+    Object.assign(write, deletionUpdate(parent, path.slice(at + 1)));
+  }
+  return write;
+}
+
 export interface PlaceOptions {
   x: number;
   y: number;
@@ -176,8 +224,9 @@ export async function place(
  * Patch a pin's payload.
  *
  * Writes the whole normalised payload rather than a sub-path diff: the queue already
- * guarantees no concurrent writer, and a whole-object write is the only form that
- * cannot leave a partially-migrated payload behind when the schema changes.
+ * guarantees no concurrent writer, and a whole-object write — with the deletion of every
+ * key it dropped, `payloadWrite` — is the only form that cannot leave a partially-migrated
+ * payload behind when the schema changes.
  *
  * `fields` carries the tile fields a payload change IMPLIES, in the same document
  * update. Today that is only `texture.src`, when re-sourcing changes the kind — and it
@@ -201,7 +250,7 @@ export function update(
       {
         ...fields,
         hidden: anchorHidden(pin.audience),
-        [`flags.${MODULE_ID}.${FLAGS.PIN}`]: pin,
+        ...payloadWrite(rawPinFlag(doc), pin),
       },
       internal()
     );
@@ -246,7 +295,7 @@ export function convertMode(
       {
         width: Math.max(1, Math.round(target.width)),
         height: Math.max(1, Math.round(target.height)),
-        [`flags.${MODULE_ID}.${FLAGS.PIN}`]: pin,
+        ...payloadWrite(rawPinFlag(doc), pin),
       },
       internal()
     );
@@ -307,7 +356,7 @@ export function batchUpdate(scene: any, entries: { doc: any; patch: PinPatch }[]
           return {
             _id: doc.id,
             hidden: anchorHidden(pin.audience),
-            [`flags.${MODULE_ID}.${FLAGS.PIN}`]: pin,
+            ...payloadWrite(rawPinFlag(doc), pin),
           };
         })
         .filter(Boolean);
@@ -331,7 +380,7 @@ export function attach(doc: any, pin: DpPinFlags): Promise<any> {
     return doc.update(
       {
         hidden: anchorHidden(validated.audience),
-        [`flags.${MODULE_ID}.${FLAGS.PIN}`]: validated,
+        ...payloadWrite(rawPinFlag(doc), validated),
       },
       internal()
     );

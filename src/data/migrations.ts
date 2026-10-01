@@ -43,10 +43,14 @@ import * as settings from "../settings";
 import { pdfSourceForPin } from "../sources/describe";
 import { docPositionFor } from "../canvas/transform";
 import { freezeMetrics, validatePin } from "./pin-schema";
+import { rawPinFlag } from "./PinData";
+import { payloadWrite } from "./PinStore";
 import type { DpPinFlags } from "../types/dp";
 
 /** The payload version from which a document's point is stored as the tile's centre. */
 const CENTRE_VERSION = 3;
+
+const PIN_PATH = `flags.${MODULE_ID}.${FLAGS.PIN}`;
 
 const log = logger("migrate");
 
@@ -99,7 +103,7 @@ export function planMigration(
 
     updates.push({
       _id: tile.id,
-      [`flags.${MODULE_ID}.${FLAGS.PIN}`]: pin,
+      [PIN_PATH]: pin,
       ...(moved ?? {}),
     });
   }
@@ -172,11 +176,24 @@ export function pendingCount(scene: any): number {
   return planMigration(scene?.tiles?.contents ?? [], { drawnAsCard }).length;
 }
 
-/** Migrate one scene. Returns the number of anchors rewritten. */
+/**
+ * Migrate one scene. Returns the number of anchors rewritten.
+ *
+ * The plan names the payload each pin should have; the write also deletes every key its
+ * stored payload has and the plan's does not (`payloadWrite`). Without that, v14 merged the
+ * plan into the stored payload, the retired keys survived, and the same pins were planned —
+ * and the world sweep offered — again every session.
+ */
 export async function migrateScene(scene: any): Promise<number> {
-  const updates = planMigration(scene?.tiles?.contents ?? [], { drawnAsCard });
-  if (!updates.length) return 0;
+  const tiles = scene?.tiles?.contents ?? [];
+  const planned = planMigration(tiles, { drawnAsCard });
+  if (!planned.length) return 0;
 
+  const updates = planned.map(({ _id, [PIN_PATH]: pin, ...fields }) => ({
+    _id,
+    ...fields,
+    ...payloadWrite(rawPinFlag(tiles.find((tile: any) => tile?.id === _id)), pin as DpPinFlags),
+  }));
   await scene.updateEmbeddedDocuments("Tile", updates, internal());
   const moved = updates.filter((update) => "x" in update).length;
   log.info(

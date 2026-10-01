@@ -166,6 +166,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **The Audience tab said revealing a compendium document "shares the whole journal".** A
   compendium's permissions are per role and pack-wide, so a reveal grants nothing and adds
   nothing to anyone's sidebar, and the tab now says so.
+- **The offer to update older pins came back every session, and a pin from 0.1 stayed
+  *Not interactive* whatever you chose.** Foundry 14 merges what the module writes into a
+  pin with what is already stored, so the four settings 0.2 retired were never removed:
+  the same pins were updated on every load, and one that used to click through snapped
+  back from any *Opening* you picked. A write now removes what it no longer stores; the
+  next load updates those pins one last time.
 
 ## [0.3.3] — 2026-09-30
 
