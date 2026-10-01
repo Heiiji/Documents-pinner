@@ -32,7 +32,7 @@
  */
 
 import { MODULE_ID } from "../const";
-import { cfg, cv, g } from "../fvtt";
+import { cfg, cv, g, ns } from "../fvtt";
 import { readPin } from "../data/PinData";
 import * as api from "../api";
 import { isArmed } from "../apps/PlacementGhost";
@@ -51,7 +51,7 @@ export function registerPropHitLayer(): boolean {
   if (registered) return true;
 
   const config = cfg();
-  const CanvasLayer = (globalThis as any).foundry?.canvas?.layers?.CanvasLayer;
+  const CanvasLayer = ns("canvas.layers.CanvasLayer");
   if (!config?.Canvas?.layers || !CanvasLayer) return false;
 
   config.Canvas.layers[LAYER_NAME] = {

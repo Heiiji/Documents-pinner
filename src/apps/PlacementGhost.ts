@@ -670,14 +670,11 @@ function stamp(): void {
  * fact a GM most needs to catch immediately and least expects to have got wrong.
  */
 function announce(anchor: any, current: GhostState): void {
-  const notifications = (globalThis as any).ui?.notifications;
   const pin = readPin(anchor);
-  const label = pin ? api.labelFor(pin) : "";
-  const message = t(
-    current.audience === "everyone" ? "DP.ghost.placedVisible" : "DP.ghost.placedHidden",
-    { name: label }
-  );
-  notifications?.info?.(message);
+  notify({
+    key: current.audience === "everyone" ? "DP.ghost.placedVisible" : "DP.ghost.placedHidden",
+    data: { name: pin ? api.labelFor(pin) : "" },
+  });
 }
 
 /** Escape-hatch used by the keybindings: place the last-used source under the cursor. */

@@ -52,7 +52,8 @@ export function playRevealSound(
       log.debug(`no audio helper; reveal sound ${path} not played`);
       return false;
     }
-    const channels = ns("CONST.AUDIO_CHANNELS") ?? (globalThis as any).CONST?.AUDIO_CHANNELS;
+    // `foundry.CONST`, which core also exposes as the global `CONST`: the same object.
+    const channels = ns("CONST.AUDIO_CHANNELS");
     const data =
       channels && "environment" in channels ? { src: path, channel: "environment" } : { src: path };
     void Promise.resolve(AudioHelper.play(data, false)).catch((error: unknown) =>

@@ -750,7 +750,7 @@ async function onExport(this: any) {
   const json = library.exportPreset(this.selected);
   try {
     await navigator.clipboard.writeText(json);
-    (globalThis as any).ui?.notifications?.info?.(t("DP.presets.copied"));
+    notify({ key: "DP.presets.copied" }, "info");
   } catch {
     // Clipboard access can be refused; show the JSON so it can still be copied by hand.
     const DialogV2 = ns("applications.api.DialogV2");

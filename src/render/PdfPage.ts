@@ -24,6 +24,7 @@
  *   once. Parsing a 32-page PDF is not cheap and the result is immutable.
  */
 
+import { ns } from "../fvtt";
 import { logger } from "../log";
 
 const log = logger("pdf");
@@ -49,7 +50,7 @@ const PAGE_LIMIT = 8;
 
 /** Foundry's own route helper, so a server under a subpath still resolves. */
 function route(path: string): string {
-  const helper = (globalThis as any).foundry?.utils?.getRoute;
+  const helper = ns("utils.getRoute");
   return typeof helper === "function" ? helper(path) : `/${path.replace(/^\/+/, "")}`;
 }
 
