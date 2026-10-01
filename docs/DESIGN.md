@@ -1966,11 +1966,13 @@ modifier is Alt.
 
 ---
 
-### Live verification checklist for 14.365 — one sitting (A23, A25, A26)
+### Live verification checklist for 14.365 — one sitting (A23, A25, A26, A27, A28)
 
 Run this in Chromium as GM, with two players: Ali in Chromium and Ben in Firefox, each in their
 own browser profile. Use a fresh world that has pins from 0.3.3, so the format-5 migration runs.
-Record each answer as observed and fold the results into A24.
+Record each answer as observed and fold the results into A24; fold the answers to steps 11–20
+into A27's and A28's tables of what is unverified. Use a **test world**: steps 11–20 import
+documents, make folders and change ownership.
 
 **Setup** (about ten minutes):
 
@@ -1984,6 +1986,17 @@ Record each answer as observed and fold the results into A24.
 - An `.ogg` file in the world's data folder.
 - A face added in Font Config.
 - A second world available in the same browser.
+- For steps 11–20 (about twenty minutes more), in a world whose system has data models for its
+  actors and items (dnd5e or pf2e are the cases the ranking was written against):
+  - a world JournalEntry compendium, *Handouts*, holding a journal *Letters* with two text pages
+    and a PDF page, and a second journal;
+  - an Actor compendium, *Bestiary*, holding one NPC, and an Item compendium, *Loot*, holding
+    one item;
+  - a world NPC, *Black Jack*, with a portrait, a public biography holding a
+    `<section class="secret">` and an inline roll (`[[/r 1d20 + 2]]`), a private biography, hit
+    points, and a token on the scene; a second NPC of the same type, *Rook*; a world item with a
+    description (on pf2e, one with a GM description too);
+  - `docs/spike-2-sources-probe.js` at hand, to paste into each browser's console.
 
 0. **Page grants (A23).** Make a journal with three pages — text, text, image — every page at
    its default ownership, and the journal at None. Pin page 2 with access granted, and reveal it
@@ -2062,3 +2075,88 @@ Record each answer as observed and fold the results into A24.
        window closing and the main menu staying shut?
 10. **Browser second opinion.** Repeat steps 2, 6, 8 and 9 from Ben's Firefox for anything that
     differed. Step 9 needs a GM, so promote Ben, or run it as GM in Firefox.
+11. **The probe** (A27, A28). Paste `docs/spike-2-sources-probe.js` into the GM's console, then
+    Ali's, then Ben's, and keep each report. It answers, by section: what `fromUuidSync` returns
+    for a compendium document and page, before and after a load (A3, B1–B8); every pack's level
+    for every player, as the GM's client sees it (A2) and as each player's does (A1); whether a
+    player's client loads from a pack below Observer, at Limited and at Observer, and whether it
+    raises a toast (C1, C2 — set the three levels on three packs first); which world actors a
+    player's client holds (D1); the HTML fields and the automatic choice for every actor and item
+    type (E); the default artwork (F); the sheet classes and the level each asks (G). Then, as
+    the report's footer lists:
+    - `__dpProbe2.recordHooks()`, and right-click a journal, an actor and an item in the sidebar
+      and in a compendium window of each kind, and open each kind of sheet: the context-menu and
+      header hook names, and each menu's target;
+    - `__dpProbe2.armDrop(4)`, and drag an actor and an item from the sidebar, then from a
+      compendium: the payloads (nothing is created while it is armed);
+    - `__dpProbe2.watchUpdates()`, and change *Black Jack*'s hit points, rename him, edit his
+      public biography and an item he owns: the shape of each change;
+    - as Ali, with *Black Jack* set to Limited for her by hand,
+      `__dpProbe2.limitedSheet("Actor.<id>")`, then look at the sheet and note what it shows,
+      and whether he is in her Actors sidebar (D2);
+    - as GM, opt-in: `__dpProbe2.importOne(uuid, { iUnderstand: true })` on a *Handouts* journal
+      (`_stats.compendiumSource` on the copy; it deletes the copy and its folder), and
+      `__dpProbe2.showPack(uuid, "<Ali's id>", { iUnderstand: true })` with *Handouts* readable
+      and then not;
+    - with the module disabled and no recorder armed, Alt-drop *Black Jack* on the map: is the
+      token hidden? Delete it.
+12. **A compendium the players can read** (A27). *Handouts* at Observer for the Player role.
+    - In *Pin a document*, type `l`: no compendium rows. Type `le`: *Letters · Handouts* is listed
+      after the world's rows, not greyed. Pin it.
+    - In Pin Studio's Content tab the source reads *Letters*, "From the compendium “Handouts”",
+      and the page select lists its pages. Choose the PDF page: the PDF page field appears with
+      the right count, and on the map it is a card, not a texture.
+    - Reload the GM's browser and open the Pinboard before anything draws. Note the row's name,
+      crumb and icon, then wait for the card: nothing changes, except that the page's own name
+      replaces the journal's once it has loaded.
+    - Reveal it to Ali: she reads it on the map and in the reader, her chip carries no key, and
+      nothing is added to her sidebar. Hide it again: her chip now carries the key (limitation 15).
+13. **A compendium the players cannot read** (A27). *Handouts* at None for Player and Observer for
+    Trusted, and Ben made Trusted.
+    - In the picker *Letters* is greyed and reads *Import & pin*. Choose it: a "Documents Pinner"
+      journal folder appears holding a copy, and the ghost carries the copy. Place it and reveal
+      it with access on: Ali reads it and finds it in her sidebar. Choose it again: no second copy.
+      Rename the folder and import the second journal: it goes into the renamed folder.
+    - Alt-drop *Letters* from the compendium window: one warning, naming *Handouts*. Reveal it to
+      both players: Ali sees a placeholder saying the document is in a compendium she cannot
+      open, with no error toast and no request for it in her network tab; Ben reads it. Ali's
+      chip carries the key and Ben's does not.
+    - *Show to players now* from the Pinboard: only Ben gets the window, and the GM is told Ali
+      was left out.
+    - Right-click *Letters* in the compendium window, *Pin to scene*: the ghost arms it. Open
+      *Letters* and right-click one of its pages in the sheet: the ghost arms that page.
+    - `/pin letters`: the picker opens on that search with the greyed row. Set Player back to
+      Observer and `/pin letters` again: the ghost arms the compendium journal.
+    - Unlock *Handouts*, rename *Letters* to *Missives*, and search `missi` without reloading: it
+      is found. Put Ben back to Player.
+14. **The wanted poster** (A28). Pin *Black Jack* as a prop from his context menu, then his sheet
+    header, then *Pin a document* with the Actors chip, then `/pin jack`. Each time: the
+    portrait, the name and the public biography, and *Text shown* opens on "Automatic —" and the
+    field's name.
+    - Reveal it to Ali with access off, the default for an actor: she reads the poster without
+      the secret, the inline roll shows a total, and *Black Jack* is **not** in her sidebar.
+    - Switch access on: the Audience tab offers Limited alone, and Ali now has him listed at
+      Limited. Note what the system's Limited sheet shows.
+    - Make Ben his owner: Ben's poster shows the secret. The GM's shows it too.
+    - The cap's reason, once, by hand: give Ali Observer on *Black Jack* in core's own ownership
+      dialog and look through her eyes. Does she see through his token? Put it back.
+15. **Drops** (A28). With the modifier on Alt, Alt-drag *Black Jack*: core's hidden token, no pin.
+    Set the modifier to Ctrl and Ctrl-drag him: a pin. Alt-drag the world item and the *Loot*
+    item: a pin each. Drag an item off a character's sheet with the modifier held: one notice,
+    nothing placed. Put the modifier back to Alt.
+16. **Retarget** (A28). On a poster whose *Text shown* is *Black Jack*'s private biography, choose
+    *Rook* from the Studio: the poster shows Rook's public text, and *Text shown* reads
+    "Automatic". Retarget a journal pin with access on onto *Rook*: one notice, access off, and
+    Rook is in nobody's sidebar.
+17. **Combat** (A28). Put *Black Jack*'s token in combat and change his hit points several times:
+    the poster does not redraw (watch its DOM card's node in devtools). Edit his public biography:
+    it redraws. Edit his private biography: it does not.
+18. **An item** (A28). Pin the world item. "Automatic" names the players' description, never a
+    GM one. Choose another field and check the card. *Show to players* is not in its Pinboard row
+    menu, and `Shift+S` on the row says it opens journals only.
+19. **A compendium actor** (A27, A28). Search `bestiary` with the Actors chip. With the Player
+    role at None on *Bestiary*, the row is greyed; *Import & pin* makes an Actor folder
+    "Documents Pinner" holding the copy and pins it with access off. With Observer, the reference
+    is pinned and Ali reads the poster.
+20. **Browser second opinion.** Repeat steps 12, 13 and 14 from Ben's Firefox for anything that
+    differed.
