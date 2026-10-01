@@ -139,18 +139,31 @@ export function cardHtml(options: CardOptions): string {
     `${options.overflow ? ' data-dp-overflow="true"' : ""} style="${escapeAttr(style)}">` +
     `<div class="dp-card__sheet">${options.missing ? "" : (options.figureHtml ?? "")}` +
     `${title}${body}</div>` +
-    // The rolling scanlines' own layer, only where the dressing says they roll. Every still
-    // card — a texture, the coarse rung, a reduced client, a pin set to stay still — draws
-    // its scanlines as it always did, on `::before`, and carries nothing new (A29).
-    (options.effectAttrs?.["data-dp-scan"] === "roll"
+    effectLayers(options.effectAttrs) +
+    `</div>`
+  );
+}
+
+/**
+ * The layers an effect draws over the sheet, after it inside the card: one card, one
+ * answer, which is why the Preset Studio's preview asks here too rather than building its
+ * own — built by hand, it never had the HUD overlay, and lost the rolling scanlines the
+ * moment they moved to a layer of their own (A29).
+ *
+ * - The rolling scanlines' own layer, only where the dressing says they roll. Every still
+ *   card — a texture, the coarse rung, a reduced client, a pin set to stay still — draws
+ *   its scanlines as it always did, on `::before`, and carries nothing new.
+ * - The HUD overlay, only when the preset asks for it, so a parchment prop's markup is
+ *   byte-identical to what it was and the presets without an overlay pay nothing.
+ */
+export function effectLayers(effectAttrs: Record<string, string> | undefined): string {
+  return (
+    (effectAttrs?.["data-dp-scan"] === "roll"
       ? `<i class="dp-card__scan" aria-hidden="true"></i>`
       : "") +
-    // Emitted only when the preset asks for it, so a parchment prop's markup is byte-
-    // identical to what it was and the ten presets without an overlay pay nothing.
-    (options.effectAttrs?.["data-dp-hud"] === "true"
+    (effectAttrs?.["data-dp-hud"] === "true"
       ? `<div class="dp-card__hud" aria-hidden="true"><i class="dp-card__hud-sweep"></i></div>`
-      : "") +
-    `</div>`
+      : "")
   );
 }
 

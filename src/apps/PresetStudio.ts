@@ -37,6 +37,7 @@ import {
 import { currentLevel } from "../effects/level";
 import { fontChoices, fontLabel, fontOptionsMarkup, fontStack } from "../effects/typeface";
 import { registeredFontFamilies } from "../render/AssetInliner";
+import { effectLayers } from "../render/CardTemplate";
 import { logger } from "../log";
 import { soundPath } from "../normalise";
 import { playRevealSound } from "../effects/reveal-sound";
@@ -317,7 +318,12 @@ function previewMarkup(preset: DpPreset, backdrop: Backdrop, frozen: boolean): s
     `<div class="dp-card__sheet">` +
     `<h1 class="dp-card__title">${escapeHtml(library.presetName(preset))}</h1>` +
     `<div class="dp-card__body"><p>${escapeHtml(t("DP.presets.sample"))}</p></div>` +
-    `</div></div></div>` +
+    `</div>` +
+    // The layers a pin's card draws over its sheet, from the card's own answer: the
+    // rolling scanlines and the HUD overlay are layers of their own, and a preview built
+    // without them showed a preset's scanlines still and its overlay not at all (A29).
+    effectLayers(dressed.attrs) +
+    `</div></div>` +
     `<div class="dp-presets__bgs" role="group" aria-label="${escapeAttr(t("DP.presets.backdrop"))}">` +
     swatches +
     `<button type="button" data-action="toggleFreeze" aria-pressed="${frozen}">` +

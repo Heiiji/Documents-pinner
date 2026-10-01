@@ -89,6 +89,22 @@ describe("presetStudioMarkup", () => {
     expect(markup).not.toContain("DP.presets.readOnlyHint");
   });
 
+  // The preview built its card by hand, so when the rolling scanlines moved to a layer of
+  // their own it showed them still, and it never had the HUD overlay at all (A29).
+  it("draws the layers a pin's card draws: the rolling scanlines and the HUD overlay", () => {
+    // The preview pane alone: from the card to the backdrop swatches after it.
+    const preview = (id: string, frozen: boolean) => {
+      const markup = presetStudioMarkup(presets, getCorePreset(id)!, "map", frozen);
+      const from = markup.indexOf('class="dp-presets__preview"');
+      return markup.slice(from, markup.indexOf('class="dp-presets__bgs"', from));
+    };
+    expect(preview("crt-scanlines", false)).toContain('<i class="dp-card__scan"');
+    // Frozen is the reduced level: the scanlines are drawn still, as a reduced card's are.
+    expect(preview("crt-scanlines", true)).not.toContain("dp-card__scan");
+    expect(preview("projected-readout", false)).toContain('<div class="dp-card__hud"');
+    expect(preview("aged-parchment", false)).not.toMatch(/dp-card__(scan|hud)/);
+  });
+
   it("marks the chosen backdrop, which is how an effect is judged against a real map", () => {
     const markup = presetStudioMarkup(presets, parchment(), "dark", false);
     expect(markup).toContain('data-dp-bg="dark"');
