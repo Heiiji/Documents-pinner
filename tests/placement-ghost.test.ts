@@ -304,6 +304,26 @@ describe("placement elevation", () => {
     expect(created[0].y).toBe(500);
   });
 
+  it.each([
+    ["leaves a gridless scene unsnapped, though v14 gives it a size", { type: 0 }, [703, 547]],
+    [
+      "snaps a hex scene where core's own snapping says, not to a square lattice",
+      { type: 2, getSnappedPoint: () => ({ x: 650, y: 587 }) },
+      [650, 587],
+    ],
+  ])("%s", async (_label, grid, [x, y]) => {
+    (globalThis as any).canvas.grid = { size: 100, ...grid };
+    arm(source);
+    const board = document.getElementById("board")!;
+    board.dispatchEvent(
+      new MouseEvent("pointermove", { bubbles: true, clientX: 703, clientY: 547 })
+    );
+    board.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0 }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(created[0]).toMatchObject({ x, y });
+  });
+
   it("places once for two presses while the first is still landing", async () => {
     arm(source);
     const board = document.getElementById("board")!;

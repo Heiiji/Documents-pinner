@@ -17,7 +17,7 @@
  * place in the module that teaches itself.
  */
 
-import { cfg, cv, isGM, notify } from "../fvtt";
+import { cfg, cv, isGM, notify, ns } from "../fvtt";
 import { t } from "../i18n";
 import { logger } from "../log";
 import { escapeAttr, escapeHtml } from "../html";
@@ -210,10 +210,10 @@ export function sizeOf(state: GhostState, gridSize: number): { width: number; he
 }
 
 /**
- * Snap a scene-space point to the grid unless free placement is held.
+ * Snap a scene-space point to a square grid unless free placement is held.
  *
- * Snapping is to the grid the scene actually uses; a gridless scene reports size 0 and
- * simply never snaps, rather than collapsing everything to the origin.
+ * A size of 0 never snaps, rather than collapsing everything to the origin. Which grid
+ * the scene has is `snapToScene`'s question: v14 never reports a size of 0.
  */
 export function snap(point: { x: number; y: number }, gridSize: number, free: boolean) {
   if (free || !gridSize) return point;
@@ -238,6 +238,35 @@ export function isArmed(): boolean {
 
 function gridSize(): number {
   return cv()?.scene?.grid?.size ?? 100;
+}
+
+/**
+ * Snap to the grid this scene actually has, unless free placement is held.
+ *
+ * The ghost assumed "a gridless scene reports size 0", which v14 does not allow — a grid's
+ * size has a minimum and defaults to 100 — so a gridless scene jumped in 50 px steps, and
+ * a hex scene snapped to a square lattice that lands between its hexes. Now: no grid, no
+ * snap; a square grid, its half-square lattice, as before; hexagons, core's own snapping
+ * to their centres, vertices and edge midpoints — the same points the half-square lattice
+ * is on a square — or no snap on a core without it.
+ */
+function snapToScene(point: { x: number; y: number }, free: boolean): { x: number; y: number } {
+  if (free) return point;
+  const grid = cv()?.grid;
+  const TYPES = ns("CONST.GRID_TYPES");
+  const type = grid?.type ?? cv()?.scene?.grid?.type;
+  if (TYPES && type === TYPES.GRIDLESS) return point;
+  if (!TYPES || type === undefined || type === TYPES.SQUARE) return snap(point, gridSize(), false);
+
+  const M = ns("CONST.GRID_SNAPPING_MODES");
+  if (typeof grid?.getSnappedPoint !== "function" || !M) return point;
+  const snapped = grid.getSnappedPoint(
+    { x: point.x, y: point.y },
+    { mode: M.CENTER | M.VERTEX | M.EDGE_MIDPOINT, resolution: 1 }
+  );
+  return Number.isFinite(snapped?.x) && Number.isFinite(snapped?.y)
+    ? { x: snapped.x, y: snapped.y }
+    : point;
 }
 
 function legendMarkup(current: GhostState): string {
@@ -477,7 +506,7 @@ export function arm(source: DpSource, mode?: DpMode): boolean {
 /** Arm and immediately place the ghost at a known scene point. Used by the drop path. */
 export function armAt(source: DpSource, point: { x: number; y: number }, mode?: DpMode): boolean {
   if (!arm(source, mode)) return false;
-  state = { ...state!, ...snap(point, gridSize(), false) };
+  state = { ...state!, ...snapToScene(point, false) };
   render();
   return true;
 }
@@ -526,7 +555,7 @@ function attach(): void {
 
   on(board, "pointermove", (event: PointerEvent) => {
     if (!state) return;
-    const point = snap(pointerScenePoint(event), gridSize(), state.freePlace);
+    const point = snapToScene(pointerScenePoint(event), state.freePlace);
     if (point.x === state.x && point.y === state.y) return;
 
     state = { ...state, x: point.x, y: point.y };

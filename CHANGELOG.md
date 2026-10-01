@@ -151,6 +151,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   zoom across a detail level, an edit to the prop, a reload. Every client redraws them as
   you save. Changing *Prop rendering* or *Effect level*, or lowering the *Texture memory
   budget*, likewise takes effect at once instead of at the next pan.
+- **Placing a pin on a gridless or a hex map no longer jumps in square steps.** The ghost
+  snapped to half a square of a grid the scene does not have: on a gridless map it moved
+  in 50-pixel steps, and on a hex map it landed between the hexes, unless you held the
+  free-placement key. It now follows the pointer freely on a gridless map, and snaps to
+  the hexes' centres, corners and edge midpoints on a hex map.
 - **"Reveal all" showed a private note to the whole table.** A pin narrowed to one player
   and hidden for a beat went back to that player when revealed with `Space` or the eye —
   and to everyone when revealed from the Pinboard's bulk bar or "Reveal all". Every reveal
