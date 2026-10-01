@@ -117,9 +117,11 @@ export function registerKeybindings(): void {
     name: "DP.keys.cancel",
     hint: "DP.keys.cancelHint",
     editable: [{ key: "Escape" }],
-    // Above core's own Escape handling, so cancelling a placement does not also
-    // deselect everything and close whatever else happened to be open.
-    precedence: 1,
+    // Before core's own Escape, so cancelling a placement does not also deselect
+    // everything and close whatever else happened to be open. Core's default precedence,
+    // NORMAL, does that: core's dismiss binding is DEFERRED (RECALLED), so a NORMAL one
+    // that claims the key runs first. A `precedence: 1` here read as "above core", and is
+    // NORMAL by number (TYPES common/constants.d.mts, KEYBINDING_PRECEDENCE).
     onDown: () => {
       if (!isArmed()) return false;
       disarm();

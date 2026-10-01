@@ -3,9 +3,13 @@
  *
  * The @layer statement on the first line fixes the cascade order regardless of the
  * order the @import rules resolve in — which is exactly the guarantee a bundler would
- * otherwise have provided. Everything the module ships lives inside a `dp.*` layer,
- * and Foundry's own unlayered styles beat layered styles by definition, so this module
- * structurally CANNOT outrank core UI, even with a careless selector.
+ * otherwise have provided. Everything the module ships lives inside a `dp.*` layer.
+ *
+ * The layers do NOT keep it below core's UI. Core's own styles have been layered since
+ * v13 (RECALLED), and a layer declared later — these — outranks theirs whatever the
+ * specificity. What keeps the module out of Foundry's UI is that every selector here is
+ * scoped to its own markup — `.dp-*`, `#documents-pinner-overlay`, `[data-dp-*]` — and
+ * every keyframe name prefixed, which tests/assets.test.ts enforces.
  *
  * No build step and no preprocessor anywhere in the CSS pipeline. The browsers this
  * needs are stated in the README and held by tests/css-baseline.test.ts: Chrome 120 and
