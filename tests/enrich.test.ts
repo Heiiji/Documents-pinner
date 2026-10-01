@@ -180,6 +180,27 @@ describe("sanitise", () => {
     expect(clean('<div class="secret">hidden</div>')).not.toContain("hidden");
   });
 
+  /**
+   * Core's Reveal button writes `class="secret revealed"`, and core's own enrichment keeps
+   * that section for every viewer (`section.secret:not(.revealed)`). Stripping every
+   * `.secret` took the paragraph the GM had just revealed off the players' cards while
+   * their journal sheet showed it.
+   */
+  it("keeps a secret the GM revealed for a non-owner, and still removes one not revealed", () => {
+    const html =
+      '<section class="secret revealed"><p>the map is in the well</p></section>' +
+      '<section class="secret"><p>the killer is the butler</p></section>';
+    const out = clean(html);
+    expect(out).toContain("the map is in the well");
+    expect(out).not.toContain("butler");
+  });
+
+  it("does the same with the bare class, revealed and not", () => {
+    const out = clean('<div class="secret revealed">shown</div><div class="secret">hidden</div>');
+    expect(out).toContain("shown");
+    expect(out).not.toContain("hidden");
+  });
+
   it("keeps secrets for an owner, which is what the GM's own prop shows", () => {
     expect(asOwner('<section class="secret">notes</section>')).toContain("notes");
   });

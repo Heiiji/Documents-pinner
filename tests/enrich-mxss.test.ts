@@ -101,6 +101,16 @@ describe("<template> content", () => {
     const clean = sanitise('<template><section class="secret">no</section></template>', false);
     expect(clean).not.toContain("no");
   });
+
+  it("keeps a revealed secret inside a template and strips the unrevealed one beside it", () => {
+    const clean = sanitise(
+      '<template><section class="secret revealed">the map</section>' +
+        '<section class="secret">the killer</section></template>',
+      false
+    );
+    expect(clean).toContain("the map");
+    expect(clean).not.toContain("the killer");
+  });
 });
 
 describe("A6's tag-name fix, which is sound and must stay so", () => {

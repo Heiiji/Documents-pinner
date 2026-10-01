@@ -11,14 +11,18 @@
  *
  * 2. **`secrets` is computed from the VIEWING user, never from the GM.** It is
  *    `page.isOwner` on this client — never `game.user.isGM`, and never a value that
- *    travelled from somewhere else. A GM's secret sections are stripped before the
- *    player's HTML exists, which is the one thing here that is genuinely *removed*
- *    rather than hidden.
+ *    travelled from somewhere else. A GM's unrevealed secret sections are stripped
+ *    before the player's HTML exists, which is the one thing here that is genuinely
+ *    *removed* rather than hidden; a section the GM revealed reaches the player, as it
+ *    does on the journal's own sheet.
  *
  * 3. **The result is scrubbed anyway.** Enriched HTML goes into markup we build
  *    ourselves rather than into a core sheet, so it is walked and stripped of scripts,
- *    frames, event handlers and executable URLs. Foundry exposes no public sanitiser,
- *    and a regex over HTML is a well-known way to be confidently wrong, so the scrub
+ *    frames, event handlers and executable URLs. Foundry's own `foundry.utils.cleanHTML`
+ *    (foundry.mjs 14.368 ~39332) is not that scrub: it is an allow-list made for chat
+ *    and tooltips, it keeps an `<iframe>` (sandboxed, but with `allow-scripts`), knows
+ *    nothing of secrets, and serialises as HTML, which the rasteriser's XML parser cannot
+ *    read. A regex over HTML is a well-known way to be confidently wrong, so the scrub
  *    parses a real tree and walks it.
  *
  * The secret post-filter in step 2 is belt-and-braces on top of `enrichHTML` already
@@ -200,14 +204,21 @@ export function serialiseXml(body: ParentNode & { firstChild: ChildNode | null }
 }
 
 /**
- * Remove GM secret sections. Applied whenever the viewer is not an owner.
+ * Remove the GM's UNREVEALED secret sections. Applied whenever the viewer is not an owner.
+ *
+ * Unrevealed only, as core's own enrichment does (`section.secret:not(.revealed)`,
+ * foundry.mjs 14.368 ~35316): the journal's Reveal button writes `class="secret revealed"`,
+ * and that is the GM saying "the players may read this now". Stripping every `.secret`
+ * took the revealed paragraph off the players' cards while their own journal sheet showed
+ * it — the card was the one place the GM's reveal did not reach.
  *
  * Descends into template content for the same reason `scrub` does: `querySelectorAll`
  * does not cross a DocumentFragment boundary, and this is the one filter in the module
  * where missing a node means a GM's notes reach a player.
  */
 export function stripSecrets(root: ParentNode): void {
-  for (const secret of [...root.querySelectorAll("section.secret, .secret")]) secret.remove();
+  const unrevealed = "section.secret:not(.revealed), .secret:not(.revealed)";
+  for (const secret of [...root.querySelectorAll(unrevealed)]) secret.remove();
   for (const element of [...root.querySelectorAll("template")]) {
     const content = (element as HTMLTemplateElement).content;
     if (content) stripSecrets(content);
