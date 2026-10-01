@@ -19,14 +19,13 @@
  */
 
 import { MODULE_ID, PLACEHOLDER_TEXTURE } from "../const";
-import { cfg, cv, g, isGM, notify, ns, playerIds, resolveUuidSync } from "../fvtt";
+import { cfg, cv, g, notify, ns, playerIds } from "../fvtt";
 import { previewIntensity } from "../canvas/DomPropTier";
 import { t, tn, tOr } from "../i18n";
 import { escapeAttr, escapeHtml } from "../html";
 import * as api from "../api";
 import { logger } from "../log";
 import { resumeAfterEdit, toggleVisibility } from "../data/audience";
-import * as settings from "../settings";
 import type { EditHold } from "../settings";
 import { readPin } from "../data/PinData";
 import { cardMetrics, freezeMetrics } from "../data/pin-schema";
@@ -44,7 +43,11 @@ import { chipsMarkup, describeChips } from "./chips";
 import { openPicker } from "./DocumentPicker";
 import { chipUsersFor } from "./PinHUD";
 import { restoreFocus, snapshotFocus } from "./focus-restore";
+import { resumeOne, worldId, writeHolds } from "./edit-holds";
 import type { DpNotice, DpPinFlags, DpSource } from "../types/dp";
+
+// The `ready` sweep lives with the holds it ends; `main.ts` and the tests read it here.
+export { resumeEditHolds } from "./edit-holds";
 
 const log = logger("studio");
 
@@ -1356,72 +1359,6 @@ function onHoldForEdit(this: any) {
 
 function onResumeEdit(this: any) {
   this.runResume();
-}
-
-// ---------------------------------------------------------------------------
-// Edit holds, across a reload
-// ---------------------------------------------------------------------------
-
-/** The world this client is in, or null on a build that does not say. */
-function worldId(): string | null {
-  const id = g()?.world?.id;
-  return typeof id === "string" && id ? id : null;
-}
-
-/** The holds this client has placed, read defensively: the setting is ours, but stored. */
-function readHolds(): EditHold[] {
-  const stored = settings.get("editHolds");
-  if (!Array.isArray(stored)) return [];
-  return stored.filter((hold): hold is EditHold => typeof hold?.anchor === "string");
-}
-
-function writeHolds(change: (holds: EditHold[]) => EditHold[]): Promise<void> {
-  return settings.set("editHolds", change(readHolds()));
-}
-
-/**
- * Reveal a held pin again iff it is still exactly as the hold left it.
- *
- * The anchor is resolved afresh from its uuid, never taken from a Studio: the pin may have
- * been deleted meanwhile, and a deleted pin is simply not there to reveal.
- */
-async function resumeOne(hold: EditHold): Promise<boolean> {
-  const doc = resolveUuidSync(hold.anchor);
-  const pin = readPin(doc);
-  const next = pin ? resumeAfterEdit(pin.audience, hold.restore) : null;
-  if (!next) return false;
-  await api.setAudience(doc, next);
-  return true;
-}
-
-/**
- * The `ready` sweep: end every hold a Studio could not end itself — the page reloaded,
- * or the browser closed, with a pin hidden for editing.
- *
- * Each pin still as its hold left it is revealed again, to the same players; one the GM
- * changed since is left as it is. Every hold of this world is then dropped in one write,
- * resumed or not, and the GM is told how many came back. A hold of another world is kept
- * for that world. A GM who never returns leaves the pin hidden with its audience
- * remembered: one Space from where it was.
- */
-export async function resumeEditHolds(): Promise<number> {
-  if (!isGM()) return 0;
-  const world = worldId();
-  const mine = readHolds().filter((hold) => !hold.world || !world || hold.world === world);
-  if (!mine.length) return 0;
-
-  let resumed = 0;
-  for (const hold of mine) {
-    try {
-      if (await resumeOne(hold)) resumed++;
-    } catch (error) {
-      log.warn(`could not reveal ${hold.anchor} again after a reload`, error);
-    }
-  }
-  const swept = new Set(mine.map((hold) => hold.anchor));
-  await writeHolds((holds) => holds.filter((hold) => !swept.has(hold.anchor)));
-  if (resumed) notify({ key: "DP.notice.editHoldsResumed", data: { count: resumed } }, "info");
-  return resumed;
 }
 
 /**
