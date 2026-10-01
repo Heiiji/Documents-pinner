@@ -19,7 +19,7 @@
  */
 
 import { MODULE_ID } from "../const";
-import { cfg, confirmDialog, g, notify, ns, playerIds } from "../fvtt";
+import { browseFiles, cfg, confirmDialog, g, notify, ns, playerIds } from "../fvtt";
 import { previewIntensity } from "../canvas/DomPropTier";
 import { t } from "../i18n";
 import { escapeHtml } from "../html";
@@ -503,14 +503,8 @@ function onEditPresets(this: any) {
 
 /** Any image as this pin's icon, from the file browser. */
 function onBrowseIcon(this: any) {
-  const FilePicker = ns("applications.apps.FilePicker.implementation");
-  if (!FilePicker) return;
   const doc = this.doc;
-  new FilePicker({
-    type: "image",
-    current: doc?.texture?.src,
-    callback: (path: string) => api.fireAndReport(api.setPinIcon(doc, path)),
-  }).render({ force: true });
+  browseFiles("image", (path) => api.fireAndReport(api.setPinIcon(doc, path)), doc?.texture?.src);
 }
 
 /**
@@ -532,20 +526,17 @@ async function setRevealSound(doc: any, value: string | null): Promise<void> {
  * never `this`: the browser outlives the Studio if the GM closes it first.
  */
 function onBrowseRevealSound(this: any) {
-  const FilePicker = ns("applications.apps.FilePicker.implementation");
   const doc = this.doc;
-  if (!FilePicker || readPin(doc)?.mode !== "prop") return;
-  const failed = (error: unknown) => log.warn(`the reveal sound could not be set`, error);
-  try {
-    const picker = new FilePicker({
-      type: "audio",
-      current: readPin(doc)?.effect.revealSound ?? "",
-      callback: (path: string) => void setRevealSound(doc, path).catch(failed),
-    });
-    void Promise.resolve(picker.render({ force: true })).catch(failed);
-  } catch (error) {
-    failed(error);
-  }
+  const pin = readPin(doc);
+  if (pin?.mode !== "prop") return;
+  browseFiles(
+    "audio",
+    (path) =>
+      void setRevealSound(doc, path).catch((error: unknown) =>
+        log.warn(`the reveal sound could not be set`, error)
+      ),
+    pin.effect.revealSound ?? ""
+  );
 }
 
 /** Hear what the players will hear when this prop arrives. */

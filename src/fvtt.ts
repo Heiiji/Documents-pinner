@@ -154,6 +154,26 @@ export async function confirmDialog(
   }
 }
 
+/**
+ * Open core's file browser on one type of file — `"image"`, `"audio"`, `"imagevideo"` —
+ * and hand the chosen path to `pick`. Returns whether it opened: not on a build with no
+ * browser, and not when the browser throws, which is logged rather than thrown into the
+ * button that asked. `current` is the path it opens on.
+ */
+export function browseFiles(type: string, pick: (path: string) => void, current?: string): boolean {
+  const FilePicker = ns("applications.apps.FilePicker.implementation");
+  if (!FilePicker) return false;
+  const failed = (error: unknown) => log.warn(`the file browser could not open`, error);
+  try {
+    const picker = new FilePicker({ type, current, callback: pick });
+    void Promise.resolve(picker.render({ force: true })).catch(failed);
+    return true;
+  } catch (error) {
+    failed(error);
+    return false;
+  }
+}
+
 /** Options every document write from this module carries, so our hooks can stand down. */
 export function internal<T extends Record<string, unknown>>(options?: T): T & { render?: boolean } {
   return { ...(options ?? ({} as T)), [INTERNAL_OPTION]: true };

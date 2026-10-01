@@ -30,6 +30,7 @@ import { hashContent } from "./TextureCache";
 import { measureCardHeight } from "./measure";
 import { cardMetrics } from "../data/pin-schema";
 import { adapterForDoc, canOpenShown } from "../sources/index";
+import { pdfPageOf } from "../sources/describe";
 import { packLockedHere } from "../sources/packs";
 import { isPackUuid, parseSourceUuid } from "../sources/uuid";
 import { labelFor, resolveSource } from "../sources/view";
@@ -140,7 +141,7 @@ export async function resolveCard(
   const pdfSrc = adapter.pdf(source);
   if (pdfSrc) {
     const longEdge = Math.max(size.width, size.height) * (options.tier === "L2a" ? 1 : 2);
-    const rendered = await renderPdfPage(pdfSrc, pin.source.pdfPage ?? 1, Math.round(longEdge));
+    const rendered = await renderPdfPage(pdfSrc, pdfPageOf(pin), Math.round(longEdge));
     if (rendered) {
       const title = pin.display.label || source.name || "";
       return {
@@ -153,7 +154,7 @@ export async function resolveCard(
         title,
         readable: canOpenShown(source, g()?.user),
         contentHash: hashContent(
-          `pdf|${pdfSrc}|${pin.source.pdfPage ?? 1}|${rendered.width}x${rendered.height}`
+          `pdf|${pdfSrc}|${pdfPageOf(pin)}|${rendered.width}x${rendered.height}`
         ),
         missing: false,
         // The page's own aspect is the answer; it is contained, so it never overflows.

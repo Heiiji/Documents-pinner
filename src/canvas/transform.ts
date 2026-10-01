@@ -204,6 +204,29 @@ export function rotatedBounds(rect: Rect & { rotation?: number }): Rect {
 }
 
 /**
+ * The four corners of a rotated top-left rect in scene space, clockwise from its own
+ * top-left, turned `rotation` degrees about its centre. For a document, pass
+ * `tileRect(doc)`.
+ */
+export function rotatedCorners(rect: Rect & { rotation?: number }): Point[] {
+  const cx = rect.x + rect.width / 2;
+  const cy = rect.y + rect.height / 2;
+  const rot = ((rect.rotation ?? 0) * Math.PI) / 180;
+  const cos = Math.cos(rot);
+  const sin = Math.sin(rot);
+  return [
+    [-1, -1],
+    [1, -1],
+    [1, 1],
+    [-1, 1],
+  ].map(([sx, sy]) => {
+    const dx = (sx * rect.width) / 2;
+    const dy = (sy * rect.height) / 2;
+    return { x: cx + dx * cos - dy * sin, y: cy + dx * sin + dy * cos };
+  });
+}
+
+/**
  * Whether a scene-space point lies inside a rotated top-left rect.
  *
  * Exact, not the axis-aligned bounds: the reader uses this to tell a press on the prop

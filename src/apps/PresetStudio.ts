@@ -15,7 +15,7 @@
  * would be worse than no meter at all.
  */
 
-import { confirmDialog, notify, ns } from "../fvtt";
+import { browseFiles, confirmDialog, notify, ns } from "../fvtt";
 import { t } from "../i18n";
 import { escapeAttr, escapeHtml } from "../html";
 import * as api from "../api";
@@ -796,21 +796,13 @@ async function setReveal(
 
 /** Choose a preset's reveal sound from the file browser, audio files only. */
 function onBrowseRevealSound(this: any) {
-  const FilePicker = ns("applications.apps.FilePicker.implementation");
-  if (!FilePicker || this.selected.author === "core") return;
+  if (this.selected.author === "core") return;
   const id = this.selectedId;
-  try {
-    const picker = new FilePicker({
-      type: "audio",
-      current: this.selected.reveal.sound ?? "",
-      callback: (path: string) => void setReveal(this, id, "sound", path),
-    });
-    void Promise.resolve(picker.render({ force: true })).catch((error: unknown) =>
-      log.warn(`the file browser could not open`, error)
-    );
-  } catch (error) {
-    log.warn(`the file browser could not open`, error);
-  }
+  browseFiles(
+    "audio",
+    (path) => void setReveal(this, id, "sound", path),
+    this.selected.reveal.sound ?? ""
+  );
 }
 
 /** Hear it: the GM's own client never sees a prop arrive, so this is how they know. */

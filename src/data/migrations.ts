@@ -40,7 +40,7 @@ import { logger } from "../log";
 import { FLAGS, MODULE_ID, SCHEMA_VERSION } from "../const";
 import { confirmDialog, g, internal, isPrimaryGM, notify } from "../fvtt";
 import * as settings from "../settings";
-import { pdfSourceForPin } from "../sources/describe";
+import { isPdfPin } from "../sources/describe";
 import { docPositionFor } from "../canvas/transform";
 import { freezeMetrics, validatePin } from "./pin-schema";
 import { rawPinFlag } from "./PinData";
@@ -154,7 +154,7 @@ function reanchor(
  */
 function drawnAsCard(pin: DpPinFlags): boolean {
   if (settings.get("rendering") === "dom") return true;
-  return pdfSourceForPin(pin) === null;
+  return !isPdfPin(pin);
 }
 
 /**

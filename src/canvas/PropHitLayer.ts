@@ -36,6 +36,7 @@ import { cfg, cv, g, ns } from "../fvtt";
 import { readPin } from "../data/PinData";
 import * as api from "../api";
 import { isArmed } from "../apps/PlacementGhost";
+import { rotatedCorners, tileRect } from "./transform";
 
 const LAYER_NAME = "documentsPinnerHits";
 
@@ -243,25 +244,13 @@ function belowTokens(): number {
 }
 
 /**
- * The prop's footprint in scene space, rotated about its centre — which is the document's
- * own point on v14 (see `tileRect` in `transform.ts`), so the corners are laid out around
- * `x, y` directly. Deriving a corner from the point first is what put every player's hit
- * area half a card down and right of the paper.
+ * The prop's footprint in scene space, rotated about its centre: `tileRect`, the one place
+ * that remembers the document's own point is its centre on v14. Deriving a corner from the
+ * point by hand is what once put every player's hit area half a card down and right of the
+ * paper.
  */
 export function rotatedPolygon(doc: any, PIXI: any): any {
-  const { x: cx, y: cy, width, height } = doc;
-  const rotation = ((doc.rotation ?? 0) * Math.PI) / 180;
-  const cos = Math.cos(rotation);
-  const sin = Math.sin(rotation);
-
-  const corners = [
-    [-width / 2, -height / 2],
-    [width / 2, -height / 2],
-    [width / 2, height / 2],
-    [-width / 2, height / 2],
-  ].flatMap(([dx, dy]) => [cx + dx * cos - dy * sin, cy + dx * sin + dy * cos]);
-
-  return new PIXI.Polygon(corners);
+  return new PIXI.Polygon(rotatedCorners(tileRect(doc)).flatMap((p) => [p.x, p.y]));
 }
 
 /** The live layer, if the canvas has been drawn. */

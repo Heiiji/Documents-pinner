@@ -54,10 +54,11 @@ export interface SourceSummary {
   /** A picture that tells it from its neighbours, or null. */
   thumbnail: string | null;
   /**
-   * The PDF this pin draws as a texture, or null — the one answer the four PDF paths
-   * share: `drawsAsDom`, `PropManager`'s draw, the Studio's Appearance tab and the
-   * migration's `drawnAsCard`. Never a compendium page's: its document arrives
-   * asynchronously, so it is always drawn as a card, on every client, every time.
+   * The PDF this pin draws as a texture, or null — the one answer every PDF path shares,
+   * through `pdfSourceForPin` and `isPdfPin`: `drawsAsDom`, `PropManager`'s draw, the
+   * Studio's PDF page field, Appearance tab and fog note, and the migration's
+   * `drawnAsCard`. Never a compendium page's: its document arrives asynchronously, so it
+   * is always drawn as a card, on every client, every time.
    */
   pdfSrc: string | null;
   /** What the card shows is one journal page, rather than a whole journal. */
@@ -91,6 +92,25 @@ export function describeSource(source: DpSource): SourceSummary {
   if (source.kind === "image") return imageSummary(source.src);
   if (isPackUuid(source.uuid)) return packSummary(source);
   return worldSummary(source);
+}
+
+/**
+ * Whether a pin is a PDF drawn as a texture: painted by pdf.js straight into the scene, so
+ * it has no card, no paper and no CSS, is lit and fogged like the map, and no setting
+ * sends it to the DOM tier. See `SourceSummary.pdfSrc`.
+ */
+export function isPdfPin(pin: DpPinFlags): boolean {
+  return pdfSourceForPin(pin) !== null;
+}
+
+/**
+ * Which page of its PDF a pin shows, one-based as pdf.js counts: `source.pdfPage`, never
+ * `pageId`, which names a journal's page. The normaliser already floors and clamps it;
+ * this holds for a payload that has not been through it.
+ */
+export function pdfPageOf(pin: DpPinFlags): number {
+  const raw = Number(pin?.source?.pdfPage);
+  return Number.isFinite(raw) && raw >= 1 ? Math.floor(raw) : 1;
 }
 
 /** The PDF a pin draws as a texture, or null. See `SourceSummary.pdfSrc`. */

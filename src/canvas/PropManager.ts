@@ -58,7 +58,7 @@ import {
 } from "../render/Rasterizer";
 import { resolveCard } from "../render/ContentResolver";
 import { renderPdfPage } from "../render/PdfPage";
-import { pdfSourceForPin } from "../sources/describe";
+import { isPdfPin, pdfPageOf, pdfSourceForPin } from "../sources/describe";
 import { bakeEffects, clearBakeCache, copyCanvas } from "../render/BakeEffects";
 import { dressing } from "../effects/EffectRegistry";
 import { svgDocument } from "../render/CardTemplate";
@@ -1169,19 +1169,6 @@ function revealOf(pin: any): { animation: string; durationMs: number } {
  */
 let bakedTaints = false;
 
-/**
- * Which page of a multi-page PDF a pin shows. One-based, as pdf.js counts.
- *
- * `source.pdfPage` and not `source.pageId`: until schema 4 this read the field that also
- * held a JournalEntryPage id, so a pin could name a page of a journal or a page of a PDF
- * but never both. The schema clamps and floors, so the fallback here is only for a
- * payload that has not been through the normaliser.
- */
-function pdfPageOf(pin: any): number {
-  const raw = Number(pin?.source?.pdfPage);
-  return Number.isFinite(raw) && raw >= 1 ? Math.floor(raw) : 1;
-}
-
 /** Every token a player can currently see, which is what a prop fades underneath. */
 function visibleTokens(): any[] {
   return (cv()?.tokens?.placeables ?? []).filter((token: any) => token.visible);
@@ -1249,8 +1236,4 @@ function domPolicy(): DomPolicy {
 function drawsAsDomUnder(policy: DomPolicy, pin: DpPinFlags): boolean {
   // HTML cannot reach a texture on this client, but a PDF still can.
   return policy.all || (policy.html && !isPdfPin(pin));
-}
-
-function isPdfPin(pin: DpPinFlags): boolean {
-  return pdfSourceForPin(pin) !== null;
 }

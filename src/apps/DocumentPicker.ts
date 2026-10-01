@@ -13,7 +13,7 @@
  * out of the way, because the questions that remain are all about the map.
  */
 
-import { ns } from "../fvtt";
+import { browseFiles, ns } from "../fvtt";
 import { t, tOr } from "../i18n";
 import { escapeAttr, escapeHtml } from "../html";
 import { arm } from "./PlacementGhost";
@@ -357,17 +357,10 @@ function onKind(this: any, _event: Event, target: HTMLElement) {
 
 /** The file-browser route, for a map scrap with no journal behind it. */
 async function onBrowse(this: any) {
-  const FilePicker = ns("applications.apps.FilePicker.implementation");
-  if (!FilePicker) return;
-
-  const picker = new FilePicker({
-    type: "imagevideo",
-    callback: (path: string) => {
-      this.close();
-      this.take(imageSource(path));
-    },
+  browseFiles("imagevideo", (path) => {
+    this.close();
+    this.take(imageSource(path));
   });
-  picker.render(true);
 }
 
 /** Attach the chosen source to the placeable that opened the picker. */

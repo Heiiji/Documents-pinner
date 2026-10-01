@@ -21,7 +21,7 @@ import { allPresets, findPreset } from "../effects/preset-library";
 import { swatchStyle } from "../effects/preset-css";
 import { fontChoices, fontLabel, fontOptionsMarkup } from "../effects/typeface";
 import { revealSoundOf } from "../effects/reveal-sound";
-import { describeSource, pdfSourceForPin } from "../sources/describe";
+import { describeSource, isPdfPin } from "../sources/describe";
 import { adapterForDoc, adapterOrJournal } from "../sources/index";
 import { chipsMarkup, describeChips } from "./chips";
 import { chipUsersFor } from "./PinHUD";
@@ -285,18 +285,6 @@ function contentTab(pin: DpPinFlags, options: StudioOptions, attrs = ""): string
 }
 
 /**
- * A PDF page is painted by pdf.js straight into a texture — no card, no paper, no CSS.
- *
- * So every appearance control below is inert for one: the paper stock, the type size,
- * the margins and anything that moves all describe a card that a PDF prop does not
- * have. Offering controls that cannot be honoured is worse than not offering them, so
- * they are disabled and the reason is stated where the GM is looking.
- */
-function isPdfPin(pin: DpPinFlags): boolean {
-  return pdfSourceForPin(pin) !== null;
-}
-
-/**
  * The PDF a shown document is, asked of its own adapter: an actor whose game system
  * names a type "pdf" is not one.
  */
@@ -441,6 +429,9 @@ function appearanceTab(doc: any, pin: DpPinFlags, options: StudioOptions = {}, a
     )
     .join("");
 
+  // A PDF is painted by pdf.js straight into a texture — no card, no paper, no CSS — so
+  // the paper, the type, the margins and anything that moves describe a card it does not
+  // have. Controls that cannot be honoured are disabled, and the reason stated here.
   const pdf = isPdfPin(pin);
   const inert = pdf
     ? `<p class="dp-studio__note">${escapeHtml(t("DP.studio.pdfAppearance"))}</p>`
