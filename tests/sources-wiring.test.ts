@@ -14,6 +14,7 @@ import {
   dataModel,
   fakeActor,
   fakeItem,
+  fakeJournal,
   fakeTile,
   installSources,
   installWorld,
@@ -40,9 +41,11 @@ let world: ReturnType<typeof installWorld>;
 const registered = new Map<string, ((...args: any[]) => unknown)[]>();
 
 /** The world, then `main.ts`, with every handler it registers recorded by name. */
-async function boot(options: { isGM?: boolean; tiles?: any[]; actors?: any[] } = {}) {
+async function boot(
+  options: { isGM?: boolean; tiles?: any[]; actors?: any[]; journals?: any[] } = {}
+) {
   world = installWorld({ isGM: options.isGM ?? true, tiles: options.tiles ?? [] });
-  installSources(world, { actors: options.actors ?? [] });
+  installSources(world, { actors: options.actors ?? [], journals: options.journals ?? [] });
   registered.clear();
   (globalThis as any).Hooks.on = (name: string, fn: (...args: any[]) => unknown) =>
     registered.set(name, [...(registered.get(name) ?? []), fn]);
@@ -137,6 +140,12 @@ describe("an edit to an actor with a poster on the map", () => {
       { ...nothing, redrawn: true, rebased: true },
     ],
     ["to an item it owns leaves it", "updateItem", { name: "Rusty Knife" }, nothing],
+    [
+      "to a journal no pin on the scene shows leaves it",
+      "updateJournalEntry",
+      { pages: [] },
+      nothing,
+    ],
   ])("%s", async (_what, hook, change, expected) => {
     const tile = fakeTile({ id: "t1", uuid: "Scene.s1.Tile.t1" });
     tile.flags = {
@@ -149,7 +158,8 @@ describe("an edit to an actor with a poster on the map", () => {
     };
     const actor = jack();
     const knife = fakeItem({ id: "knife", name: "Knife", parent: actor });
-    await boot({ tiles: [tile], actors: [actor] });
+    const ledger = fakeJournal({ id: "ledger", name: "Ledger" });
+    await boot({ tiles: [tile], actors: [actor], journals: [ledger] });
     (globalThis as any).CONFIG.Actor.dataModels.npc = dataModel({
       details: new SchemaField({
         biography: new SchemaField({ value: new HTMLField(), public: new HTMLField() }),
@@ -160,10 +170,11 @@ describe("an edit to an actor with a poster on the map", () => {
     const invalidate = vi.spyOn(propManager(), "invalidate");
     const redraw = vi.spyOn(tile.object.renderFlags, "set");
 
-    fire(hook, hook === "updateItem" ? knife : actor, change, {}, "gm");
+    const doc = { updateActor: actor, updateItem: knife, updateJournalEntry: ledger }[hook];
+    fire(hook, doc, change, {}, "gm");
 
     expect({
-      redrawn: invalidate.mock.calls.some(([uuid]) => uuid === "Actor.jack"),
+      redrawn: invalidate.mock.calls.length > 0,
       renamed: redraw.mock.calls.length > 0,
       rebased: vi.mocked(onSourceOwnershipEdited).mock.calls.length > 0,
     }).toEqual(expected);
