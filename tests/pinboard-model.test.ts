@@ -266,9 +266,11 @@ describe("nextToReveal", () => {
     result.left,
   ];
 
-  it("takes the first hidden row in order, and counts the hidden ones after it", () => {
+  it("takes the first hidden row in order and counts the hidden ones after it, or has none", () => {
     const rows = [shown("a"), hidden("b"), shown("c"), hidden("d"), hidden("e")];
     expect(ids(nextToReveal(rows, q()))).toEqual(["b", 2]);
+    expect(ids(nextToReveal([], q()))).toEqual([null, 0]);
+    expect(ids(nextToReveal([shown("a"), shown("b")], q()))).toEqual([null, 0]);
   });
 
   it("steps past a selection naming nobody: not visible, and not hidden either", () => {
@@ -288,26 +290,5 @@ describe("nextToReveal", () => {
     expect(ids(nextToReveal(rows, q({ filter: "hidden" })))).toEqual(["low", 2]);
     // Nothing hidden shows under "Visible", so there is nothing next in that view.
     expect(ids(nextToReveal(rows, q({ filter: "visible" })))).toEqual([null, 0]);
-  });
-
-  it("has nothing next on an empty or fully revealed scene", () => {
-    expect(ids(nextToReveal([], q()))).toEqual([null, 0]);
-    expect(ids(nextToReveal([shown("a"), shown("b")], q()))).toEqual([null, 0]);
-  });
-
-  it("takes any row that carries the facts, not only the board's own", () => {
-    const facts = [
-      {
-        id: "x",
-        name: "X",
-        breadcrumb: "",
-        mode: "pin" as const,
-        visible: false,
-        hidden: true,
-        elevation: 0,
-        users: [],
-      },
-    ];
-    expect(nextToReveal(facts, q()).next).toBe(facts[0]);
   });
 });

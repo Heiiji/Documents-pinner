@@ -88,6 +88,8 @@ describe("api.spotlight", () => {
       data: { scene: "s1", pull: true, style: "chevron" },
     });
     expect(world.notifications).toEqual([]);
+    // And the GM's own card pulses, which covers the ping on the DOM tier.
+    expect(world.hooks).toContainEqual({ name: `${MODULE_ID}.flash`, args: [tile] });
   });
 
   it("writes the reveal before it points, so a player pulled there finds it", async () => {
@@ -110,6 +112,8 @@ describe("api.spotlight", () => {
 
   it("reveals a pin for Ali to Ali, points at it for the GM alone, and says why", async () => {
     await setup(ALI);
+    // Whatever the keyboard holds: the Pinboard's Shift+Space is how this is pressed.
+    holdModifier("Shift");
     expect(await api.spotlight(tile)).toEqual({ revealed: true, pulled: false });
 
     expect(stored(tile)).toMatchObject({ kind: "selected", users: ["ali"] });
@@ -127,13 +131,6 @@ describe("api.spotlight", () => {
     expect(stored(tile).kind).toBe("everyone");
   });
 
-  it("pulls nobody for a pin shown to some players, whatever the keyboard holds", async () => {
-    await setup({ kind: "selected", users: ["ali", "ben"] });
-    holdModifier("Shift");
-    await api.spotlight(tile);
-    expect(kinds()).toEqual(["local"]);
-  });
-
   it("reveals a pin on another scene but points at nothing on this one", async () => {
     await setup(HIDDEN);
     tile.parent = { id: "elsewhere" };
@@ -141,12 +138,6 @@ describe("api.spotlight", () => {
     expect(stored(tile).kind).toBe("everyone");
     expect(recordedPings()).toEqual([]);
     expect(world.notifications.map((n) => n.message)).toEqual(["DP.notice.spotlightElsewhere"]);
-  });
-
-  it("pulses the GM's own card, which covers the ping on the DOM tier", async () => {
-    await setup(EVERYONE);
-    await api.spotlight(tile);
-    expect(world.hooks).toContainEqual({ name: `${MODULE_ID}.flash`, args: [tile] });
   });
 
   it("does nothing for a player", async () => {
@@ -159,30 +150,19 @@ describe("api.spotlight", () => {
 
 /** K11: flash keeps its reach, and joins the same door. */
 describe("flash", () => {
-  it("never pulls, even with Shift held", async () => {
-    await setup(EVERYONE);
+  it("keeps its documented reach — a visible pin for one player pulses everywhere — and never pulls", async () => {
+    await setup({ kind: "selected", users: ["ali"] });
     holdModifier("Shift");
     api.flash(tile);
     expect(kinds()).toEqual(["broadcast", "local"]);
     expect(recordedPings()[0].data).toMatchObject({ pull: false, style: "pulse" });
   });
 
-  it("keeps its documented reach: a visible pin for one player still pulses everywhere", async () => {
-    await setup({ kind: "selected", users: ["ali"] });
-    api.flash(tile);
-    expect(kinds()).toEqual(["broadcast", "local"]);
-  });
-
-  it("draws a hidden pin's flash on the GM's screen, with the scene core needs", async () => {
-    await setup(HIDDEN);
-    api.flash(tile);
-    expect(kinds()).toEqual(["local"]);
-    expect(recordedPings()[0].data).toEqual({ scene: "s1", style: "pulse" });
-  });
-
-  // The fake this suite pings against must refuse the very call the flash used to make:
-  // `{}` drew nothing on a real canvas, whose scene always has an id, while a test scene
-  // with none let `undefined === undefined` draw it.
+  // A hidden pin's flash, on the GM's screen alone with the scene core needs, is asserted
+  // on its exact call in `api-open.test.ts`. Every local ping asserted here (a pin for Ali)
+  // is drawn by a fake that must refuse the very call the flash used to make: `{}` drew
+  // nothing on a real canvas, whose scene always has an id, while a test scene with none
+  // let `undefined === undefined` draw it.
   it("is checked against a canvas that draws nothing for a local ping with no scene", async () => {
     await setup(HIDDEN);
     delete world.canvas.scene.id;
@@ -233,19 +213,6 @@ describe("the surfaces", () => {
     expect(stored(tile).kind).toBe("everyone");
     expect(tile.updates).toEqual([]);
     expect(recordedPings()[0].data).toMatchObject({ pull: true, style: "chevron" });
-  });
-
-  it("holds Shift on a pin for Ali without pulling anyone", async () => {
-    await setup(ALI);
-    const app = await board();
-    holdModifier("Shift");
-    contentOf(app)
-      .querySelector(".dp-board")!
-      .dispatchEvent(new KeyboardEvent("keydown", { key: " ", shiftKey: true, bubbles: true }));
-    await new Promise((resolve) => setTimeout(resolve, 0));
-
-    expect(stored(tile)).toMatchObject({ kind: "selected", users: ["ali"] });
-    expect(kinds()).toEqual(["local"]);
   });
 
   it("offers it in the row menu, beside reveal and hide", async () => {

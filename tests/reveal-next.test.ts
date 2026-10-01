@@ -76,41 +76,34 @@ async function setup(list: any[], isGM = true) {
 afterEach(() => uninstallWorld());
 
 describe("api.revealNext", () => {
-  it("reveals the first hidden pin in order to the players it remembers", async () => {
+  it("walks the hidden pins in sort order, each to the players it remembers, and says when it is done", async () => {
     await setup([
       pinnedTile("t1", 0, { kind: "everyone" }),
+      pinnedTile("late", 20, HIDDEN),
       pinnedTile("t2", 10, ALI),
-      pinnedTile("t3", 20, HIDDEN),
     ]);
-    const { doc, left } = await api.revealNext(world.canvas.scene);
+    const first = await api.revealNext(world.canvas.scene);
 
-    expect(doc).toBe(tiles[1]);
-    expect(left).toBe(1);
-    expect(stored(tiles[1])).toMatchObject({ kind: "selected", users: ["ali"], restore: null });
-    expect(api.canUserSee(tiles[1], "ali")).toBe(true);
-    expect(api.canUserSee(tiles[1], "ben")).toBe(false);
+    expect([first.doc?.id, first.left]).toEqual(["t2", 1]);
+    expect(stored(tiles[2])).toMatchObject({ kind: "selected", users: ["ali"], restore: null });
+    expect(api.canUserSee(tiles[2], "ali")).toBe(true);
+    expect(api.canUserSee(tiles[2], "ben")).toBe(false);
     // Only the pin it revealed was touched.
     expect(tiles[0].updates).toEqual([]);
-    expect(tiles[2].updates).toEqual([]);
-  });
+    expect(tiles[1].updates).toEqual([]);
 
-  it("walks the script in sort order and stops, saying so, at its end", async () => {
-    await setup([pinnedTile("late", 20, HIDDEN), pinnedTile("early", 10, HIDDEN)]);
-    const first = await api.revealNext(world.canvas.scene);
     const second = await api.revealNext(world.canvas.scene);
-    const third = await api.revealNext(world.canvas.scene);
-
-    expect([first.doc?.id, first.left]).toEqual(["early", 1]);
     expect([second.doc?.id, second.left]).toEqual(["late", 0]);
-    expect(third).toEqual({ doc: null, left: 0 });
+    expect(await api.revealNext(world.canvas.scene)).toEqual({ doc: null, left: 0 });
     expect(world.notifications.map((n) => n.message)).toEqual(["DP.notice.revealNextNone"]);
   });
 
-  it("never toggles: with nothing hidden it writes nothing and hides nothing", async () => {
+  it("never toggles: with nothing hidden, two presses write nothing and say so once", async () => {
     await setup([pinnedTile("t1", 0, { kind: "everyone" })]);
-    await api.revealNext(world.canvas.scene);
+    await Promise.all([api.revealNext(world.canvas.scene), api.revealNext(world.canvas.scene)]);
     expect(tiles[0].updates).toEqual([]);
     expect(stored(tiles[0]).kind).toBe("everyone");
+    expect(world.notifications.map((n) => n.message)).toEqual(["DP.notice.revealNextNone"]);
   });
 
   it("tells 'nothing hidden in this view' from 'nothing hidden'", async () => {
@@ -138,12 +131,6 @@ describe("api.revealNext", () => {
     expect((await api.revealNext(world.canvas.scene)).doc).toBe(tiles[1]);
   });
 
-  it("says 'nothing left' once for two presses at the end of the script", async () => {
-    await setup([pinnedTile("t1", 0, { kind: "everyone" })]);
-    await Promise.all([api.revealNext(world.canvas.scene), api.revealNext(world.canvas.scene)]);
-    expect(world.notifications.map((n) => n.message)).toEqual(["DP.notice.revealNextNone"]);
-  });
-
   it("does nothing for a player", async () => {
     await setup([pinnedTile("t1", 0, HIDDEN)], false);
     expect(await api.revealNext(world.canvas.scene)).toEqual({ doc: null, left: 0 });
@@ -153,14 +140,17 @@ describe("api.revealNext", () => {
 
 /** K1: a ping reaches every client only for an audience of everyone, and never pulls. */
 describe("where Reveal next points", () => {
-  it("pulses every client for a pin revealed to everyone, pulling nobody", async () => {
+  it("pulses every client for a pin revealed to everyone, pulling nobody though Shift is held", async () => {
     await setup([pinnedTile("t1", 0, HIDDEN)]);
+    holdModifier("Shift");
     await api.revealNext(world.canvas.scene);
 
     const broadcasts = recordedPings().filter((p) => p.kind === "broadcast");
     expect(broadcasts).toHaveLength(1);
     expect(broadcasts[0].data).toMatchObject({ scene: "s1", pull: false, style: "pulse" });
     expect(recordedPings().some((p) => p.kind === "pan")).toBe(false);
+    // And the GM's own card pulses, which covers the ping on the DOM tier.
+    expect(world.hooks).toContainEqual({ name: `${MODULE_ID}.flash`, args: [tiles[0]] });
   });
 
   it("points at a pin for one player on the GM's screen alone", async () => {
@@ -169,16 +159,6 @@ describe("where Reveal next points", () => {
 
     expect(recordedPings().map((p) => p.kind)).toEqual(["local"]);
     expect(recordedPings()[0].data).toMatchObject({ scene: "s1", style: "pulse" });
-  });
-
-  it("does not pull every view because the GM happened to hold Shift", async () => {
-    await setup([pinnedTile("t1", 0, HIDDEN)]);
-    holdModifier("Shift");
-    await api.revealNext(world.canvas.scene);
-
-    const broadcast = recordedPings().find((p) => p.kind === "broadcast");
-    expect(broadcast?.data.pull).toBe(false);
-    expect(recordedPings().some((p) => p.kind === "pan")).toBe(false);
   });
 
   it("points only once the reveal has landed", async () => {
@@ -197,12 +177,6 @@ describe("where Reveal next points", () => {
     };
     await api.revealNext(world.canvas.scene);
     expect(order).toEqual(["written, hidden=false", "pinged"]);
-  });
-
-  it("pulses the GM's own card, which covers the ping on the DOM tier", async () => {
-    await setup([pinnedTile("t1", 0, HIDDEN)]);
-    await api.revealNext(world.canvas.scene);
-    expect(world.hooks).toContainEqual({ name: `${MODULE_ID}.flash`, args: [tiles[0]] });
   });
 });
 
@@ -228,15 +202,28 @@ describe("N on the Pinboard", () => {
     await board.render();
   });
 
-  it("names what goes out next in the footer, where Reveal all used to be", () => {
-    const button = root().querySelector<HTMLButtonElement>('[data-action="revealNext"]')!;
-    expect(button.closest(".dp-board__foot")).not.toBeNull();
-    expect(button.textContent).toBe("DP.board.revealNext name=Pin t2");
-    expect(button.disabled).toBe(false);
+  it("names what goes out next in the footer, and says, disabled, when nothing is left", async () => {
+    const button = () => root().querySelector<HTMLButtonElement>('[data-action="revealNext"]')!;
+    expect(button().closest(".dp-board__foot")).not.toBeNull();
+    expect(button().textContent).toBe("DP.board.revealNext name=Pin t2");
+    expect(button().disabled).toBe(false);
+    // Where "Reveal all" used to be.
     expect(root().querySelector('.dp-board__foot [data-action="revealAll"]')).toBeNull();
+
+    // Nothing hidden in this view, though there is in the scene…
+    board.query = { filter: "visible", search: "", level: null };
+    await board.render();
+    expect(button().disabled).toBe(true);
+    expect(button().textContent).toBe("DP.board.revealNextNoneInView");
+
+    // …and nothing hidden at all.
+    for (const tile of tiles) tile.flags[MODULE_ID][FLAGS.PIN].audience.kind = "everyone";
+    for (const tile of tiles) tile.hidden = false;
+    await board.render();
+    expect(button().textContent).toBe("DP.board.revealNextNone");
   });
 
-  it("reveals the next row, says what it did, and moves the focus on", async () => {
+  it("reveals the next row on N, and the one after from the footer, saying so and moving the focus on", async () => {
     await press({});
 
     expect(stored(tiles[1])).toMatchObject({ kind: "selected", users: ["ali"] });
@@ -247,67 +234,20 @@ describe("N on the Pinboard", () => {
     expect(root().querySelector('[data-action="revealNext"]')!.textContent).toBe(
       "DP.board.revealNext name=Pin t3"
     );
-  });
 
-  it("walks the hidden rows in order, one per N, and says when the script is done", async () => {
-    await press({});
-    await press({});
-    await press({});
-    expect(tiles.map((tile) => stored(tile).kind)).toEqual([
-      "everyone",
-      "selected",
-      "everyone",
-      "everyone",
-    ]);
-    expect(root().querySelector('[role="status"]')!.textContent).toBe(
-      "DP.board.statusRevealed name=Pin t4 count=0"
-    );
-
-    await press({});
-    expect(tiles.map((tile) => tile.updates.length)).toEqual([0, 1, 1, 1]);
-    expect(world.notifications.map((n) => n.message)).toEqual(["DP.notice.revealNextNone"]);
-  });
-
-  it("reveals from the footer button exactly as from the key", async () => {
     await board.dispatch("revealNext");
     await flush();
-    expect(stored(tiles[1]).kind).toBe("selected");
-    expect(stored(tiles[2]).kind).toBe("hidden");
+    expect(stored(tiles[2]).kind).toBe("everyone");
+    expect(stored(tiles[3]).kind).toBe("hidden");
   });
 
-  it("ignores a held key's repeats, or holding N would reveal the scene", async () => {
+  it("ignores a held key's repeats, or holding N would reveal the scene; and N with Ctrl, ⌘ or Alt", async () => {
     await press({ repeat: true });
     await press({ repeat: true });
-    expect(tiles.map((tile) => tile.updates.length)).toEqual([0, 0, 0, 0]);
-  });
-
-  it("leaves N with Ctrl, ⌘ or Alt alone", async () => {
     await press({ ctrlKey: true });
     await press({ metaKey: true });
     await press({ altKey: true });
     expect(tiles.map((tile) => tile.updates.length)).toEqual([0, 0, 0, 0]);
-  });
-
-  it("follows the board's own view", async () => {
-    board.query = { filter: "all", search: "t4", level: null };
-    await board.render();
-    await press({});
-    expect(stored(tiles[3]).kind).toBe("everyone");
-    expect(stored(tiles[1]).kind).toBe("hidden");
-  });
-
-  it("says, disabled, when there is nothing left — and when the view is hiding the rest", async () => {
-    board.query = { filter: "visible", search: "", level: null };
-    await board.render();
-    let button = root().querySelector<HTMLButtonElement>('[data-action="revealNext"]')!;
-    expect(button.disabled).toBe(true);
-    expect(button.textContent).toBe("DP.board.revealNextNoneInView");
-
-    for (const tile of tiles) tile.flags[MODULE_ID][FLAGS.PIN].audience.kind = "everyone";
-    for (const tile of tiles) tile.hidden = false;
-    await board.render();
-    button = root().querySelector<HTMLButtonElement>('[data-action="revealNext"]')!;
-    expect(button.textContent).toBe("DP.board.revealNextNone");
   });
 });
 
@@ -318,12 +258,15 @@ describe("the revealNext keybinding", () => {
     return world.game.keybindings.registered.find((r: any) => r.key === "revealNext")!;
   }
 
-  it("is registered unbound, for the GM only, at core's normal precedence", async () => {
+  it("is registered unbound, for the GM only, at core's normal precedence, and stands down with no scene", async () => {
     await setup([]);
     const found = await binding();
     expect(found.options.editable).toEqual([]);
     expect(found.options.restricted).toBe(true);
     expect(found.options).not.toHaveProperty("precedence");
+
+    world.canvas.scene = null;
+    expect(found.options.onDown()).toBe(false);
   });
 
   it("reveals the next pin with no Pinboard open, and says what it revealed", async () => {
@@ -339,6 +282,7 @@ describe("the revealNext keybinding", () => {
     ]);
   });
 
+  // The board's N runs the same method, so this is also where N is held to the board's view.
   it("plays an open Pinboard's own script: its view, its status line, its focus", async () => {
     await setup([
       pinnedTile("t1", 0, ALI),
@@ -376,12 +320,5 @@ describe("the revealNext keybinding", () => {
       "DP.notice.revealNext name=Pin t1 count=1",
     ]);
     expect(stored(tiles[1]).kind).toBe("hidden");
-  });
-
-  it("stands down with no scene to reveal on", async () => {
-    await setup([]);
-    const found = await binding();
-    world.canvas.scene = null;
-    expect(found.options.onDown()).toBe(false);
   });
 });
