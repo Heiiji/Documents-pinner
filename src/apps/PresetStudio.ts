@@ -6,8 +6,11 @@
  *
  * The preview's BACKGROUND SWATCHES matter more than they look. An effect authored
  * against a white panel is invisible on a dark dungeon map, and an author has no way to
- * discover that from inside a settings window — so the preview offers the current map,
- * dark, light and a checker, and switching between them is one click.
+ * discover that from inside a settings window — so the preview offers a map, dark, light
+ * and a checker, and switching between them is one click. "Map" is a painted stand-in
+ * for a lit dungeon floor (`styles/ui/presets.css`), not the scene behind the window:
+ * showing that would take a live capture of the canvas or a `backdrop-filter`, and the
+ * module uses neither.
  *
  * Core presets are read-only and Duplicate is the only way to edit one, so a preset
  * broken while being tuned always has a working ancestor. That is also why the cost

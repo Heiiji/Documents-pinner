@@ -6,8 +6,10 @@
  * rail slot for a module would cost every other module's users room they need more.
  *
  * v14 hands `getSceneControlButtons` a RECORD keyed by control name, and the tools
- * inside it are a record too. A tool with neither `onChange` nor `onClick` throws in
- * core, so both of ours are `button: true` with an `onChange`.
+ * inside it are a record too. Both of ours are `button: true` with an `onChange`, which
+ * core calls on a press (`#onChange`, foundry.mjs 146537). A tool with neither does not
+ * throw — the press just does nothing — and `onClick` still works but is deprecated
+ * since 13, until 15.
  */
 
 import { isGM } from "../fvtt";
