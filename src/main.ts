@@ -243,18 +243,19 @@ Hooks.on("updateTile", syncAfterCoreHidden);
  * The ids are gathered and the refresh runs ONCE from a microtask, so a batch of any size
  * costs one pass. Everything here was already idempotent; only the arithmetic changes.
  */
-const changedTiles = new Set<string>();
+const changedTiles = new Map<string, string>();
 let tileRefreshQueued = false;
 
 function onTileChanged(doc: any, changed?: any): void {
   if (!concernsPins(doc, changed)) return;
-  if (doc?.id) changedTiles.add(doc.id);
+  if (doc?.id) changedTiles.set(doc.uuid ?? doc.id, doc.id);
   if (tileRefreshQueued) return;
   tileRefreshQueued = true;
 
   void Promise.resolve().then(() => {
     tileRefreshQueued = false;
-    const ids = [...changedTiles];
+    const uuids = [...changedTiles.keys()];
+    const ids = [...new Set(changedTiles.values())];
     changedTiles.clear();
 
     // Core re-tests a tile's visibility only when `hidden`, `sort` or `locked` change.
@@ -269,7 +270,7 @@ function onTileChanged(doc: any, changed?: any): void {
     for (const id of ids) refreshPinHUD({ id });
     // Only the Studios showing a pin that changed: re-rendering every open Studio on any
     // pin's change threw away the focus — and a half-typed label — in all of them.
-    refreshStudios(ids);
+    refreshStudios(uuids);
     refreshPinboard();
   });
 }

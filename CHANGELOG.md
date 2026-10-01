@@ -183,6 +183,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   gave back the access it had granted, and the undo restored the pin without it; nothing
   noticed until its audience next changed. A pin Foundry brings back revealed — an undo, a
   paste — is granted again.
+- **Pin Studio on a duplicated scene edited the original's pin.** A copied scene keeps its
+  tiles' ids, and the Studio was found by id: opening it for a pin on the copy brought
+  forward the window of its twin on the other scene, where every change then went. Each
+  pin now has its own Studio.
 
 ## [0.3.3] — 2026-09-30
 

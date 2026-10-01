@@ -213,10 +213,29 @@ describe("which Studios a change re-renders", () => {
     await tick();
     const before = studio.renderCount;
 
-    refreshStudios(["another-pin"]);
+    refreshStudios(["Scene.s2.Tile.t1"]);
     expect(studio.renderCount).toBe(before);
-    refreshStudios(["t1"]);
+    refreshStudios(["Scene.s1.Tile.t1"]);
     expect(studio.renderCount).toBe(before + 1);
+  });
+});
+
+/**
+ * A duplicated scene keeps every tile's id. The Studio was found by id, so opening it for a
+ * pin on the copy brought forward the original's, and every edit went to the other scene.
+ */
+describe("the Studio of a pin on a duplicated scene", () => {
+  it("is its own window, editing its own pin", async () => {
+    const twin = fakeTile({ id: "t1", uuid: "Scene.s2.Tile.t1", width: 400, height: 560 });
+    twin.flags = structuredClone(tile.flags);
+    const { openStudio } = await import("../src/apps/PinStudio");
+
+    const day = openStudio(tile);
+    const night = openStudio(twin);
+
+    expect(night).not.toBe(day);
+    expect(day.doc).toBe(tile);
+    expect(night.doc).toBe(twin);
   });
 });
 

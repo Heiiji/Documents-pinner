@@ -49,7 +49,20 @@ import type { DpNotice, DpPinFlags, DpSource } from "../types/dp";
 const log = logger("studio");
 
 let StudioClass: any = null;
+/**
+ * The open Studios, by their pin's UUID. Not its id: a duplicated scene — and one imported
+ * twice from a compendium — keeps every tile's id, so opening the Studio for a pin on
+ * "Tavern (night)" brought forward the one for its twin on "Tavern (day)", and every edit
+ * went to the other scene's pin.
+ */
 const open = new Map<string, any>();
+
+/** A pin's key in `open`. */
+const keyOf = (doc: any): string => String(doc?.uuid ?? doc?.id ?? "");
+
+/** An id for the window, and the stem of the ids inside it, unique per pin across scenes. */
+const studioId = (doc: any): string =>
+  `dp-studio-${String(doc?.uuid ?? doc?.id ?? "pin").replace(/[^\w-]/g, "-")}`;
 
 type TabId = "content" | "appearance" | "audience";
 
@@ -715,7 +728,7 @@ export function studioMarkup(
 ): string {
   const grid = gridOf(doc);
   // Ids unique per window: two Studios can be open at once, one per pin.
-  const base = `dp-studio-${String(doc?.id ?? "pin").replace(/[^\w-]/g, "")}`;
+  const base = studioId(doc);
   const tabId = (id: TabId) => `${base}-tab-${id}`;
   const panelId = `${base}-panel`;
   // A real tab pattern: one tab stop for the row, the arrows move along it, and the
@@ -1431,16 +1444,25 @@ async function confirmRetarget(source: DpSource): Promise<boolean> {
   }).catch(() => false);
 }
 
-/** Open the Studio for a pin, reusing the window already showing it. */
+/**
+ * Open the Studio for a pin, reusing the window already showing it — that pin's, and no
+ * other's. A window still holding another copy of the document is replaced, never edited
+ * through.
+ */
 export function openStudio(doc: any, tab: TabId = "content"): any {
   const Studio = definePinStudio();
   if (!Studio || !doc) return null;
 
-  let app = open.get(doc.id);
+  const key = keyOf(doc);
+  let app = open.get(key);
+  if (app && app.doc !== doc) {
+    void app.close();
+    app = null;
+  }
   if (!app) {
-    app = new Studio({ id: `dp-studio-${doc.id}` });
+    app = new Studio({ id: studioId(doc) });
     app.doc = doc;
-    open.set(doc.id, app);
+    open.set(key, app);
   }
   app.tab = tab;
   app.render(true);
@@ -1448,16 +1470,16 @@ export function openStudio(doc: any, tab: TabId = "content"): any {
 }
 
 /**
- * Re-render the open Studios for these pins, or every one when no ids are given. Wired to
- * the tile hooks, which pass the pins that changed.
+ * Re-render the open Studios for these pins, by UUID, or every one when none are given.
+ * Wired to the tile hooks, which pass the pins that changed.
  */
-export function refreshStudios(ids?: readonly string[]): void {
-  for (const [id, app] of open) {
+export function refreshStudios(uuids?: readonly string[]): void {
+  for (const [key, app] of open) {
     if (!app.rendered) {
-      open.delete(id);
+      open.delete(key);
       continue;
     }
-    if (!ids || ids.includes(id)) app.render();
+    if (!uuids || uuids.includes(key)) app.render();
   }
 }
 
