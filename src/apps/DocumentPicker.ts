@@ -417,12 +417,9 @@ export function definePicker(): any {
       if (this.importing) return;
       this.importing = uuid;
       void this.render();
-      let copy: DpSource | null = null;
-      try {
-        copy = await importForPin(uuid);
-      } finally {
+      const copy = await importForPin(uuid).finally(() => {
         this.importing = null;
-      }
+      });
       if (!this.rendered) return;
       if (!copy) {
         void this.render();
