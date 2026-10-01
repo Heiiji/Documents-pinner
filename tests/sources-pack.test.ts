@@ -164,15 +164,28 @@ describe("the key glyph on a compendium pin", () => {
       unreadableByMethods,
       { ali: "seesButCannotOpen", ben: "visible" },
     ],
-  ])("on a %s from %s follows each player's role", async (mode, _pack, pack, expected) => {
-    const tile = pinTile({ uuid: ENTRY }, { mode });
-    install(tile, pack());
-    const { chipUsersFor } = await import("../src/apps/PinHUD");
-    const { chipState } = await import("../src/apps/chips");
+    // Deliberate, as for a world journal a player holds: they can browse the pack, so a
+    // hidden pin on it is flagged — on every chip, with core's default pack ownership.
+    [
+      "prop",
+      "a pack every role reads, while it is hidden",
+      () => handouts(),
+      { ali: "opensButCannotSee", ben: "opensButCannotSee" },
+      "hidden",
+    ],
+  ])(
+    "on a %s from %s follows each player's role",
+    async (mode, _pack, pack, expected, kind?: string) => {
+      const tile = pinTile({ uuid: ENTRY }, { mode });
+      if (kind) pinOf(tile).audience.kind = kind;
+      install(tile, pack());
+      const { chipUsersFor } = await import("../src/apps/PinHUD");
+      const { chipState } = await import("../src/apps/chips");
 
-    const states = Object.fromEntries(chipUsersFor(tile).map((u) => [u.id, chipState(u)]));
-    expect(states).toEqual(expected);
-  });
+      const states = Object.fromEntries(chipUsersFor(tile).map((u) => [u.id, chipState(u)]));
+      expect(states).toEqual(expected);
+    }
+  );
 });
 
 describe("the Audience tab on a compendium pin", () => {
