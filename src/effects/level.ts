@@ -18,7 +18,7 @@
 
 import { cv, g } from "../fvtt";
 import * as settings from "../settings";
-import { resolveAutoLevel, type EffectsLevel } from "./EffectRegistry";
+import { resolveAutoLevel, slowFrameRate, type EffectsLevel } from "./EffectRegistry";
 
 /**
  * A gap between two frames longer than this is a pause, not a slow frame.
@@ -98,6 +98,15 @@ function photosensitive(): boolean {
 }
 
 /**
+ * Whether the frame rate read as slow the last time `auto` was answered.
+ *
+ * Remembered so the answer holds while the rate sits between the line down and the line
+ * back up — see `slowFrameRate`. Only the frame rate's verdict, never the level: a
+ * reduced-motion preference switched off must not leave a fast client reduced.
+ */
+let wasSlow = false;
+
+/**
  * The level to render at right now.
  *
  * Not cached: it is read once per rasterisation, not per frame, and caching it would
@@ -107,6 +116,9 @@ export function currentLevel(): EffectsLevel {
   const setting = settings.get("effectsLevel");
   if (setting !== "auto") return setting;
 
+  const fps = sampledFps();
+  const maxFps = frameCap();
+  wasSlow = slowFrameRate(fps, maxFps, wasSlow);
   return resolveAutoLevel({
     prefersReducedMotion: prefersReducedMotion(),
     photosensitive: photosensitive(),
@@ -114,8 +126,9 @@ export function currentLevel(): EffectsLevel {
     // Absent in WebKit entirely, so it must stay optional rather than defaulting low —
     // assuming the worst would permanently reduce effects for every Safari user.
     deviceMemory: (navigator as any).deviceMemory,
-    fps: sampledFps(),
-    maxFps: frameCap(),
+    fps,
+    maxFps,
+    wasSlow,
   });
 }
 

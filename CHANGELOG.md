@@ -133,6 +133,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   every prop dropped a detail level for the rest of the scene — the smallest vanished. A
   pause is no longer counted, and one slow second — a scene loading, say — no longer
   trips it either: it now takes two in a row.
+- **Effects on *Auto* no longer switch off and on by themselves.** A machine running near
+  40 fps read as slow on one pass and fast on the next, so motion stopped and started and
+  every card on the scene was redrawn at each flip. Once *Auto* has reduced the effects,
+  it now waits for the frame rate to climb clear of the line — 46 fps at the default cap —
+  before bringing them back.
 - **"Reveal all" showed a private note to the whole table.** A pin narrowed to one player
   and hidden for a beat went back to that player when revealed with `Space` or the eye —
   and to everyone when revealed from the Pinboard's bulk bar or "Reveal all". Every reveal

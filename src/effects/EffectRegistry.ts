@@ -212,16 +212,41 @@ export function resolveAutoLevel(signals: {
   fps: number | undefined;
   /** The frame rate core is capped at, so a capped client is not read as a slow one. */
   maxFps?: number;
+  /** Whether the frame rate read as slow last time, so the answer holds inside the band. */
+  wasSlow?: boolean;
 }): EffectsLevel {
   // Photosensitive mode is not a performance signal and is not negotiable: glitch and
   // scanlines are seizure hazards, so motion stops regardless of how fast the machine is.
   if (signals.photosensitive || signals.prefersReducedMotion) return "reduced";
   if ((signals.hardwareConcurrency ?? 8) <= 4) return "reduced";
   if ((signals.deviceMemory ?? 8) <= 4) return "reduced";
-  // Measured against what this client ALLOWS, not a fixed 40: core's "Maximum framerate"
-  // goes down to 10, and a client capped at 40 sampled 39-40 and flipped between the two
-  // levels — and the level is in every card's key, so each flip re-resolved every prop,
-  // exactly on the machine that could least afford it. Two thirds of the cap is 40 at 60.
-  if ((signals.fps ?? 60) < Math.min(40, (2 / 3) * (signals.maxFps || 60))) return "reduced";
-  return "full";
+  return slowFrameRate(signals.fps, signals.maxFps, signals.wasSlow) ? "reduced" : "full";
+}
+
+/**
+ * How far above the slow line a slow client must climb before it reads as fast again.
+ *
+ * 40 fps down, 46 back up at core's default cap. One line flipped a client sampling
+ * 39 then 41 on every pass, and the level is in every card's key: each flip re-resolved
+ * every card on the scene, on the machine that could least afford it.
+ */
+const RECOVERY = 1.15;
+
+/**
+ * Whether a measured frame rate is slow, with a band so a client near the line holds its
+ * answer.
+ *
+ * Measured against what this client ALLOWS, not a fixed 40: core's "Maximum framerate"
+ * goes down to 10, and a client capped at 40 sampled 39-40 and flipped between the two
+ * levels. Two thirds of the cap is 40 at 60; the way back up stays under the cap, so a
+ * capped client running at its cap always recovers.
+ */
+export function slowFrameRate(
+  fps: number | undefined,
+  maxFps: number | undefined,
+  wasSlow = false
+): boolean {
+  const slow = Math.min(40, (2 / 3) * (maxFps || 60));
+  const rate = fps ?? 60;
+  return wasSlow ? rate <= slow * RECOVERY : rate < slow;
 }

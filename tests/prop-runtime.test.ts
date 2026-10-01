@@ -71,6 +71,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
   uninstallWorld();
 });
 
@@ -121,5 +122,25 @@ describe("the perf guard", () => {
     run();
     expect(manager.stats().degraded).toBe(fires);
     expect(world.notifications.some((n) => n.message === "DP.notice.degraded")).toBe(fires);
+  });
+});
+
+describe("the auto effects level", () => {
+  it("holds its answer while the frame rate sits between the line down and the line back up", async () => {
+    installWorld({ settings: { effectsLevel: "auto" } });
+    // A capable machine, wherever the suite runs: only the frame rate decides here.
+    vi.stubGlobal("navigator", { hardwareConcurrency: 8 });
+    const { currentLevel, sampleFrame } = await import("../src/effects/level");
+    const play = (fps: number, seconds: number) => {
+      for (let i = 0; i < fps * seconds; i++) sampleFrame((now += 1000 / fps));
+    };
+
+    play(30, 6);
+    expect(currentLevel()).toBe("reduced");
+    // 43 fps: over the line down, under the line back up. One line flipped it here.
+    play(43, 10);
+    expect(currentLevel()).toBe("reduced");
+    play(60, 10);
+    expect(currentLevel()).toBe("full");
   });
 });
