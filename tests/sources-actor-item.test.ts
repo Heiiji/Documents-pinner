@@ -277,6 +277,31 @@ describe("the text an actor's or an item's card shows", () => {
       "Dies in act 3.",
     ],
     [
+      "a homebrew system's notes, never a field whose name starts gm, private or secret",
+      null,
+      actorWith({
+        details: {
+          privateBiography: "<p>Hidden: a past.</p>",
+          gmDescription: "<p>Hidden: a plan.</p>",
+          secretNotes: "<p>Hidden: a name.</p>",
+          notes: "<p>Drinks at the Gull.</p>",
+        },
+      }),
+      {
+        npc: () =>
+          dataModel({
+            details: new SchemaField({
+              privateBiography: new HTMLField(),
+              gmDescription: new HTMLField(),
+              secretNotes: new HTMLField(),
+              notes: new HTMLField(),
+            }),
+          }),
+      },
+      "Drinks at the Gull.",
+      "Hidden",
+    ],
+    [
       "the GM's choice, when the type declares it",
       "details.biography.value",
       () => jack(),

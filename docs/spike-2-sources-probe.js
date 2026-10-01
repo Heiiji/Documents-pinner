@@ -226,10 +226,11 @@
   // Walk SchemaField (and so DataModelSchemaField / EmbeddedDataField) recursively; record every
   // HTMLField; skip ArrayField, SetField, ObjectField, TypedObjectField, TypedSchemaField — they
   // have no stable path. Default: the first eligible path matching, IN THIS ORDER, public >
-  // biograph > description > notes; never a gm/private/secret path; else the first eligible; else none.
+  // biograph > description > notes; never a path with a segment STARTING with gm, private or
+  // secret (gmNotes, privateDescription, secretNotes…); else the first eligible; else none.
   const F = foundry.data?.fields ?? {};
   const RANK = [/public/i, /biograph/i, /description/i, /notes/i];
-  const NEVER_DEFAULT = /(^|\.)(gm|gmnotes|private|privatenotes|secret|secrets)(\.|$)/i;
+  const NEVER_DEFAULT = /(^|\.)(gm|private|secret)[^.]*(\.|$)/i;
   const discover = (schema) => {
     const out = [];
     const walk = (field, path, depth) => {

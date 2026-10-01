@@ -73,11 +73,19 @@ const textOf = (value: unknown): string => (typeof value === "string" ? value : 
 const RANK = [/public/i, /biograph/i, /description/i, /notes/i];
 
 /**
- * Text a GM wrote for themselves, by the name of the segment that holds it. Never the
+ * Text a GM wrote for themselves, by the name of the segment that holds it: any segment
+ * that STARTS with `gm`, `private` or `secret`, whatever follows — `gm`, `gmNotes`,
+ * `gmDescription`, `privateNotes`, `privateDescription`, `secret`, `secretNotes`. Never the
  * automatic choice: a `.secret` section is stripped for players, but pf2e's
  * `description.gm` is a whole field of GM text that no section marks.
+ *
+ * A prefix rather than a list of whole names, because systems name these freely and a
+ * name this rule misses reaches the table. Its cost is the other way round and bounded: a
+ * player-facing field whose name happens to start so (a `secretary`, a `privateer`) is
+ * only left out of the AUTOMATIC choice — the GM can still choose it in the Studio. No
+ * text field of dnd5e or pf2e starts with these except GM text.
  */
-const NEVER_AUTOMATIC = /(^|\.)(gm|gmnotes|private|privatenotes|secret|secrets)(\.|$)/i;
+const NEVER_AUTOMATIC = /(^|\.)(gm|private|secret)[^.]*(\.|$)/i;
 
 /**
  * The field a card shows when the GM has not chosen one, or null when none will do.
