@@ -86,15 +86,18 @@ Hooks.once("ready", () => {
       `ready | props render on the ${canRasterise ? "canvas" : "DOM"} path` +
         `${settings.get("rendering") === "dom" ? " (chosen in settings)" : ""}`
     );
-    // AND recompute. The probe is asynchronous, so `canvasReady` usually runs its first
-    // LOD pass while the answer is still `null` — which reads as "canvas is fine", takes
-    // the canvas path, holds every prop's mesh invisible waiting for a texture that will
-    // never arrive, and mounts no DOM card either. The props were then invisible until
-    // something unrelated happened to schedule another pass. Measured on a fresh load:
-    // zero cards; one forced recompute and all three appeared, correctly placed.
+    // AND recompute. Core awaits the canvas before `ready`, so `canvasReady` always runs
+    // its first LOD pass before this answer exists. That pass now draws text props as DOM
+    // cards while the answer is `null` (`PropManager`'s policy); a `true` moves them to
+    // the canvas, and before the policy read `null` as DOM, a fresh load showed zero
+    // cards until something unrelated scheduled another pass.
     propManager().refresh();
+    // The rasteriser's fonts, encoded as data URIs, are for the canvas path only — and
+    // the probe decodes from a `blob:` URL, which taints, so it answers `false` on every
+    // supported browser today (DESIGN A29). Encoding every face for a path that will
+    // never run cost each client its idle time at load for nothing.
+    if (canRasterise) warmFontCache();
   });
-  warmFontCache();
   void reconcile().catch((error) => log.warn("the ready sweep of the grants failed", error));
   void onboardingReady().catch((error) => log.warn("the welcome could not be shown", error));
   // A pin hidden with "Hide while I edit" in a Studio this reload closed without asking.
