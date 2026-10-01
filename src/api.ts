@@ -14,7 +14,7 @@
  */
 
 import { MODULE_ID, PLACEHOLDER_TEXTURE } from "./const";
-import { cfg, cv, g, isGM, notify, playerIds, resolveUuid } from "./fvtt";
+import { cfg, cv, g, isGM, notify, ns, playerIds, resolveUuid } from "./fvtt";
 import { logger } from "./log";
 import * as audience from "./data/audience";
 import * as store from "./data/PinStore";
@@ -598,9 +598,9 @@ export async function showToAudience(anchorDoc: any): Promise<void> {
     recipients = readers;
   }
 
-  // The namespaced class first: reading the bare global logs a compatibility warning.
-  const Journal =
-    (globalThis as any).foundry?.documents?.collections?.Journal ?? (globalThis as any).Journal;
+  // The namespaced class only: the bare global `Journal` is deprecated since v13 and goes
+  // in v15 (TYPES client.d.mts:2168-2172), and reading it logs a compatibility warning.
+  const Journal = ns("documents.collections.Journal");
   if (!Journal?.show) {
     notify({ key: "DP.notice.showUnavailable" }, "warn");
     return;
