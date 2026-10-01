@@ -190,13 +190,17 @@ export function pendingCount(scene: any): number {
  * second won, and a frozen type size could be written back to null under a current `v`.
  */
 export async function migrateScene(scene: any): Promise<number> {
-  const tiles = scene?.tiles?.contents ?? [];
-  const ids = tiles.filter((tile: any) => rawPinFlag(tile) !== null).map((tile: any) => tile.id);
-  if (!ids.length) return 0;
-  return enqueueAll(ids, () => writeMigration(scene, tiles));
+  const pins = (scene?.tiles?.contents ?? []).filter((tile: any) => rawPinFlag(tile) !== null);
+  if (!pins.length) return 0;
+  return enqueueAll(
+    pins.map((tile: any) => tile.id),
+    () => writeMigration(scene)
+  );
 }
 
-async function writeMigration(scene: any, tiles: any[]): Promise<number> {
+/** Planned from the scene as it is once the queue reaches it, not as it was when asked. */
+async function writeMigration(scene: any): Promise<number> {
+  const tiles = scene?.tiles?.contents ?? [];
   const planned = planMigration(tiles, { drawnAsCard });
   if (!planned.length) return 0;
 
