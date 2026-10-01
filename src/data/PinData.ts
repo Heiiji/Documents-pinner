@@ -1,71 +1,22 @@
 /**
- * The pin payload as Foundry sees it.
+ * Reading the pin payload off a document.
  *
- * IMPURE. The validation rules are NOT here — they live in `pin-schema.ts`, which is
- * pure and unit-tested, and this file delegates to them. A `DataModel` that restated
- * the clamps would drift from the tested copy the first time either changed, and the
- * drift would surface as a pin that renders differently depending on which code path
- * read it.
+ * IMPURE only in that it reads a document; the rules are not here. They live in
+ * `pin-schema.ts`, which is pure and unit-tested, and every read goes through its
+ * `validatePin` — so a pin reads the same whichever code path reads it, and a damaged
+ * flag still reads as something that draws.
  *
- * What the DataModel adds over the bare validator is the part Foundry cares about: a
- * declared shape for the flag, a `migrateData` hook that runs before anything reads
- * it, and a stable class other modules can reference. The schema below is therefore
- * about STRUCTURE; `validatePin` remains the authority on VALUES.
- *
- * The class is built inside a factory rather than declared at module scope because
- * extending `foundry.abstract.DataModel` evaluates a global, and this module has to be
- * importable under Node for the rest of the data layer to be testable.
+ * Until 0.4.1 this file also built a `foundry.abstract.DataModel` for the payload, at
+ * `init`, and its header said `migrateData` ran before anything read the flag and that the
+ * class was one other modules could reference. Neither was true: the class was never
+ * registered, never instantiated and never exported anywhere a module could reach, and no
+ * read ever went through it. It was removed rather than wired up (DESIGN A29): a flag is not
+ * a field Foundry validates, and the reads below already normalise on every call.
  */
 
 import { FLAGS, MODULE_ID } from "../const";
-import { ns } from "../fvtt";
 import type { DpPinFlags } from "../types/dp";
-import { defaultPin, validatePin, type PinValidationResult } from "./pin-schema";
-
-/** Set once at `init`. Null under Node, and on any build missing the namespace. */
-let PinDataClass: any = null;
-
-/**
- * Build and register the DataModel subclass. Call once, at `init`.
- *
- * Returns the class, or `null` if this build has no `foundry.abstract.DataModel` — in
- * which case every read still works, because reads go through `validatePin` either
- * way. The model is a convenience, never a dependency.
- */
-export function definePinData(): any {
-  if (PinDataClass) return PinDataClass;
-
-  const DataModel = ns("abstract.DataModel");
-  const fields = ns("data.fields");
-  if (!DataModel || !fields) return null;
-
-  PinDataClass = class PinData extends DataModel {
-    static defineSchema() {
-      const d = defaultPin();
-      return {
-        v: new fields.NumberField({ required: true, integer: true, initial: d.v }),
-        mode: new fields.StringField({ required: true, choices: ["pin", "prop"], initial: d.mode }),
-        // The groups are declared as opaque objects on purpose: their contents are
-        // validated by `validatePin` in `migrateData` below, before Foundry ever
-        // looks at them, so a second set of field-level rules here would be dead
-        // weight that could only disagree with the first.
-        source: new fields.ObjectField({ initial: () => defaultPin().source }),
-        display: new fields.ObjectField({ initial: () => defaultPin().display }),
-        geometry: new fields.ObjectField({ initial: () => defaultPin().geometry }),
-        effect: new fields.ObjectField({ initial: () => defaultPin().effect }),
-        audience: new fields.ObjectField({ initial: () => defaultPin().audience }),
-        interaction: new fields.ObjectField({ initial: () => defaultPin().interaction }),
-      };
-    }
-
-    /** The single entry point for the rules. Runs before validation, on every read. */
-    static migrateData(source: any) {
-      return super.migrateData(validatePin(source).pin);
-    }
-  };
-
-  return PinDataClass;
-}
+import { validatePin, type PinValidationResult } from "./pin-schema";
 
 /** The raw flag as stored, without normalisation. */
 export function rawPinFlag(doc: any): unknown {
