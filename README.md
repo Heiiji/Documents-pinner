@@ -69,7 +69,7 @@ sidebar — so if you prepare scenes while players are connected, change the def
 | `Alt+Shift+V` / `Alt+M` / `Alt+Shift+F` | cycle audience · switch shape · fit to content |
 | hold `Alt` | peek: props fade so the map can be read (players too) |
 | *Reveal the next hidden pin* | Reveal next from anywhere, in the Pinboard's view when it is open — no key until you give it one in Configure Controls |
-| `/pin <name>` | place by name from chat |
+| `/pin <name>` | place by name from chat — a world journal or page, else a compendium journal |
 
 | Pinboard | |
 |---|---|
@@ -286,7 +286,7 @@ réglage.
 | `Alt+Maj+V` / `Alt+M` / `Alt+Maj+F` | faire défiler le public · changer de forme · ajuster au contenu |
 | `Alt` maintenu | coup d'œil : les accessoires s'estompent (les joueurs aussi) |
 | *Révéler l'épingle masquée suivante* | révéler la suivante de n'importe où, dans la vue du tableau de bord s'il est ouvert — sans touche tant que vous ne lui en donnez pas une dans Configurer les contrôles |
-| `/pin <nom>` | poser par son nom depuis le chat |
+| `/pin <nom>` | poser par son nom depuis le chat — un journal ou une page du monde, sinon un journal de compendium |
 
 | Tableau de bord | |
 |---|---|
