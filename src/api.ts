@@ -44,7 +44,7 @@ import {
   type Refusal,
 } from "./sources/index";
 import { packFacts, packLockedHere, packOf, packReadableBy, playersCanRead } from "./sources/packs";
-import { isPackUuid } from "./sources/uuid";
+import { isPackUuid, parseSourceUuid } from "./sources/uuid";
 import type { DpAudience, DpMode, DpPinFlags, DpSource } from "./types/dp";
 
 declare const Hooks: any;
@@ -285,7 +285,7 @@ export interface PinPlacement {
  * the note in `pin-schema.ts`.
  */
 export async function pinAt(scene: any, source: DpSource, at: PinPlacement): Promise<any> {
-  if (!isGM() || !scene) return null;
+  if (!isGM() || !scene || refused(source)) return null;
 
   const mode = at.mode ?? settings.get("defaultMode");
   const grid = scene.grid?.size ?? 100;
@@ -340,6 +340,21 @@ export async function pinAt(scene: any, source: DpSource, at: PinPlacement): Pro
     warnIfPlayersCannotRead(source);
   }
   return anchor;
+}
+
+/**
+ * D3 at every door: an item an actor owns, or a token's own actor, is refused to an API
+ * caller as its drop, its header and the picker refuse it — with the same notice, and
+ * nothing written. Their ownership is their parent's, so no grant could follow, and a card
+ * of an owned item was drawn all the same.
+ */
+function refused(source: DpSource): boolean {
+  if (source?.kind !== "document") return false;
+  const name = parseSourceUuid(source.uuid)?.documentName;
+  const outcome = name ? adapterFor(name)?.fromDrop({ type: name, uuid: source.uuid }) : null;
+  if (!isRefusal(outcome)) return false;
+  notify({ key: outcome.refused }, "info");
+  return true;
 }
 
 /** New pins land at the end of the reveal order, which is where a GM expects them. */
@@ -1075,7 +1090,7 @@ export async function unpin(anchorDoc: any): Promise<void> {
  * is still showing them.
  */
 export async function retarget(anchorDoc: any, source: DpSource): Promise<boolean> {
-  if (!isGM() || !anchorDoc) return false;
+  if (!isGM() || !anchorDoc || refused(source)) return false;
 
   const before = readPin(anchorDoc);
   if (!before) return false;
@@ -1129,7 +1144,7 @@ export async function retarget(anchorDoc: any, source: DpSource): Promise<boolea
 
 /** Adopt an existing tile as a pin — the one-click path from the Tile config sheet. */
 export async function adoptTile(tileDoc: any, source: DpSource): Promise<void> {
-  if (!isGM() || !tileDoc) return;
+  if (!isGM() || !tileDoc || refused(source)) return;
   const pin: DpPinFlags = {
     ...defaultPin(),
     // A tile big enough to read is obviously a prop; anything smaller takes the world's

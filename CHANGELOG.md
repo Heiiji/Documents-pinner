@@ -206,6 +206,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and you are offered them again next session.
 - **A compendium actor with no portrait of its own had no picture in the Pinboard**, even
   once its poster had loaded and showed its token. The Pinboard now shows the token too.
+- **A macro could pin an item an actor owns, or a token's own actor**, which every other
+  way of pinning refuses. The module API's `pinAt`, `adoptTile` and `retarget` refuse them
+  too now, with the same notice.
 
 ## [0.3.3] — 2026-09-30
 
