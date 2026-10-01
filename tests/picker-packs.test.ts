@@ -39,7 +39,7 @@ const handouts = (over: Partial<FakePackOptions> = {}) =>
     id: PACK,
     label: "Handouts",
     entries: [
-      { _id: "letters", name: "Letters" },
+      { _id: "letters", name: "Letters", pages: [{ _id: "baron", name: "The Baron's Letter" }] },
       { _id: "ledger", name: "Ledger" },
     ],
     ...over,
@@ -241,10 +241,30 @@ describe("/pin and the compendium window's menu", () => {
     }
   });
 
+  const entryRow = (id: string) => ({ entryId: id });
   it.each([
-    ["a compendium window", () => world.game.packs.get(PACK), "letters", ENTRY],
-    ["the journal sidebar", () => world.game.journal, "mayor", "JournalEntry.mayor"],
-  ])("Pin to scene in %s arms the row's document", async (_where, collection, id, uuid) => {
+    [
+      "a compendium window",
+      "getJournalEntryContextOptions",
+      () => ({ collection: world.game.packs.get(PACK) }),
+      entryRow("letters"),
+      ENTRY,
+    ],
+    [
+      "the journal sidebar",
+      "getJournalEntryContextOptions",
+      () => ({ collection: world.game.journal }),
+      entryRow("mayor"),
+      "JournalEntry.mayor",
+    ],
+    [
+      "a compendium journal's sheet, on a page",
+      "getJournalEntryPageContextOptions",
+      () => ({ document: world.game.packs.get(PACK).holdInCache("letters") }),
+      { pageId: "baron" },
+      `${ENTRY}.JournalEntryPage.baron`,
+    ],
+  ])("Pin to scene in %s arms the row's document", async (_where, hook, app, dataset, uuid) => {
     install([handouts()]);
     const registered = new Map<string, ((...args: any[]) => void)[]>();
     (globalThis as any).Hooks.on = (name: string, fn: (...args: any[]) => void) =>
@@ -252,11 +272,9 @@ describe("/pin and the compendium window's menu", () => {
     await import("../src/main");
 
     const options: any[] = [];
-    for (const handler of registered.get("getJournalEntryContextOptions") ?? []) {
-      handler({ collection: collection() }, options);
-    }
+    for (const handler of registered.get(hook) ?? []) handler(app(), options);
     const row = document.createElement("li");
-    row.dataset.entryId = id;
+    Object.assign(row.dataset, dataset);
     options[0].onClick(new Event("click"), row);
 
     expect(vi.mocked(armAt).mock.calls.map((call) => call[0].uuid)).toEqual([uuid]);

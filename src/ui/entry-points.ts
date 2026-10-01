@@ -121,8 +121,9 @@ export function addContextOption(options: any[], app?: any): void {
  * guessing which one this build uses.
  *
  * A row in a compendium window names a document of the PACK, which the world does not
- * hold: its id is asked of the window's own collection, which builds the pack uuid. The
- * world's journals were the only place it was looked for, so "Pin to scene" there found
+ * hold: its id is asked of the window's own collection, which builds the pack uuid — and
+ * a page in a compendium journal's sheet is asked of that sheet's journal. The world's
+ * journals were the only place either was looked for, so "Pin to scene" there found
  * nothing and did nothing.
  */
 function uuidFromContextTarget(target: any, app?: any): string | null {
@@ -141,6 +142,10 @@ function uuidFromContextTarget(target: any, app?: any): string | null {
   }
   const listed = collection?.get?.(id);
   if (typeof listed?.uuid === "string") return listed.uuid;
+  // A page in a journal's own sheet: the sheet knows its journal, which may be a
+  // compendium's, where the world lookup below would never find it.
+  const page = app?.document?.pages?.get?.(id);
+  if (typeof page?.uuid === "string") return page.uuid;
 
   const doc =
     g()?.journal?.get(id) ??
