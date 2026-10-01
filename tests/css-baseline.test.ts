@@ -353,6 +353,28 @@ describe("the effects' motion", () => {
       expect(refused, stop).toContain(stop);
     }
   });
+
+  it("stops the coarse rung's motion below every rule that starts it, where the stop wins", () => {
+    // Each stop has the specificity of the start it answers, so only its place decides —
+    // and the list sat above the glow's start and the sweep's, and lost to both.
+    const rules = [...FX.matchAll(/([^{};]+)\{([^{}]*)\}/g)].map((m) => ({
+      at: m.index!,
+      selector: m[1].trim(),
+      body: m[2],
+    }));
+    const stop = rules.find(
+      (rule) =>
+        rule.selector.includes('.dp-card[data-dp-tier="L2a"]::after') &&
+        /animation\s*:\s*none/.test(rule.body)
+    );
+    expect(stop).toBeDefined();
+    // Every start but the scanline roll, whose gate refuses the coarse rung itself.
+    const starts = rules.filter((rule) =>
+      /animation\s*:\s*(?!none\b)(?!dp-scan\b)[\w-]+/.test(rule.body)
+    );
+    expect(starts.length).toBeGreaterThanOrEqual(3);
+    for (const start of starts) expect(stop!.at, start.selector).toBeGreaterThan(start.at);
+  });
 });
 
 /**

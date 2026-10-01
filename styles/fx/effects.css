@@ -124,25 +124,6 @@
   animation-play-state: running;
 }
 
-/*
- * Everything animated, stopped.
- *
- * The pseudo-element selectors are the point. `.dp-card[data-dp-tier="L2a"]` matched the
- * card and not `::after`, where the glow pulse actually lives — so coarse props kept
- * animating in exactly the size band where a scene has the most of them. The `.dp-card *`
- * net in `fx/_props.css` has the same hole, because `*` does not match a pseudo-element
- * either. The scanline roll is not in this list: it has one gate of its own, below.
- */
-.dp-card[data-dp-tier="L2a"],
-.dp-card[data-dp-tier="L2a"]::after,
-.dp-card[data-dp-tier="L2a"] .dp-card__hud-sweep,
-.dp-card[data-dp-motion="loop"]:where([data-dp-level="reduced"], [data-dp-level="off"]),
-.dp-card[data-dp-motion="loop"]:where([data-dp-level="reduced"], [data-dp-level="off"])::after,
-.dp-card[data-dp-motion="loop"]:where([data-dp-level="reduced"], [data-dp-level="off"])
-  .dp-card__hud-sweep {
-  animation: none;
-}
-
 .dp-card[data-dp-motion="loop"]::after {
   animation: dp-glow var(--dp-glow-dur, 0s) ease-in-out infinite alternate;
 }
@@ -506,6 +487,31 @@
  */
 .dp-card[data-dp-tier="L2a"] .dp-card__hud::after {
   display: none;
+}
+
+/*
+ * Everything animated, stopped.
+ *
+ * The pseudo-element selectors are the point. `.dp-card[data-dp-tier="L2a"]` matched the
+ * card and not `::after`, where the glow pulse actually lives — so coarse props kept
+ * animating in exactly the size band where a scene has the most of them. The `.dp-card *`
+ * net in `fx/_props.css` has the same hole, because `*` does not match a pseudo-element
+ * either. The scanline roll is not in this list: it has one gate of its own, above.
+ *
+ * So is the PLACE. Each stop here has the specificity of the rule that starts what it
+ * stops — (0,2,1) for the glow, (0,3,0) for the sweep — and at equal specificity the later
+ * rule wins. This list sat above both, lost to both, and the coarse rung kept its glow
+ * pulse and its sweep while this comment said otherwise (A29). It stays below every rule
+ * that starts an animation; `tests/css-baseline.test.ts` holds it there.
+ */
+.dp-card[data-dp-tier="L2a"],
+.dp-card[data-dp-tier="L2a"]::after,
+.dp-card[data-dp-tier="L2a"] .dp-card__hud-sweep,
+.dp-card[data-dp-motion="loop"]:where([data-dp-level="reduced"], [data-dp-level="off"]),
+.dp-card[data-dp-motion="loop"]:where([data-dp-level="reduced"], [data-dp-level="off"])::after,
+.dp-card[data-dp-motion="loop"]:where([data-dp-level="reduced"], [data-dp-level="off"])
+  .dp-card__hud-sweep {
+  animation: none;
 }
 
 /*
