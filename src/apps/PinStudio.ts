@@ -616,7 +616,10 @@ export function liveBanner(live: StudioLive | undefined): string {
       `<div class="dp-studio__live dp-studio__live--held" role="status">` +
       `<i class="fa-solid fa-eye-slash" aria-hidden="true"></i>` +
       `<span>${escapeHtml(t("DP.studio.holdBanner"))}</span>` +
-      `<button type="button" data-action="resumeEdit">${escapeHtml(t("DP.studio.resumeEdit"))}</button>` +
+      // One focus key for both of the banner's buttons, so the keyboard crosses from one to
+      // the other as the pin hides and shows, instead of falling back to the page.
+      `<button type="button" data-action="resumeEdit" data-dp-focus-key="editHold">` +
+      `${escapeHtml(t("DP.studio.resumeEdit"))}</button>` +
       `</div>`
     );
   }
@@ -625,7 +628,7 @@ export function liveBanner(live: StudioLive | undefined): string {
     `<div class="dp-studio__live" role="status">` +
     `<i class="fa-solid fa-eye" aria-hidden="true"></i>` +
     `<span>${escapeHtml(t("DP.studio.liveBanner", { count: live.count }))}</span>` +
-    `<button type="button" data-action="holdForEdit"` +
+    `<button type="button" data-action="holdForEdit" data-dp-focus-key="editHold"` +
     ` data-tooltip-text="${escapeAttr(t("DP.studio.holdHint"))}">` +
     `${escapeHtml(t("DP.studio.holdForEdit"))}</button>` +
     `</div>`

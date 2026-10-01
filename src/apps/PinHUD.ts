@@ -232,7 +232,7 @@ export function hudMarkup(anchorDoc: any, pin: DpPinFlags): string {
  * Move focus along the toolbar with the arrow keys.
  *
  * Roving tabindex rather than every button being tabbable: a toolbar is ONE tab stop,
- * so a GM tabbing through the sheet behind it does not have to walk eight icons to get
+ * so a GM tabbing through the sheet behind it does not have to walk nine icons to get
  * past the HUD.
  */
 export function focusStep(
@@ -272,8 +272,8 @@ export function definePinHUD(): any {
         setAudienceKind: onSetAudienceKind,
         setEffect: onSetEffect,
         editPresets: onEditPresets,
-        cheatSheet(this: any, _event: Event, target: HTMLElement) {
-          toggleCheatSheet("hud", target);
+        cheatSheet() {
+          toggleCheatSheet("hud");
         },
       },
     };
@@ -368,13 +368,16 @@ export function definePinHUD(): any {
         if (event.key === "Escape") {
           // The sheet closes first, then a palette; with neither open, Escape lets go of
           // the pin, which is what closes the HUD — it used to do nothing at all.
-          if (closeCheatSheet()) event.preventDefault();
-          else if (this.openPaletteId) this.#closePalettes(root);
+          if (closeCheatSheet()) {
+            // Stopped too: core's Escape on the window would otherwise let go of the pin.
+            event.preventDefault();
+            event.stopPropagation();
+          } else if (this.openPaletteId) this.#closePalettes(root);
           else this.object?.release?.();
           return;
         }
         if (event.key === "?" && !isTextEntry(target)) {
-          toggleCheatSheet("hud", root.querySelector<HTMLElement>('[data-action="cheatSheet"]'));
+          toggleCheatSheet("hud");
           event.preventDefault();
           return;
         }
@@ -487,6 +490,8 @@ export function showPinHUD(tile: any): void {
 }
 
 export function hidePinHUD(): void {
+  // The HUD's keys go with the HUD, whichever way it was hidden.
+  closeCheatSheet("hud", false);
   if (!hudInstance) return;
   // `close`, never `clear`: that is deprecated since v13 and gone in v15, and it only
   // ever logged a warning and called `close`.

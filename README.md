@@ -82,7 +82,9 @@ sidebar — so if you prepare scenes while players are connected, change the def
 | bulk bar | reveal · hide · delete the selection — each pin to its own audience · *Reveal all* asks before showing more than one |
 | `/` `Esc` | search · clear |
 
-Press `?` while placing, on the Pinboard or on a pin's HUD — or click their `?` button — to see that surface's keys, named as your keyboard names them and as you bound them in Configure Controls.
+Press `?` while placing, on the Pinboard or on a pin's HUD — or click their `?` button —
+to see that surface's keys, named as your keyboard names them and as you bound them in
+Configure Controls.
 
 **Click a pin on the Notes layer to grab it.** Pins are Tiles, and Foundry only lets you
 drag one from the Tiles layer — so a press on a prop from the Notes layer, where the
@@ -278,7 +280,7 @@ réglage.
 | `Maj+P` | reposer le dernier document, sans dialogue |
 | `Alt+Maj+V` / `Alt+M` / `Alt+Maj+F` | faire défiler le public · changer de forme · ajuster au contenu |
 | `Alt` maintenu | coup d'œil : les accessoires s'estompent (les joueurs aussi) |
-| *Révéler l'épingle masquée suivante* | révéler la suivante de n'importe où, dans la vue du tableau des épingles s'il est ouvert — sans touche tant que vous ne lui en donnez pas une dans Configurer les contrôles |
+| *Révéler l'épingle masquée suivante* | révéler la suivante de n'importe où, dans la vue du tableau de bord s'il est ouvert — sans touche tant que vous ne lui en donnez pas une dans Configurer les contrôles |
 | `/pin <nom>` | poser par son nom depuis le chat |
 
 | Tableau de bord | |
@@ -292,7 +294,9 @@ réglage.
 | barre groupée | révéler · masquer · supprimer la sélection — chaque épingle à son propre public · *Tout révéler* demande confirmation avant d'en montrer plus d'une |
 | `/` `Échap` | rechercher · effacer |
 
-Appuyez sur `?` pendant le placement, dans le tableau des épingles ou sur les commandes d'une épingle — ou cliquez leur bouton `?` — pour voir les touches de cet endroit, nommées comme votre clavier les nomme et comme vous les avez réglées dans Configurer les contrôles.
+Appuyez sur `?` pendant le placement, dans le tableau de bord ou sur les commandes d'une
+épingle — ou cliquez leur bouton `?` — pour voir les touches de cet endroit, nommées comme
+votre clavier les nomme et comme vous les avez réglées dans Configurer les contrôles.
 
 **Cliquez une épingle sur le calque Notes pour la saisir.** Les épingles sont des tuiles,
 et Foundry ne permet de les déplacer que depuis le calque Tuiles — alors un clic sur un

@@ -526,8 +526,8 @@ export function definePinboard(): any {
         place: onPlace,
         revealAll: onRevealAll,
         revealNext: onRevealNext,
-        cheatSheet(this: any, _event: Event, target: HTMLElement) {
-          toggleCheatSheet("board", target);
+        cheatSheet() {
+          toggleCheatSheet("board");
         },
         hideAll(this: any) {
           return allRows(this, false);
@@ -609,6 +609,18 @@ export function definePinboard(): any {
         this.status
       );
       return wrapper.firstElementChild ?? wrapper;
+    }
+
+    /**
+     * The keys of a board that is gone are nobody's: its sheet goes with it. Core calls this
+     * after the window has closed and does not await it, so nothing here may throw into it.
+     */
+    _onClose(options: unknown) {
+      try {
+        super._onClose?.(options);
+      } finally {
+        closeCheatSheet("board", false);
+      }
     }
 
     _replaceHTML(result: HTMLElement, content: HTMLElement) {
@@ -775,8 +787,11 @@ export function definePinboard(): any {
       const target = event.target as HTMLElement;
 
       // The sheet goes first, before the menu, the search and the selection.
+      // Stopped as well as prevented: core's own Escape listens on the window, and one that
+      // reached it would close this board, or the window behind, after the sheet.
       if (event.key === "Escape" && closeCheatSheet()) {
         event.preventDefault();
+        event.stopPropagation();
         return;
       }
 
@@ -823,7 +838,9 @@ export function definePinboard(): any {
         return;
       }
       // Shift+/ on most layouts, so it cannot be mistaken for the search's `/`.
-      if (event.key === "?" && !typing) {
+      // Any button but a text field: focus comes back to the `?` button when the sheet
+      // closes, and from there `?` has to open it again.
+      if (event.key === "?" && !isTextEntry(target)) {
         toggleCheatSheet("board");
         event.preventDefault();
         return;

@@ -40,8 +40,16 @@ interface Surface {
   field(): HTMLElement;
   /** True while the surface's own Escape has not acted. */
   untouched(): boolean;
-  /** Click the surface's `?` button, when it has one. */
+  /** Click the surface's `?` button, when it has one — the press first, as a pointer does. */
   click?(): void;
+  /** Close or hide the surface the way core does. */
+  close?(): Promise<void> | void;
+}
+
+/** A real click: the pointer's press reaches the document's capture before the click. */
+function clickOn(button: HTMLElement, dispatch: () => void): void {
+  button.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true }));
+  dispatch();
 }
 
 const source = {
@@ -109,7 +117,8 @@ const mount: Record<SurfaceName, () => Promise<Surface>> = {
       press: (key, mods, target = row()) => keydown(target, key, mods),
       field: () => contentOf(board).querySelector<HTMLElement>(".dp-board__search")!,
       untouched: () => board.selected.length === 1,
-      click: () => board.dispatch("cheatSheet", button()),
+      click: () => clickOn(button(), () => board.dispatch("cheatSheet", button())),
+      close: () => board.close(),
     };
   },
 
@@ -133,7 +142,8 @@ const mount: Record<SurfaceName, () => Promise<Surface>> = {
       },
       field: () => contentOf(hud).querySelector<HTMLElement>('[data-action="setIntensity"]')!,
       untouched: () => release.mock.calls.length === 0,
-      click: () => hud.dispatch("cheatSheet", button()),
+      click: () => clickOn(button(), () => hud.dispatch("cheatSheet", button())),
+      close: async () => (await import("../src/apps/PinHUD")).hidePinHUD(),
     };
   },
 };
@@ -266,6 +276,32 @@ describe("opening and closing", () => {
         surface.click();
         expect(sheet()).toBeNull();
       }
+    }
+  );
+
+  // The board and the HUD sit in the page under core's own window-level Escape, and they
+  // rebuild their `?` button on every render.
+  it.each(["board", "hud"] as const)(
+    "on the %s, Escape stops at the sheet, the ? button closes a sheet the keyboard opened, and the sheet goes with the surface",
+    async (name) => {
+      const surface = await mount[name]();
+      const core = vi.fn();
+      const listen = (event: KeyboardEvent) => event.key === "Escape" && core();
+      window.addEventListener("keydown", listen);
+      cleanup.push(() => window.removeEventListener("keydown", listen));
+
+      surface.press("?", { shift: true });
+      surface.press("Escape");
+      expect(sheet()).toBeNull();
+      expect(core).not.toHaveBeenCalled();
+
+      surface.press("?", { shift: true });
+      surface.click!();
+      expect(sheet()).toBeNull();
+
+      surface.press("?", { shift: true });
+      await surface.close!();
+      expect(sheet()).toBeNull();
     }
   );
 

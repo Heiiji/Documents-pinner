@@ -130,6 +130,22 @@ describe("Hide while I edit", () => {
     expect(tile.hidden).toBe(false);
   });
 
+  it("keeps the keyboard on the banner as the pin hides and shows again", async () => {
+    await openStudio();
+    const button = (action: string) =>
+      contentOf(studio).querySelector<HTMLElement>(`[data-action="${action}"]`)!;
+
+    button("holdForEdit").focus();
+    await studio.dispatch("holdForEdit", button("holdForEdit"));
+    await settle();
+    expect(document.activeElement).toBe(button("resumeEdit"));
+
+    await studio.dispatch("resumeEdit", button("resumeEdit"));
+    await vi.waitFor(() => expect(tile.hidden).toBe(false));
+    await studio.render();
+    expect(document.activeElement).toBe(button("holdForEdit"));
+  });
+
   it("leaves no hold behind when the hide does not land", async () => {
     await openStudio();
     // A write core refuses: it resolves, and nothing changes.

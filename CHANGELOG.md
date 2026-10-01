@@ -79,9 +79,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   greyed out when nothing on the scene is hidden. The bulk bar's "Reveal to all" is now
   "Reveal".
 - **The HUD keeps to the verbs of the moment.** On the left: reveal, who can see it, and
-  spotlight; on the right: effect, shape, open for me, flash and Pin Studio. Lock and *Fit
-  to content* have left it for Pin Studio's strip, where both already were; Fit is still
-  `Alt+Shift+F`.
+  spotlight; on the right: effect, shape, open for me, flash, Pin Studio and `?` for the
+  keys. Lock and *Fit to content* have left it for Pin Studio's strip, where both already
+  were; Fit is still `Alt+Shift+F`.
 
 ### Fixed
 

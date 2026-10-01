@@ -78,17 +78,17 @@ export function closeCheatSheet(surface?: CheatSurface, restoreFocus = true): bo
 }
 
 /** `?` and the `?` buttons: open this surface's sheet, or close it if it is the one up. */
-export function toggleCheatSheet(surface: CheatSurface, opener: HTMLElement | null = null): void {
+export function toggleCheatSheet(surface: CheatSurface): void {
   try {
     const was = shown?.surface;
     closeCheatSheet(undefined, was === surface);
-    if (was !== surface) show(surface, opener);
+    if (was !== surface) show(surface);
   } catch (error) {
     log.warn("the cheat sheet failed", error);
   }
 }
 
-function show(surface: CheatSurface, opener: HTMLElement | null): void {
+function show(surface: CheatSurface): void {
   const wrapper = document.createElement("div");
   wrapper.innerHTML = cheatSheetMarkup(surface, modifierGlyphs(platform()), currentBindings);
   const element = wrapper.firstElementChild as HTMLElement | null;
@@ -109,10 +109,15 @@ function show(surface: CheatSurface, opener: HTMLElement | null): void {
   };
   // Captured, so a surface that stops its own pointer events still dismisses the sheet.
   // The click goes on to whatever it was aimed at, and keeps the focus it gives — except
-  // on the button that opened it, whose own click is the toggle that closes it.
+  // on a `?` button, whose own click is the toggle that closes it. Any `?` button, not the
+  // one that opened it: the board and the HUD rebuild their markup on every render, and a
+  // sheet opened from the keyboard had no opener at all, so the press closed it and the
+  // click opened it again.
   const onPointer = (event: PointerEvent) => {
-    const target = event.target as Node | null;
-    if (target && (element.contains(target) || opener?.contains(target))) return;
+    const target = event.target as Element | null;
+    if (target && (element.contains(target) || target.closest?.('[data-action="cheatSheet"]'))) {
+      return;
+    }
     closeCheatSheet(undefined, false);
   };
 
