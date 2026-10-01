@@ -204,6 +204,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   said nothing.** The scenes after it were never updated and the offer never came back
   for them. Every scene that can be updated now is, the ones that could not are named,
   and you are offered them again next session.
+- **A compendium actor with no portrait of its own had no picture in the Pinboard**, even
+  once its poster had loaded and showed its token. The Pinboard now shows the token too.
 
 ## [0.3.3] — 2026-09-30
 

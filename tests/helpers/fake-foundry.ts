@@ -1080,6 +1080,12 @@ export interface FakePackEntry {
   /** An Actor's or an Item's artwork and system subtype, which its index entry carries. */
   img?: string;
   type?: string;
+  /**
+   * An Actor's prototype token texture, which its loaded document carries and its index
+   * entry does not (TYPES actor.d.mts:40, the index fields; the document's
+   * `prototypeToken.texture.src`).
+   */
+  token?: string;
   /** An Actor's or an Item's system data, once loaded. */
   system?: Record<string, unknown>;
 }
@@ -1152,6 +1158,7 @@ export function fakePack(options: FakePackOptions): any {
         type: entry.type ?? "base",
         img: entry.img,
         system: entry.system ?? {},
+        ...(entry.token === undefined ? {} : { prototypeToken: { texture: { src: entry.token } } }),
         pack: options.id,
         // Pack documents answer by ROLE, through the pack (document.d.mts:342-358).
         permission: (user: any, level: unknown) => pack.testUserPermission(user, level),
