@@ -1255,7 +1255,7 @@ function onBrowseIcon(this: any) {
     type: "image",
     current: doc?.texture?.src,
     callback: (path: string) => void api.setPinIcon(doc, path),
-  }).render(true);
+  }).render({ force: true });
 }
 
 /**
@@ -1475,7 +1475,7 @@ export function openStudio(doc: any, tab: TabId = "content"): any {
     open.set(key, app);
   }
   app.tab = tab;
-  app.render(true);
+  app.render({ force: true });
   return app;
 }
 

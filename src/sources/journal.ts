@@ -200,13 +200,13 @@ function journalFamily(doc: any): any[] {
  */
 function openJournal(source: any): void {
   if (source.documentName === "JournalEntryPage" && source.parent?.sheet) {
-    source.parent.sheet.render(true, { pageId: source.id });
+    source.parent.sheet.render({ force: true, pageId: source.id });
     return;
   }
   // So anything reaching here is an entry with no page chosen, or one whose chosen page
   // has been deleted. Passing the stored id on would ask the sheet for a page that is
   // not there; the entry opens where it opens.
-  source.sheet.render(true);
+  source.sheet.render({ force: true });
 }
 
 const documentSource = (uuid: string, pageId: string | null = null): DpSource => ({
