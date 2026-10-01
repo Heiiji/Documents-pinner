@@ -263,9 +263,11 @@ export function fakeDoc(options: FakeDocOptions = {}): any {
     return doc;
   };
   doc.getFlag = (scope: string, key: string) => doc.flags?.[scope]?.[key];
-  // `Document#testUserPermission` (TYPES common/abstract/document.d.mts:342-375): computed
-  // as core computes it — `ownership[user.id] ?? ownership.default ?? NONE` against the
-  // level, and true for a GM (RECALLED). A test that needs another answer passes its own.
+  // `Document#testUserPermission` (TYPES common/abstract/document.d.mts:342-375; LIVE
+  // foundry.mjs 14.368, 14852 for a GM's OWNER, 14832 for the record): computed as core
+  // computes it — true for a GM, else `ownership[user.id] ?? ownership.default ?? NONE`
+  // against the level. Not modelled: a banned user (NONE) and an embedded document's
+  // INHERIT (its parent's level). A test that needs another answer passes its own.
   doc.testUserPermission =
     doc.testUserPermission ??
     ((user: any, level: unknown) => {

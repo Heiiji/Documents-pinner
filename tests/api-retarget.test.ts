@@ -67,7 +67,6 @@ describe("retarget, as the payload sees it", () => {
     vi.doMock("../src/data/ownership-sync", () => ({
       syncAnchor: vi.fn(async () => {}),
       releaseAnchor: vi.fn(async () => {}),
-      grantTargets: vi.fn(() => []),
     }));
     tile = pinnedTile();
     installWorld({ isGM: true, tiles: [tile] });
