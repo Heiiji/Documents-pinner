@@ -193,6 +193,17 @@ describe("the card of an actor or an item", () => {
       { portrait: null, title: "Black Jack", text: "Wanted: 50 gold." },
     ],
     [
+      "an actor whose system's roll data throws still shows its portrait",
+      () =>
+        Object.assign(jack(), {
+          getRollData: () => {
+            throw new Error("derived data not prepared");
+          },
+        }),
+      "Actor.jack",
+      { portrait: "portraits/jack.webp", title: "Black Jack", text: "Wanted: 50 gold." },
+    ],
+    [
       "an item shows its image",
       () => amulet(),
       "Item.amulet",
