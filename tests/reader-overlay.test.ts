@@ -31,7 +31,11 @@ vi.mock("../src/render/ContentResolver", () => ({
   resolveCard: vi.fn(async () => card),
 }));
 
+/** Which tier this client draws a prop on; the manager's answer, mocked. */
+const tier = { dom: false };
+
 vi.mock("../src/canvas/PropManager", () => ({
+  drawsAsDom: vi.fn(() => tier.dom),
   propManager: () => ({ setFocused: vi.fn() }),
 }));
 
@@ -60,6 +64,7 @@ beforeEach(() => {
   world = installWorld({ isGM: false, tiles: [tile] });
   card.readable = false;
   card.missing = false;
+  tier.dom = false;
 });
 
 afterEach(() => {
@@ -256,6 +261,41 @@ describe("the focus reader", () => {
     await openReader(tile);
 
     expect(reader()).toBeNull();
+  });
+});
+
+/**
+ * Opening the reader dims the mesh under it, and closing writes `document.alpha` back. On
+ * the DOM path that mesh carries only the placeholder book, held at zero by the manager —
+ * so the restore put the book on the map, stretched across the letter, as the reader went.
+ */
+describe("the mesh under the reader", () => {
+  it("dims a canvas-tier prop's page and brings it back", async () => {
+    const { openReader, closeReader } = await import("../src/apps/ReaderOverlay");
+    await openReader(tile);
+    expect(tile.object.mesh.alpha).toBe(0.15);
+    closeReader();
+    expect(tile.object.mesh.alpha).toBe(1);
+  });
+
+  it("leaves a DOM card's placeholder at the zero the manager holds it at", async () => {
+    tier.dom = true;
+    tile.object.mesh.alpha = 0;
+    const { openReader, closeReader } = await import("../src/apps/ReaderOverlay");
+    await openReader(tile);
+    expect(tile.object.mesh.alpha).toBe(0);
+    closeReader();
+    expect(tile.object.mesh.alpha).toBe(0);
+  });
+
+  it("still dims a pin's icon, which is what its mesh shows on either path", async () => {
+    tier.dom = true;
+    tile.flags["documents-pinner"].pin.mode = "pin";
+    const { openReader, closeReader } = await import("../src/apps/ReaderOverlay");
+    await openReader(tile);
+    expect(tile.object.mesh.alpha).toBe(0.15);
+    closeReader();
+    expect(tile.object.mesh.alpha).toBe(1);
   });
 });
 

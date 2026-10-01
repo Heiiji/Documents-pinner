@@ -160,9 +160,29 @@ export function definePinnedTile(): boolean {
       if (!this.isVisible && this.mesh) this.mesh.visible = false;
     }
 
+    /**
+     * Core's state refresh writes the mesh's alpha, and it runs after the manager's.
+     *
+     * `Tile#_refreshState` sets `mesh.alpha` from the placeable's own alpha on a hover in
+     * or out, a control or release, a drag, the Tiles layer (de)activating, the Alt
+     * highlight and any change of `hidden`, `sort` or `locked` (foundry.mjs 14.368,
+     * 150381). The manager holds a DOM-path prop's mesh at zero only through its own
+     * `applyAlpha`, so each of those put the placeholder book back at full strength under
+     * the card — seen through every translucent moment of it: a peek, a token fade, a
+     * reveal fading in, a torn edge, a rotated corner. The zero is held here, where core
+     * writes over it (DESIGN A29). A canvas-path prop's alpha is the manager's, and an
+     * icon pin's mesh is the icon itself; neither is touched.
+     */
     _refreshState() {
       super._refreshState?.();
       if (this.#previewProp()) this.#dressPreview();
+      else if (this.#domProp()) this.mesh.alpha = 0;
+    }
+
+    /** An original prop this client draws as a DOM card, over a mesh it must not see. */
+    #domProp(): boolean {
+      const pin = this.pin;
+      return !!this.mesh && pin?.mode === "prop" && drawsAsDom(pin);
     }
 
     _refreshMesh() {
@@ -301,19 +321,19 @@ export function definePinnedTile(): boolean {
       else Hooks.callAll(`${MODULE_ID}.tileDrawn`, this);
     }
 
+    /**
+     * A borrowed page belongs to the original's mesh and to the texture cache; the clone
+     * goes without it, whatever core's teardown does to a mesh's texture.
+     *
+     * An original's destroy says nothing. It used to fire `tileDestroyed`, which no code
+     * listened for and the README never offered: the manager learns a prop has gone from
+     * the refresh `deleteTile` runs, and a scene's from `canvasTearDown` (DESIGN A29).
+     */
     _destroy(options?: any) {
-      if (this.#previewProp()) {
-        // A borrowed page belongs to the original's mesh and to the texture cache; the
-        // clone goes without it, whatever core's teardown does to a mesh's texture.
-        if (this.#borrowedPage && this.mesh) {
-          this.mesh.texture =
-            this._original?.texture ??
-            (globalThis as any).PIXI?.Texture?.EMPTY ??
-            this.mesh.texture;
-          this.#borrowedPage = false;
-        }
-      } else if (this.pin) {
-        Hooks.callAll(`${MODULE_ID}.tileDestroyed`, this);
+      if (this.#previewProp() && this.#borrowedPage && this.mesh) {
+        this.mesh.texture =
+          this._original?.texture ?? (globalThis as any).PIXI?.Texture?.EMPTY ?? this.mesh.texture;
+        this.#borrowedPage = false;
       }
       return super._destroy?.(options);
     }

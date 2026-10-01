@@ -121,7 +121,7 @@ describe("the drag preview", () => {
     clone._refreshMesh();
     expect(clone.mesh.alpha).toBe(0);
 
-    // The original's own mesh is the manager's business, not the clone's.
+    // Dressing the clone leaves the original's own mesh alone.
     expect(original.mesh.alpha).toBe(1);
   });
 
@@ -149,7 +149,7 @@ describe("the drag preview", () => {
     expect(clone.mesh.texture).toBe(original.texture);
   });
 
-  it("never reports a preview's draw or destroy as the original's", async () => {
+  it("never reports a preview's draw as the original's", async () => {
     const original = await drawn();
     const event = await startDrag(original);
     original._onDragLeftDrop(event);
@@ -157,7 +157,6 @@ describe("the drag preview", () => {
     const drawnHooks = world.hooks.filter((h) => h.name === `${MODULE_ID}.tileDrawn`);
     expect(drawnHooks).toHaveLength(1);
     expect(drawnHooks[0].args[0]).toBe(original);
-    expect(world.hooks.filter((h) => h.name === `${MODULE_ID}.tileDestroyed`)).toHaveLength(0);
   });
 
   it("moves the card with every clone on a drag move, under the original's id", async () => {
@@ -200,6 +199,58 @@ describe("the drag preview", () => {
     original._onUpdate({ x: 350, y: 430 }, {}, "gm");
     onTileRefreshed(original);
     expect(followDomProp).toHaveBeenCalledWith(doc);
+  });
+});
+
+/**
+ * Core's `Tile#_refreshState` writes the mesh's alpha on a hover, a control, a drag, the
+ * layer's activation, the Alt highlight and any `hidden`/`sort`/`locked` change — after the
+ * manager's own write. On the DOM path the mesh carries only the placeholder book, so each
+ * of those put it back on the map under a translucent card. The fake writes
+ * `document.alpha` back exactly where core does.
+ */
+describe("the original's mesh through core's state refresh", () => {
+  it("stays at zero under a DOM card, through every refresh core makes", async () => {
+    const original = await drawn();
+    expect(original.mesh.alpha).toBe(1);
+
+    original._refreshState();
+    expect(original.mesh.alpha).toBe(0);
+    original.release();
+    original._refreshState();
+    expect(original.mesh.alpha).toBe(0);
+  });
+
+  it("is left to the manager on the canvas path", async () => {
+    tier.dom = false;
+    doc.alpha = 0.7;
+    const original = await drawn();
+    original._refreshState();
+    expect(original.mesh.alpha).toBe(0.7);
+  });
+
+  it("is left alone on a pin's icon, which IS what the mesh shows", async () => {
+    const icon = new Tile(propDoc("p", "pin"));
+    await icon.draw();
+    icon._refreshState();
+    expect(icon.mesh.alpha).toBe(1);
+  });
+
+  it("is left alone on an ordinary tile", async () => {
+    const plain = new Tile(fakeTile({ id: "plain" }));
+    await plain.draw();
+    plain._refreshState();
+    expect(plain.mesh.alpha).toBe(1);
+  });
+});
+
+describe("destroy", () => {
+  it("fires no hook for an original: nothing listened for one, and the README never offered it", async () => {
+    const original = await drawn();
+    const before = world.hooks.length;
+    original.destroy();
+    expect(original.destroyed).toBe(true);
+    expect(world.hooks.slice(before).filter((h) => h.name.startsWith(MODULE_ID))).toEqual([]);
   });
 });
 
