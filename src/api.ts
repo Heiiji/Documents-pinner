@@ -34,6 +34,7 @@ import * as settings from "./settings";
 import { centreOf, docPositionFor } from "./canvas/transform";
 import { nextToReveal, type PinboardQuery, type RowFacts } from "./apps/pinboard-model";
 import { describeSource, rememberShown } from "./sources/describe";
+import { adapterFor, adapterForDoc, type PageChoice } from "./sources/index";
 import { packFacts, packLockedHere, packOf, packReadableBy, playersCanRead } from "./sources/packs";
 import { isPackUuid } from "./sources/uuid";
 import type { DpAudience, DpMode, DpPinFlags, DpSource } from "./types/dp";
@@ -46,38 +47,19 @@ const log = logger("api");
 // Sources
 // ---------------------------------------------------------------------------
 
-const DOCUMENT_SOURCES = ["JournalEntry", "JournalEntryPage"];
-
 /**
  * A pin source from a sidebar drag payload.
  *
- * v1 pins journals, journal pages and bare image files. Actors, items and tables are a
- * later adapter; returning `null` for them lets the drop fall through to whatever core
- * or another module would have done, rather than producing a pin of the wrong thing.
+ * A document of a type some adapter answers for (`sources/index.ts`) becomes a document
+ * source, and bare image files an image source. Anything else returns `null`, which lets
+ * the drop fall through to whatever core or another module would have done, rather than
+ * producing a pin of the wrong thing.
  */
 export function sourceFromDropData(data: any): DpSource | null {
   if (!data) return null;
 
-  if (data.type === "JournalEntryPage" && data.uuid) {
-    return {
-      kind: "document",
-      uuid: data.uuid,
-      src: null,
-      pageId: null,
-      pdfPage: null,
-      followName: true,
-    };
-  }
-  if (data.type === "JournalEntry" && data.uuid) {
-    return {
-      kind: "document",
-      uuid: data.uuid,
-      src: null,
-      pageId: typeof data.pageId === "string" ? data.pageId : null,
-      pdfPage: null,
-      followName: true,
-    };
-  }
+  const named = adapterFor(data.type)?.fromDrop(data);
+  if (named) return named;
   // Core's file browser drags a TILE: `{type: "Tile", texture: {src}, fromFilePicker}`
   // (foundry.mjs 14.367, 33809). Reading only a bare `src` or `path` missed it, so an
   // Alt-drop of an image from the browser fell through to core and made a plain tile.
@@ -93,15 +75,7 @@ export function sourceFromDropData(data: any): DpSource | null {
 }
 
 export function sourceFromDocument(doc: any): DpSource | null {
-  if (!doc?.uuid || !DOCUMENT_SOURCES.includes(doc.documentName)) return null;
-  return {
-    kind: "document",
-    uuid: doc.uuid,
-    src: null,
-    pageId: null,
-    pdfPage: null,
-    followName: true,
-  };
+  return adapterFor(doc?.documentName)?.fromDocument(doc) ?? null;
 }
 
 /**
@@ -114,8 +88,7 @@ export async function resolveSource(pin: DpPinFlags): Promise<any> {
   if (packLockedHere(pin.source.uuid)) return null;
   const doc = await resolveUuid(pin.source.uuid);
   if (!doc) return null;
-  const shown =
-    pin.source.pageId && doc.pages?.get ? (doc.pages.get(pin.source.pageId) ?? doc) : doc;
+  const shown = adapterForDoc(doc).shown(doc, pin.source.pageId);
   // A compendium page's name and type are not in its pack's index; now they are known.
   rememberShown(pin.source, shown);
   return shown;
@@ -140,16 +113,8 @@ export async function shownSource(pin: DpPinFlags): Promise<any> {
   return isPackUuid(pin.source.uuid) ? resolveSource(pin) : resolveSourceSync(pin);
 }
 
-/** The pages of a journal, or none when there is no choice to make. */
-function pagesOf(named: any): { id: string; name: string; type: string }[] {
-  const pages = named?.pages?.contents ?? [];
-  if (pages.length < 2) return [];
-  return pages.map((page: any) => ({
-    id: page.id,
-    name: page.name ?? "",
-    type: page.type ?? "text",
-  }));
-}
+/** The parts of a document a GM may choose between: a journal's pages, or none. */
+const pagesOf = (named: any): PageChoice[] => adapterForDoc(named).pages(named);
 
 /**
  * The pages a GM may choose between for this pin.
@@ -163,15 +128,13 @@ function pagesOf(named: any): { id: string; name: string; type: string }[] {
  * the chosen page, which is the wrong document to enumerate siblings of. World sources
  * only — a compendium journal's pages exist only once it has loaded: `pageChoicesFor`.
  */
-export function pageChoices(pin: DpPinFlags): { id: string; name: string; type: string }[] {
+export function pageChoices(pin: DpPinFlags): PageChoice[] {
   if (pin.source.kind !== "document") return [];
   return pagesOf(describeSource(pin.source).doc);
 }
 
 /** `pageChoices`, for any source: a compendium journal is loaded to list its pages. */
-export async function pageChoicesFor(
-  pin: DpPinFlags
-): Promise<{ id: string; name: string; type: string }[]> {
+export async function pageChoicesFor(pin: DpPinFlags): Promise<PageChoice[]> {
   if (pin.source.kind !== "document") return [];
   if (!isPackUuid(pin.source.uuid)) return pageChoices(pin);
   if (packLockedHere(pin.source.uuid)) return [];
@@ -505,8 +468,9 @@ export function canUserOpen(anchorDoc: any, userId: string): boolean {
 
   const source = describeSource(pin.source).shown;
   if (!source) return false;
-  // OBSERVER is the level at which a text page actually opens; LIMITED is the tease.
-  if (source.testUserPermission?.(user, "OBSERVER") === true) return true;
+  // The level the document's own sheet asks for: for a journal, OBSERVER is the level at
+  // which a text page actually opens, and LIMITED is the tease.
+  if (source.testUserPermission?.(user, adapterForDoc(source).openLevel) === true) return true;
   return readsInPlace(pin) && canUserSee(anchorDoc, userId);
 }
 
@@ -620,25 +584,17 @@ export async function openLocally(anchorDoc: any): Promise<void> {
   // The player-side half of the key glyph. A GM sees ⚿ on a chip whose player can see
   // the pin but not open the document; the player used to get core's generic refusal,
   // or nothing. Say what the state is — not a fault, a "not yet".
+  const adapter = adapterForDoc(source);
   const canOpen = source.testUserPermission
-    ? source.testUserPermission(g()?.user, "OBSERVER") === true
+    ? source.testUserPermission(g()?.user, adapter.openLevel) === true
     : true;
   if (!isGM() && !canOpen) {
     notify({ key: "DP.notice.cannotOpenYet" }, "info");
     return;
   }
 
-  // A page opens inside its parent's sheet, which is where its navigation lives. This
-  // branch takes BOTH page cases: a pin whose uuid names a page, and a pin on an entry
-  // with a page chosen — `resolveSource` has already resolved the second to the page.
-  if (source.documentName === "JournalEntryPage" && source.parent?.sheet) {
-    source.parent.sheet.render(true, { pageId: source.id });
-    return;
-  }
-  // So anything reaching here is an entry with no page chosen, or one whose chosen page
-  // has been deleted. Passing the stored id on would ask the sheet for a page that is
-  // not there; the entry opens where it opens.
-  source.sheet.render(true);
+  // Where it opens is the document's to say: a journal page inside its journal's sheet.
+  adapter.open(source);
 }
 
 /**

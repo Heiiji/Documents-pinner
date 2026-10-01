@@ -20,13 +20,13 @@
  * refresh, so nothing here iterates players, packs or pages, and who can read a pack is
  * asked of `packs.ts` by the callers that need it.
  *
- * The journal-specific half is a set of named functions (`journalFacts`, `journalPdf`)
- * so that a later registry of per-type adapters can move them as they are.
+ * What depends on the kind of document — a journal's crumb and page icons, its PDF — is
+ * the adapter's to say (`sources/index.ts`): this file finds the document, and asks.
  */
 
 import { resolveUuidSync } from "../fvtt";
-import { pdfSourceOf } from "../render/PdfPage";
 import type { DpPinFlags, DpSource } from "../types/dp";
+import { adapterForDoc, type ShownFacts } from "./index";
 import { packFacts, packOf, type PackFacts } from "./packs";
 import { isPackUuid, parseSourceUuid } from "./uuid";
 
@@ -64,15 +64,6 @@ export interface SourceSummary {
   isPage: boolean;
 }
 
-/** What the card shows, as far as the facts go: a Document, or what a load recorded. */
-interface ShownFacts {
-  name?: unknown;
-  documentName?: unknown;
-  type?: unknown;
-  src?: unknown;
-  parent?: { name?: unknown } | null;
-}
-
 /** Name, type and picture of a compendium source's shown document, once loaded. */
 const remembered = new Map<string, ShownFacts>();
 const keyOf = (source: DpSource) => `${source.uuid ?? ""}#${source.pageId ?? ""}`;
@@ -101,72 +92,19 @@ export function describeSource(source: DpSource): SourceSummary {
 export function pdfSourceForPin(pin: DpPinFlags): string | null {
   if (pin.source.kind !== "document" || isPackUuid(pin.source.uuid)) return null;
   // The summary's own answer, without building the summary: this is the drag preview's.
-  return journalPdf(worldShown(resolveUuidSync(pin.source.uuid), pin.source.pageId));
-}
-
-// ---------------------------------------------------------------------------
-// The journal half
-// ---------------------------------------------------------------------------
-
-/** "Journal › Page" for a page, the shown document's own name otherwise. */
-function journalCrumb(shown: ShownFacts): string {
-  const name = typeof shown.name === "string" ? shown.name : "";
-  const parent = shown.parent?.name;
-  if (shown.documentName === "JournalEntryPage" && typeof parent === "string" && parent) {
-    return `${parent} › ${name}`;
-  }
-  return name;
-}
-
-/** What kind of journal document it is, as an icon. */
-function journalIcon(shown: ShownFacts): string {
-  if (shown.documentName !== "JournalEntryPage") return "fa-book";
-  switch (shown.type) {
-    case "image":
-      return "fa-image";
-    case "pdf":
-      return "fa-file-pdf";
-    case "video":
-      return "fa-film";
-    default:
-      return "fa-file-lines";
-  }
-}
-
-/** The name, the crumb, the icon and the picture of what a journal source shows. */
-export function journalFacts(
-  shown: ShownFacts
-): Pick<SourceSummary, "name" | "breadcrumb" | "icon" | "thumbnail" | "isPage"> {
-  const isPage = shown.documentName === "JournalEntryPage";
-  return {
-    name: typeof shown.name === "string" ? shown.name : "",
-    breadcrumb: journalCrumb(shown),
-    icon: journalIcon(shown),
-    thumbnail:
-      isPage && shown.type === "image" && typeof shown.src === "string" && shown.src
-        ? shown.src
-        : null,
-    isPage,
-  };
-}
-
-/** The PDF a WORLD journal page draws as a texture. */
-export function journalPdf(shown: any): string | null {
-  return pdfSourceOf(shown);
+  const named = resolveUuidSync(pin.source.uuid);
+  const adapter = adapterForDoc(named);
+  return adapter.pdf(adapter.shown(named, pin.source.pageId));
 }
 
 // ---------------------------------------------------------------------------
 // By origin
 // ---------------------------------------------------------------------------
 
-/** The chosen page of a world journal, else the document itself. */
-function worldShown(named: any, pageId: string | null): any {
-  return named && pageId && named.pages?.get ? (named.pages.get(pageId) ?? named) : named;
-}
-
 function worldSummary(source: DpSource): SourceSummary {
   const named = resolveUuidSync(source.uuid);
-  const shown = worldShown(named, source.pageId);
+  const adapter = adapterForDoc(named);
+  const shown = adapter.shown(named, source.pageId);
   if (!shown) return missingSummary(source.uuid, null);
   return {
     origin: "world",
@@ -176,8 +114,8 @@ function worldSummary(source: DpSource): SourceSummary {
     doc: named,
     shown,
     index: null,
-    ...journalFacts(shown),
-    pdfSrc: journalPdf(shown),
+    ...adapter.describe(shown),
+    pdfSrc: adapter.pdf(shown),
   };
 }
 
@@ -203,7 +141,7 @@ function packSummary(source: DpSource): SourceSummary {
     doc: null,
     shown: null,
     index,
-    ...journalFacts(shown),
+    ...adapterForDoc(shown).describe(shown),
     breadcrumb: entry ? `${facts.title} › ${entry}` : facts.title,
     pdfSrc: null,
   };

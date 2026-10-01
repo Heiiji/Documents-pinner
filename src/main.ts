@@ -50,6 +50,7 @@ import {
 } from "./ui/entry-points";
 import { flashDomProp, setDomPropHover, syncSceneDim } from "./canvas/DomPropTier";
 import { onboardingReady } from "./ui/onboarding";
+import { hookedDocumentNames } from "./sources/index";
 
 const log = logger("boot");
 
@@ -258,7 +259,9 @@ for (const hook of ["updateToken", "createToken", "deleteToken"]) {
   Hooks.on(hook, () => propManager().applyAlpha());
 }
 
-for (const type of ["JournalEntry", "JournalEntryPage"]) {
+// Every type of document a pin can show: an edit to one may rename a pin, change who holds
+// it, or change what its card says.
+for (const type of hookedDocumentNames()) {
   Hooks.on(`update${type}`, (doc: any, changed: any, options: any, userId: string) => {
     if (isOurs(options)) return;
     void onSourceOwnershipEdited(doc, changed, options, userId);
