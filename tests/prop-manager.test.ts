@@ -215,6 +215,17 @@ describe("the texture cache key and the chosen page", () => {
     expect(vi.mocked(resolveCard).mock.calls.length).toBeGreaterThan(before);
   });
 
+  it("is a cache miss when the text an actor or an item shows changes", async () => {
+    const { resolveCard } = await import("../src/render/ContentResolver");
+    const before = vi.mocked(resolveCard).mock.calls.length;
+
+    tiles[0].flags["documents-pinner"].pin.source.field = "details.biography.public";
+    manager.refresh();
+    await settle();
+
+    expect(vi.mocked(resolveCard).mock.calls.length).toBeGreaterThan(before);
+  });
+
   it("still invalidates by source uuid once a page is chosen", async () => {
     const { resolveCard } = await import("../src/render/ContentResolver");
     tiles[0].flags["documents-pinner"].pin.source.pageId = "aBcD1234eFgH5678";

@@ -763,10 +763,12 @@ class Manager {
       // prefix-matches `${uuid}|`, so folding it into the uuid would break `invalidate`
       // for every prop on the scene. It has to be here, though — the provisional key
       // above is built from the PREVIOUS draw's hash, so without the page a re-page hits
-      // the cache, binds the old texture and returns before ever resolving.
+      // the cache, binds the old texture and returns before ever resolving. The text an
+      // Actor or an Item shows is chosen the same way, and keyed for the same reason.
       docHash:
         `${doc.width}x${doc.height}:${fontPx}:${padPx}` +
-        `:${pin.source.pageId ?? ""}:${pin.source.pdfPage ?? ""}:${contentHash}`,
+        `:${pin.source.pageId ?? ""}:${pin.source.pdfPage ?? ""}:${pin.source.field ?? ""}` +
+        `:${contentHash}`,
     });
   }
 

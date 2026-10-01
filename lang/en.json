@@ -272,6 +272,7 @@
   "DP.pin.error.missingSource": "This pin has no source document or image, so it shows a placeholder.",
   "DP.pin.untitled": "Untitled pin",
   "DP.pin.warn.badEnum": "{path} does not accept \"{value}\"; the default was used.",
+  "DP.pin.warn.badField": "{path} is not a text field this module can read ({value}); the automatic choice was used.",
   "DP.pin.warn.badFont": "{path} is not a typeface this module can use ({value}); the effect's was used.",
   "DP.pin.warn.badPath": "{path} is not a usable file path ({value}); it was cleared.",
   "DP.pin.warn.badSound": "{path} is not a sound on this server ({value}); nothing was changed. A sound is a file in your world or in Foundry's own data, never a web address.",

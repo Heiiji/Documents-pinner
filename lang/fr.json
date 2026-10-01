@@ -272,6 +272,7 @@
   "DP.pin.error.missingSource": "Cette épingle n'a ni document ni image source ; un substitut est affiché.",
   "DP.pin.untitled": "Épingle sans titre",
   "DP.pin.warn.badEnum": "{path} n'accepte pas « {value} » ; la valeur par défaut a été utilisée.",
+  "DP.pin.warn.badField": "{path} n'est pas un champ de texte lisible par ce module ({value}) ; le choix automatique a été utilisé.",
   "DP.pin.warn.badFont": "{path} n'est pas une police utilisable par ce module ({value}) ; celle de l'effet a été utilisée.",
   "DP.pin.warn.badPath": "{path} n'est pas un chemin de fichier utilisable ({value}) ; il a été effacé.",
   "DP.pin.warn.badSound": "{path} n'est pas un son de ce serveur ({value}) ; rien n'a été changé. Un son est un fichier de votre monde ou des données de Foundry, jamais une adresse web.",
