@@ -1,11 +1,14 @@
 /**
- * The only stateful singleton in the module.
+ * The prop manager: the one owner of every prop on the scene.
  *
  * IMPURE. Owns everything that has to exist exactly once: the per-prop records, ONE
- * ticker callback, ONE shared uniform group, the texture LRU, the generation queue and
- * the LOD state machine. Every other module in the project is stateless, and the
- * reason is here — this is the file where a second copy of any of these would show up
- * as doubled work per frame that nobody could attribute to anything.
+ * ticker callback, the texture LRU, the generation queue and the LOD state machine that
+ * also tells the DOM tier what to draw. This is the file where a second copy of any of
+ * these would show up as doubled work per frame that nobody could attribute to anything.
+ *
+ * There is no shared uniform group, though §6.2 asks for one: nothing on this tier is a
+ * shader. A baked effect is pixels in the texture (DESIGN A3) and the mesh is core's own,
+ * so there is no uniform for a group to share (DESIGN A29).
  *
  * The frame path is the part to be careful with:
  *
