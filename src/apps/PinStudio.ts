@@ -38,6 +38,7 @@ import { registeredFontFamilies } from "../render/AssetInliner";
 import { playRevealSound, revealSoundOf } from "../canvas/PropManager";
 import { soundPath } from "../normalise";
 import { pdfPageCount, pdfSourceOf } from "../render/PdfPage";
+import { describeSource, pdfSourceForPin } from "../sources/describe";
 import { chipsMarkup, describeChips } from "./chips";
 import { openPicker } from "./DocumentPicker";
 import { chipUsersFor } from "./PinHUD";
@@ -174,6 +175,11 @@ export interface StudioOptions {
   pages?: { id: string; name: string; type: string }[];
   /** How many pages the PDF behind this pin has, or 0 while that is not known. */
   pdfPages?: number;
+  /**
+   * Whether the page this pin shows is a PDF, when only a load can tell: a compendium
+   * page, which is always drawn as a card but whose PDF page can still be chosen.
+   */
+  shownIsPdf?: boolean;
   /** The icons a pin may wear: core's map-note icons, labelled. */
   icons?: { label: string; src: string }[];
   /** The world's own font families, before `fontChoices` filters them. */
@@ -183,8 +189,8 @@ export interface StudioOptions {
 }
 
 function contentTab(pin: DpPinFlags, options: StudioOptions, attrs = ""): string {
-  const source = api.resolveSourceSync(pin);
-  const isPage = source?.documentName === "JournalEntryPage";
+  const summary = describeSource(pin.source);
+  const isPage = summary.isPage;
   const pages = options.pages ?? [];
 
   // Removed rather than disabled, unlike the PDF-inert controls on the Appearance tab.
@@ -211,15 +217,16 @@ function contentTab(pin: DpPinFlags, options: StudioOptions, attrs = ""): string
       ? `<p class="dp-studio__note">${escapeHtml(t("DP.studio.pageIsOne"))}</p>`
       : "";
 
-  const pdfField = isPdfPin(pin)
-    ? field(
-        "DP.studio.pdfPage",
-        `<input type="number" name="source.pdfPage" min="1"` +
-          (options.pdfPages ? ` max="${options.pdfPages}"` : "") +
-          ` step="1" value="${pin.source.pdfPage ?? 1}">`,
-        "DP.studio.pdfPageHint"
-      )
-    : "";
+  const pdfField =
+    isPdfPin(pin) || options.shownIsPdf
+      ? field(
+          "DP.studio.pdfPage",
+          `<input type="number" name="source.pdfPage" min="1"` +
+            (options.pdfPages ? ` max="${options.pdfPages}"` : "") +
+            ` step="1" value="${pin.source.pdfPage ?? 1}">`,
+          "DP.studio.pdfPageHint"
+        )
+      : "";
 
   return (
     `<section class="dp-studio__tab" data-dp-tab="content"${attrs}>` +
@@ -228,8 +235,14 @@ function contentTab(pin: DpPinFlags, options: StudioOptions, attrs = ""): string
     `<div class="dp-studio__sourcebox">` +
     `<p class="dp-studio__source">` +
     `<i class="fa-solid fa-link" aria-hidden="true"></i> ` +
-    escapeHtml(source?.name ?? pin.source.src ?? t("DP.studio.sourceMissing")) +
+    escapeHtml(
+      (pin.source.kind === "image" ? pin.source.src : summary.name) || t("DP.studio.sourceMissing")
+    ) +
     `</p>` +
+    (summary.pack
+      ? `<span class="dp-studio__hint">` +
+        `${escapeHtml(t("DP.studio.fromPack", { pack: summary.pack.title }))}</span>`
+      : "") +
     `<button type="button" class="dp-studio__link" data-action="retargetSource">` +
     `${escapeHtml(t("DP.studio.retarget"))}</button>` +
     `<span class="dp-studio__hint">${escapeHtml(t("DP.studio.retargetHint"))}</span>` +
@@ -270,12 +283,12 @@ function contentTab(pin: DpPinFlags, options: StudioOptions, attrs = ""): string
  * they are disabled and the reason is stated where the GM is looking.
  */
 function isPdfPin(pin: DpPinFlags): boolean {
-  return pdfSourceOf(api.resolveSourceSync(pin)) !== null;
+  return pdfSourceForPin(pin) !== null;
 }
 
-/** How many pages the PDF behind this pin has, or 0 when there is no answer. */
-async function pdfPageCountFor(pin: DpPinFlags): Promise<number> {
-  const src = pdfSourceOf(api.resolveSourceSync(pin));
+/** How many pages the PDF a pin shows has, or 0 when there is no answer. */
+async function pdfPageCountOf(shown: any): Promise<number> {
+  const src = pdfSourceOf(shown);
   if (!src) return 0;
   try {
     return await pdfPageCount(src);
@@ -520,10 +533,12 @@ function grantNote(pin: DpPinFlags): string {
   const scope = api.grantScope(pin);
   if (!scope) return "";
   const text =
-    scope.kind === "page"
-      ? t("DP.studio.grantsPage", { page: scope.page, entry: scope.entry })
-      : t("DP.studio.grantsJournal", { entry: scope.entry }) +
-        (scope.pages > 1 ? ` ${t("DP.studio.grantsJournalHint")}` : "");
+    scope.kind === "pack"
+      ? t("DP.studio.grantsPack", { pack: scope.pack, entry: scope.entry })
+      : scope.kind === "page"
+        ? t("DP.studio.grantsPage", { page: scope.page, entry: scope.entry })
+        : t("DP.studio.grantsJournal", { entry: scope.entry }) +
+          (scope.pages > 1 ? ` ${t("DP.studio.grantsJournalHint")}` : "");
   return `<p class="dp-studio__note" data-dp-grants="${scope.kind}">${escapeHtml(text)}</p>`;
 }
 
@@ -918,16 +933,20 @@ export function definePinStudio(): any {
       // showing, outside the hide's own write, is where a hold learns it is over.
       const showing = this.doc?.hidden !== true && pin?.audience.kind !== "hidden";
       if (pin && showing && this.hold && !this.hiding) this.dropHold();
+      // A compendium document is loaded to list its pages and read its PDF: the index
+      // its pack keeps knows neither. A world one is at hand, as it always was.
+      const shown = pin ? await api.shownSource(pin) : null;
       const wrapper = document.createElement("div");
       wrapper.innerHTML = pin
         ? studioMarkup(this.doc, pin, this.tab, {
             aspectLocked: this.aspectLocked,
             live: this.liveState(pin),
-            pages: api.pageChoices(pin),
+            pages: await api.pageChoicesFor(pin),
             // Awaited here and not in the markup: parsing a PDF is not free and the
             // markup builder must stay synchronous and world-free. A count that fails to
             // arrive leaves the field with no ceiling, which is still a usable control.
-            pdfPages: await pdfPageCountFor(pin),
+            pdfPages: await pdfPageCountOf(shown),
+            shownIsPdf: pdfSourceOf(shown) !== null,
             icons: noteIcons(),
             fonts: registeredFontFamilies(),
             canBrowse: !!ns("applications.apps.FilePicker.implementation"),

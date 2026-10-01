@@ -1,0 +1,246 @@
+/**
+ * @vitest-environment jsdom
+ *
+ * A pin on a compendium document.
+ *
+ * `fromUuidSync` answers a compendium uuid in three shapes: the pack's index entry (a
+ * plain object with a name and no methods), the Document itself for five minutes after
+ * anything loaded it, or a throw for a page whose journal is not cached. Sixteen places
+ * read whatever came back, so one pin had one label, icon, key glyph and audience note
+ * before its card was drawn and another after — and a player who could not read the pack
+ * was told nothing at all. The fake models all three shapes and computes pack permission
+ * by role, as core does.
+ */
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { FLAGS, MODULE_ID } from "../src/const";
+import { defaultPin } from "../src/data/pin-schema";
+import type { DpSource } from "../src/types/dp";
+import {
+  contentOf,
+  fakePack,
+  fakeTile,
+  installSources,
+  installWorld,
+  uninstallWorld,
+  USER_ROLES,
+  type FakePackOptions,
+} from "./helpers/fake-foundry";
+
+vi.mock("../src/render/PdfPage", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../src/render/PdfPage")>()),
+  pdfPageCount: vi.fn(async () => 12),
+}));
+
+const PACK = "world.handouts";
+const ENTRY = `Compendium.${PACK}.JournalEntry.letters`;
+const PAGE = `${ENTRY}.JournalEntryPage.baron`;
+const PDF = `${ENTRY}.JournalEntryPage.deed`;
+
+const handouts = (over: Partial<FakePackOptions> = {}) =>
+  fakePack({
+    id: PACK,
+    label: "Handouts",
+    entries: [
+      {
+        _id: "letters",
+        name: "Letters",
+        pages: [
+          { _id: "baron", name: "The Baron's Letter" },
+          { _id: "keep", name: "Map of the Keep", type: "image", src: "maps/keep.webp" },
+          { _id: "deed", name: "Deed", type: "pdf", src: "deeds/deed.pdf" },
+        ],
+      },
+    ],
+    ...over,
+  });
+
+/** Ali is a player; Ben is trusted, so a pack open to trusted players only is his alone. */
+const PLAYERS = [
+  { id: "ali", role: USER_ROLES.PLAYER },
+  { id: "ben", role: USER_ROLES.TRUSTED },
+];
+const TRUSTED_ONLY = { PLAYER: "NONE", TRUSTED: "OBSERVER", ASSISTANT: "OWNER" };
+
+function pinTile(source: Partial<DpSource>, over: Record<string, any> = {}) {
+  const tile = fakeTile({ id: "t1", uuid: "Scene.s1.Tile.t1", width: 400, height: 560 });
+  tile.flags = {
+    [MODULE_ID]: {
+      [FLAGS.PIN]: {
+        ...defaultPin(),
+        mode: "prop",
+        source: {
+          kind: "document",
+          uuid: ENTRY,
+          src: null,
+          pageId: null,
+          pdfPage: null,
+          followName: true,
+          ...source,
+        },
+        audience: {
+          ...defaultPin().audience,
+          kind: "everyone",
+          ownershipSync: { enabled: true, level: 2 },
+        },
+        ...over,
+      },
+    },
+  };
+  return tile;
+}
+
+const pinOf = (tile: any) => tile.flags[MODULE_ID][FLAGS.PIN];
+
+let world: ReturnType<typeof installWorld>;
+
+function install(tile: any, pack = handouts(), isGM = true) {
+  world = installWorld({ isGM, players: PLAYERS, tiles: [tile] });
+  installSources(world, { packs: [pack] });
+  return pack;
+}
+
+beforeEach(() => vi.resetModules());
+afterEach(() => uninstallWorld());
+
+describe("what a compendium pin says it is", () => {
+  it.each([
+    ["the index entry", { uuid: ENTRY, pageId: "baron" }, false],
+    ["the cached journal", { uuid: ENTRY, pageId: "baron" }, true],
+    ["a throw, for a page whose journal is not cached", { uuid: PAGE }, false],
+    ["the cached page", { uuid: PAGE }, true],
+  ])(
+    "has one label, crumb and icon whether fromUuidSync returns %s, and names the page once it loads",
+    async (_shape, source, cached) => {
+      const tile = pinTile(source);
+      const pack = install(tile);
+      if (cached) pack.holdInCache("letters");
+      const { rowsFor } = await import("../src/apps/Pinboard");
+      const row = () => rowsFor(world.canvas.scene)[0];
+
+      expect(row()).toMatchObject({
+        name: "Letters",
+        breadcrumb: "Handouts › Letters",
+        icon: "fa-file-lines",
+      });
+
+      const { resolveSource } = await import("../src/api");
+      await resolveSource(pinOf(tile));
+      expect(row()).toMatchObject({
+        name: "The Baron's Letter",
+        breadcrumb: "Handouts › Letters",
+        icon: "fa-file-lines",
+      });
+    }
+  );
+});
+
+describe("the key glyph on a compendium pin", () => {
+  const unreadableByMethods = () => {
+    const pack = handouts({ ownership: TRUSTED_ONLY });
+    delete pack.testUserPermission;
+    delete pack.getUserLevel;
+    return pack;
+  };
+
+  it.each([
+    ["prop", "a pack every role reads", () => handouts(), { ali: "visible", ben: "visible" }],
+    [
+      "prop",
+      "a pack for trusted players",
+      () => handouts({ ownership: TRUSTED_ONLY }),
+      { ali: "seesButCannotOpen", ben: "visible" },
+    ],
+    ["pin", "a pack every role reads", () => handouts(), { ali: "visible", ben: "visible" }],
+    [
+      "pin",
+      "a pack for trusted players",
+      () => handouts({ ownership: TRUSTED_ONLY }),
+      { ali: "seesButCannotOpen", ben: "visible" },
+    ],
+    [
+      "prop",
+      "a pack that only states its ownership",
+      unreadableByMethods,
+      { ali: "seesButCannotOpen", ben: "visible" },
+    ],
+  ])("on a %s from %s follows each player's role", async (mode, _pack, pack, expected) => {
+    const tile = pinTile({ uuid: ENTRY }, { mode });
+    install(tile, pack());
+    const { chipUsersFor } = await import("../src/apps/PinHUD");
+    const { chipState } = await import("../src/apps/chips");
+
+    const states = Object.fromEntries(chipUsersFor(tile).map((u) => [u.id, chipState(u)]));
+    expect(states).toEqual(expected);
+  });
+});
+
+describe("the Audience tab on a compendium pin", () => {
+  it.each([
+    ["the index entry", false],
+    ["the cached journal", true],
+  ])(
+    "says a reveal shows the content and adds nothing to sidebars, with %s",
+    async (_shape, cached) => {
+      const tile = pinTile({ uuid: ENTRY });
+      const pack = install(tile);
+      if (cached) pack.holdInCache("letters");
+      const { studioMarkup } = await import("../src/apps/PinStudio");
+
+      const markup = studioMarkup(tile, pinOf(tile), "audience");
+      expect(markup).toContain('data-dp-grants="pack"');
+      expect(markup).toContain("DP.studio.grantsPack");
+    }
+  );
+});
+
+describe("a PDF page from a compendium", () => {
+  it.each([
+    ["while its journal is not cached", false],
+    ["while core holds it", true],
+  ])("is drawn as a card everywhere %s", async (_shape, cached) => {
+    // Version 2: drawn before the frame moved to the paper's centre, so the migration
+    // re-anchors a card and leaves a texture where it is.
+    const tile = pinTile({ uuid: PDF }, { v: 2 });
+    const pack = install(tile);
+    if (cached) pack.holdInCache("letters");
+    const { setRasterisationAvailable } = await import("../src/render/Rasterizer");
+    const { drawsAsDom } = await import("../src/canvas/PropManager");
+    const { studioMarkup } = await import("../src/apps/PinStudio");
+    const { migrateScene } = await import("../src/data/migrations");
+    const writes = vi.spyOn(world.canvas.scene, "updateEmbeddedDocuments");
+
+    setRasterisationAvailable(false);
+    expect(drawsAsDom(pinOf(tile))).toBe(true);
+    expect(studioMarkup(tile, pinOf(tile), "appearance")).not.toContain('data-dp-pdf="true"');
+    await migrateScene(world.canvas.scene);
+    expect((writes.mock.calls[0][1] as unknown[])[0]).toHaveProperty("x");
+  });
+});
+
+describe("Pin Studio's Content tab on a compendium pin", () => {
+  it.each([
+    [
+      "a journal, with its pages to choose from",
+      { uuid: ENTRY },
+      "Letters",
+      '[name="source.pageId"]',
+    ],
+    ["a PDF page, with its page count", { uuid: PDF }, "Deed", '[name="source.pdfPage"][max="12"]'],
+  ])("loads %s, and names it", async (_what, source, name, control) => {
+    const tile = pinTile(source);
+    install(tile);
+    const { definePinStudio } = await import("../src/apps/PinStudio");
+    const studio = new (definePinStudio())();
+    studio.doc = tile;
+    studio.tab = "content";
+    await studio.render();
+
+    const root = contentOf(studio);
+    expect(root.querySelector(".dp-studio__source")!.textContent).toContain(name);
+    expect(root.querySelector(control)).not.toBeNull();
+    if (control.includes("pageId")) {
+      const options = root.querySelectorAll<HTMLOptionElement>('[name="source.pageId"] option');
+      expect([...options].map((option) => option.value)).toEqual(["", "baron", "keep", "deed"]);
+    }
+  });
+});

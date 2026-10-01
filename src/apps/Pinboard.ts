@@ -32,6 +32,7 @@ import * as store from "../data/PinStore";
 import { anchorHidden, revealed, sameAudience, wouldReveal } from "../data/audience";
 import type { DpAudience } from "../types/dp";
 import { readPin } from "../data/PinData";
+import { describeSource, type SourceSummary } from "../sources/describe";
 import { releaseAnchor, syncAnchor } from "../data/ownership-sync";
 import { allPresets, findPreset } from "../effects/preset-library";
 import { swatchStyle } from "../effects/preset-css";
@@ -109,7 +110,7 @@ export function rowsFor(scene: any): PinboardRow[] {
     const users = chipUsersFor(doc);
     const facts = api.rowFacts(doc, users);
     if (!pin || !facts) return [];
-    const source = api.resolveSourceSync(pin);
+    const summary = describeSource(pin.source);
     // The library, not just the shipped ten, or a user preset shows as a raw id.
     const preset = findPreset(pin.effect.id);
 
@@ -119,8 +120,8 @@ export function rowsFor(scene: any): PinboardRow[] {
       effectLabel: preset ? t(preset.label) : pin.effect.id,
       sort: doc.sort ?? 0,
       locked: doc.locked === true,
-      thumbnail: thumbnailFor(doc, pin, source),
-      icon: iconFor(pin, source),
+      thumbnail: thumbnailFor(doc, summary),
+      icon: summary.icon,
       users,
     };
   });
@@ -131,33 +132,12 @@ export function rowsFor(scene: any): PinboardRow[] {
  *
  * The tile's texture only when it is not the placeholder every document pin shares: the
  * thumbnail column used to show the same book on every journal row, which is a column
- * of pixels that says nothing. An image page shows its image.
+ * of pixels that says nothing. An image source or an image page shows its image.
  */
-function thumbnailFor(doc: any, pin: any, source: any): string | null {
+function thumbnailFor(doc: any, summary: SourceSummary): string | null {
   const texture = doc.texture?.src ?? null;
   if (texture && texture !== PLACEHOLDER_TEXTURE) return texture;
-  if (pin.source.kind === "image") return pin.source.src ?? null;
-  if (source?.documentName === "JournalEntryPage" && source.type === "image" && source.src) {
-    return source.src;
-  }
-  return null;
-}
-
-/** What kind of thing the row points at, as an icon, for rows with no picture. */
-function iconFor(pin: any, source: any): string {
-  if (pin.source.kind === "image") return "fa-image";
-  if (!source) return "fa-circle-question";
-  if (source.documentName !== "JournalEntryPage") return "fa-book";
-  switch (source.type) {
-    case "image":
-      return "fa-image";
-    case "pdf":
-      return "fa-file-pdf";
-    case "video":
-      return "fa-film";
-    default:
-      return "fa-file-lines";
-  }
+  return summary.thumbnail;
 }
 
 // ---------------------------------------------------------------------------

@@ -14,7 +14,7 @@
  */
 
 import { MODULE_ID, PLACEHOLDER_TEXTURE } from "./const";
-import { cfg, cv, g, isGM, notify, playerIds, resolveUuid, resolveUuidSync } from "./fvtt";
+import { cfg, cv, g, isGM, notify, playerIds, resolveUuid } from "./fvtt";
 import { logger } from "./log";
 import * as audience from "./data/audience";
 import * as store from "./data/PinStore";
@@ -33,6 +33,9 @@ import { resolveCard } from "./render/ContentResolver";
 import * as settings from "./settings";
 import { centreOf, docPositionFor } from "./canvas/transform";
 import { nextToReveal, type PinboardQuery, type RowFacts } from "./apps/pinboard-model";
+import { describeSource, rememberShown } from "./sources/describe";
+import { packOf, packReadableBy } from "./sources/packs";
+import { isPackUuid } from "./sources/uuid";
 import type { DpAudience, DpMode, DpPinFlags, DpSource } from "./types/dp";
 
 declare const Hooks: any;
@@ -101,22 +104,49 @@ export function sourceFromDocument(doc: any): DpSource | null {
   };
 }
 
-/** The document a pin points at, or `null` for an image source or a deleted target. */
+/**
+ * The document a pin shows, loaded: the chosen page, else the named document, or `null`
+ * for an image source or a deleted target.
+ */
 export async function resolveSource(pin: DpPinFlags): Promise<any> {
   if (pin.source.kind !== "document") return null;
   const doc = await resolveUuid(pin.source.uuid);
   if (!doc) return null;
-  if (pin.source.pageId && doc.pages?.get) return doc.pages.get(pin.source.pageId) ?? doc;
-  return doc;
+  const shown =
+    pin.source.pageId && doc.pages?.get ? (doc.pages.get(pin.source.pageId) ?? doc) : doc;
+  // A compendium page's name and type are not in its pack's index; now they are known.
+  rememberShown(pin.source, shown);
+  return shown;
 }
 
-/** The synchronous form, for render paths. Returns `null` rather than awaiting. */
+/**
+ * The synchronous form, for render paths. Returns `null` rather than awaiting — and
+ * always for a compendium source, whatever core's cache happens to hold: see
+ * `describeSource`, which this reads.
+ */
 export function resolveSourceSync(pin: DpPinFlags): any {
   if (pin.source.kind !== "document") return null;
-  const doc = resolveUuidSync(pin.source.uuid);
-  if (!doc) return null;
-  if (pin.source.pageId && doc.pages?.get) return doc.pages.get(pin.source.pageId) ?? doc;
-  return doc;
+  return describeSource(pin.source).shown;
+}
+
+/**
+ * What the pin shows, for a caller that can wait: a world source at once, a compendium
+ * source once its document has loaded.
+ */
+export async function shownSource(pin: DpPinFlags): Promise<any> {
+  if (pin.source.kind !== "document") return null;
+  return isPackUuid(pin.source.uuid) ? resolveSource(pin) : resolveSourceSync(pin);
+}
+
+/** The pages of a journal, or none when there is no choice to make. */
+function pagesOf(named: any): { id: string; name: string; type: string }[] {
+  const pages = named?.pages?.contents ?? [];
+  if (pages.length < 2) return [];
+  return pages.map((page: any) => ({
+    id: page.id,
+    name: page.name ?? "",
+    type: page.type ?? "text",
+  }));
 }
 
 /**
@@ -127,35 +157,46 @@ export function resolveSourceSync(pin: DpPinFlags): any {
  * type check), a source that no longer resolves, or a single-page journal — which is one
  * thing to a GM, the same rule `pickerEntries` applies in the picker.
  *
- * Resolves `pin.source.uuid` DIRECTLY rather than through `resolveSourceSync`: that one
- * already returns the chosen page, which is the wrong document to enumerate siblings of.
+ * Reads the NAMED document rather than `resolveSourceSync`'s: that one already returns
+ * the chosen page, which is the wrong document to enumerate siblings of. World sources
+ * only — a compendium journal's pages exist only once it has loaded: `pageChoicesFor`.
  */
 export function pageChoices(pin: DpPinFlags): { id: string; name: string; type: string }[] {
   if (pin.source.kind !== "document") return [];
-  const pages = resolveUuidSync(pin.source.uuid)?.pages?.contents ?? [];
-  if (pages.length < 2) return [];
-  return pages.map((page: any) => ({
-    id: page.id,
-    name: page.name ?? "",
-    type: page.type ?? "text",
-  }));
+  return pagesOf(describeSource(pin.source).doc);
+}
+
+/** `pageChoices`, for any source: a compendium journal is loaded to list its pages. */
+export async function pageChoicesFor(
+  pin: DpPinFlags
+): Promise<{ id: string; name: string; type: string }[]> {
+  if (pin.source.kind !== "document") return [];
+  if (!isPackUuid(pin.source.uuid)) return pageChoices(pin);
+  return pagesOf(await resolveUuid(pin.source.uuid));
 }
 
 /** What revealing a pin shares, for the Studio to say where the choice is made. */
 export type GrantScope =
-  { kind: "page"; page: string; entry: string } | { kind: "journal"; entry: string; pages: number };
+  | { kind: "page"; page: string; entry: string }
+  | { kind: "journal"; entry: string; pages: number }
+  | { kind: "pack"; pack: string; entry: string };
 
 /**
- * One page and its journal's listing, or a whole journal — or null when revealing grants
- * nothing at all: an image, a compendium, a document that is gone.
+ * One page and its journal's listing, a whole journal, or a compendium document — which
+ * grants nothing, and says so — or null when there is nothing to say: an image, a
+ * document that is gone.
  *
  * Read off `grantTargets`, the function the grant itself is made by, so the sentence the
  * GM reads and the permission the player receives cannot drift apart.
  */
 export function grantScope(pin: DpPinFlags): GrantScope | null {
   if (pin.source.kind !== "document") return null;
-  const named = resolveUuidSync(pin.source.uuid);
-  if (!named || named.pack) return null;
+  const summary = describeSource(pin.source);
+  if (summary.origin === "pack" && summary.pack) {
+    return { kind: "pack", pack: summary.pack.title, entry: summary.name };
+  }
+  const named = summary.doc;
+  if (!named) return null;
   const [shown, entry] = grantTargets(
     named,
     pin.source.pageId,
@@ -166,6 +207,13 @@ export function grantScope(pin: DpPinFlags): GrantScope | null {
   return { kind: "journal", entry: shown.name ?? "", pages: shown.pages?.contents?.length ?? 0 };
 }
 
+const untitled = (): string => g()?.i18n?.localize?.("DP.pin.untitled") ?? "Pin";
+
+/** The label for a source that has no pin yet — the placement ghost's chip. */
+export function labelForSource(source: DpSource): string {
+  return describeSource(source).name || untitled();
+}
+
 /**
  * What to write on the pin.
  *
@@ -173,23 +221,9 @@ export function grantScope(pin: DpPinFlags): GrantScope | null {
  * step with it, which is what `followName` is for — a GM who renames "Letter" to "The
  * Duke's Letter" should not have to find every pin of it.
  */
-/** The label for a source that has no pin yet — the placement ghost's chip. */
-export function labelForSource(source: DpSource): string {
-  if (source.kind === "image" && source.src) {
-    return decodeURIComponent(source.src.split("/").pop() ?? "").replace(/\.[a-z0-9]+$/i, "");
-  }
-  const doc = resolveUuidSync(source.uuid);
-  return doc?.name ?? g()?.i18n?.localize?.("DP.pin.untitled") ?? "Pin";
-}
-
 export function labelFor(pin: DpPinFlags): string {
   if (pin.display.label) return pin.display.label;
-  const source = resolveSourceSync(pin);
-  if (source?.name) return source.name;
-  if (pin.source.kind === "image" && pin.source.src) {
-    return decodeURIComponent(pin.source.src.split("/").pop() ?? "").replace(/\.[a-z0-9]+$/i, "");
-  }
-  return g()?.i18n?.localize?.("DP.pin.untitled") ?? "Pin";
+  return describeSource(pin.source).name || untitled();
 }
 
 // ---------------------------------------------------------------------------
@@ -446,9 +480,15 @@ export function canUserOpen(anchorDoc: any, userId: string): boolean {
   if (pin.source.kind === "image") return canUserSee(anchorDoc, userId);
   if (pin.interaction.open === "never") return false;
 
-  const source = resolveSourceSync(pin);
   const user = g()?.users?.get(userId);
-  if (!source || !user) return false;
+  if (!user) return false;
+  // A compendium document opens for a player whose ROLE reads the pack, as a pin or as a
+  // prop. One whose role does not is never sent it: their card is a placeholder even
+  // where a world journal would read in place, so the key is true there, and must show.
+  if (isPackUuid(pin.source.uuid)) return packReadableBy(packOf(pin.source.uuid), user);
+
+  const source = describeSource(pin.source).shown;
+  if (!source) return false;
   // OBSERVER is the level at which a text page actually opens; LIMITED is the tease.
   if (source.testUserPermission?.(user, "OBSERVER") === true) return true;
   return readsInPlace(pin) && canUserSee(anchorDoc, userId);
@@ -779,15 +819,6 @@ export async function locate(anchorDoc: any): Promise<void> {
 // The scene's script
 // ---------------------------------------------------------------------------
 
-/** "Journal › Page" for a page, the document's own name otherwise. */
-function breadcrumbFor(source: any): string {
-  if (!source) return "";
-  if (source.documentName === "JournalEntryPage" && source.parent?.name) {
-    return `${source.parent.name} › ${source.name}`;
-  }
-  return source.name ?? "";
-}
-
 /** What each player can do with a pin: the two facts the Pinboard's filters read. */
 function factsUsers(anchorDoc: any): RowFacts["users"] {
   return playerIds().map((id) => ({
@@ -812,7 +843,7 @@ export function rowFacts(
   return {
     id: anchorDoc.id,
     name: labelFor(pin),
-    breadcrumb: breadcrumbFor(resolveSourceSync(pin)),
+    breadcrumb: describeSource(pin.source).breadcrumb,
     mode: pin.mode,
     // Whether anyone is reached, not whether the kind says "hidden": a selection that
     // names nobody was counted as visible while every chip on its row was hollow.
