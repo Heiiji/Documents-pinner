@@ -386,13 +386,12 @@ export async function reorder(scene: any, updates: { id: string; sort: number }[
  *
  * The page counts because the grant follows it (`grantTargets`). Choosing another page in
  * the Studio used to leave the access on the page the pin no longer showed.
+ *
+ * `patch` now keeps all of this itself; this is its GM-only form, kept for its callers.
  */
 export async function patchAndSync(anchorDoc: any, changes: PinPatch): Promise<void> {
   if (!isGM()) return;
-  await store.update(anchorDoc, changes);
-  if (changes.audience || (changes.source && "pageId" in changes.source)) {
-    await syncAnchor(anchorDoc);
-  }
+  await patch(anchorDoc, changes);
 }
 
 /**
@@ -551,8 +550,132 @@ export function toggleMode(anchorDoc: any): Promise<any> | undefined {
   return store.convertMode(anchorDoc, pin.mode === "pin" ? "prop" : "pin");
 }
 
-export function patch(anchorDoc: any, changes: PinPatch): Promise<any> {
-  return store.update(anchorDoc, changes);
+/**
+ * Patch a pin, keeping what the verbs keep. Resolves the document update's result, which
+ * other modules have always been handed; null when nothing was written.
+ *
+ * It was a bare `store.update`, and it is public: a module patching `source.uuid` moved the
+ * pin onto another document carrying the old one's page, PDF page and text field, with the
+ * icon of the wrong kind and the grant left on the document it no longer showed; one
+ * patching `audience` showed the pin and granted nothing. A patch naming another document
+ * now goes the way `retarget` goes, the rest of it in the same write, and an audience or a
+ * page change brings ownership in line as `patchAndSync` always did — which is now this.
+ */
+export async function patch(anchorDoc: any, changes: PinPatch): Promise<any> {
+  return (await writeSourced(anchorDoc, changes, { plain: true })).result;
+}
+
+/** Which of a source's keys say WHICH document it is, rather than where in it to look. */
+const IDENTITY = ["kind", "uuid", "src"] as const;
+
+/** Whether `given` names a document other than the one `current` names. */
+function namesAnotherDocument(current: DpSource, given: Partial<DpSource>): boolean {
+  return IDENTITY.some((key) => given[key] !== undefined && given[key] !== current[key]);
+}
+
+/**
+ * The whole source a pin is pointed at, from as much of one as a caller gave.
+ *
+ * One naming another document starts from a blank source, never from the old one:
+ * `mergePin` deep-merges, so a `pageId`, `pdfPage` or `field` left out would go on naming a
+ * place inside the OLD document — a page id of one journal pointing into the next, or the
+ * text a GM chose for one actor read off another, a private biography included, where the
+ * automatic choice never picks GM text. Only `followName` carries over: it is about the
+ * pin's label, not the document. A uuid names a document and a path names a file, so a
+ * source given only one of them takes its kind from which. One naming the same document is
+ * the current source with the given keys over it.
+ */
+function completeSource(current: DpSource, given: Partial<DpSource>): DpSource {
+  const named = Object.fromEntries(
+    Object.entries(given).filter(([, value]) => value !== undefined)
+  ) as Partial<DpSource>;
+  if (!namesAnotherDocument(current, named)) return { ...current, ...named };
+  const kind = named.kind ?? (named.uuid ? "document" : named.src ? "image" : current.kind);
+  return { ...defaultPin().source, kind, followName: current.followName, ...named };
+}
+
+/**
+ * Whether moving to `source` switches the pin's access off: a pin that comes to show an
+ * actor starts with it off, as one placed on it does (DESIGN A28, D2). A journal shared with
+ * access on, retargeted onto an NPC, would otherwise list the NPC in every sidebar its
+ * audience reaches at the very next sync. Switching off never widens anything; a pin
+ * already on an actor keeps what the GM chose for it, and so does a patch that says.
+ */
+function switchesAccessOff(before: DpPinFlags, source: DpSource, changes: PinPatch): boolean {
+  const said = (changes.audience?.ownershipSync as { enabled?: boolean } | undefined)?.enabled;
+  return (
+    said === undefined &&
+    before.audience.ownershipSync.enabled &&
+    adapterOf(before.source).syncOnCreate &&
+    !adapterOf(source).syncOnCreate
+  );
+}
+
+/**
+ * The texture follows only when the KIND changes: from one document to another, the icon
+ * the GM chose for this pin is part of the pin, like its size and its effect.
+ */
+function keepsIcon(before: DpSource, source: DpSource): boolean {
+  return before.kind === "document" && source.kind === "document";
+}
+
+/**
+ * Write a patch that may point the pin at another document — `patch` and `retarget` both.
+ *
+ * Decided inside the pin's write queue (`store.updateWith`), so the document it moves FROM
+ * is the one the pin names when the write lands, and the old uuid handed to the sync is
+ * right even with another retarget still in flight. `plain` writes a patch that names the
+ * same document as it is; without it, such a patch writes nothing.
+ *
+ * Then ownership: a move syncs with the old uuid, so one pass grants the new document and
+ * releases the old; a plain patch syncs when it touched the audience or the page.
+ */
+async function writeSourced(
+  anchorDoc: any,
+  changes: PinPatch,
+  { plain }: { plain: boolean }
+): Promise<{ result: any; moved: boolean }> {
+  const given = changes.source ?? {};
+  const moves = (before: DpPinFlags) => namesAnotherDocument(before.source, given);
+
+  const outcome = await store.updateWith(
+    anchorDoc,
+    (before): PinPatch | null => {
+      if (!moves(before)) return plain ? changes : null;
+      const source = completeSource(before.source, given);
+      if (refused(source)) return null;
+      if (!switchesAccessOff(before, source, changes)) return { ...changes, source };
+      const ownershipSync = { ...before.audience.ownershipSync, enabled: false };
+      return { ...changes, source, audience: { ...changes.audience, ownershipSync } };
+    },
+    (before): Record<string, unknown> => {
+      if (!moves(before)) return {};
+      const source = completeSource(before.source, given);
+      return keepsIcon(before.source, source) ? {} : { "texture.src": anchorTexture(source) };
+    }
+  );
+  const { before, result } = outcome;
+  if (!before || !outcome.patch) return { result, moved: false };
+
+  if (!moves(before)) {
+    if (changes.audience || (changes.source && "pageId" in changes.source)) {
+      await syncAnchor(anchorDoc);
+    }
+    return { result, moved: false };
+  }
+
+  const source = completeSource(before.source, given);
+  if (switchesAccessOff(before, source, changes)) {
+    notify({ key: "DP.notice.retargetSyncOff" }, "info");
+  }
+  // The old uuid rides along precisely for this: the payload no longer names the old
+  // document, so the sync cannot find it on its own any more. One call, not a sync and
+  // then a release, because a pin moved between a journal and one of its own pages has
+  // an old document and a new one in the same family — and releasing the old family
+  // after granting the new one took back the grant just made.
+  await syncAnchor(anchorDoc, before.source.uuid);
+  warnIfPlayersCannotRead(source);
+  return { result, moved: true };
 }
 
 /**
@@ -739,15 +862,15 @@ export async function resetSize(anchorDoc: any): Promise<boolean> {
  * before its card is ready: every document pin used to be the same book, so a map with
  * five of them was five identical markers. An image pin shows its image and has no icon
  * to choose.
+ *
+ * Through the store (`setTexture`): it was the one write to a pin that went around the
+ * queue and without the internal option, so an icon chosen while a retarget landed compared
+ * itself with a texture about to change, and every hook of the module read the module's own
+ * write as a GM's.
  */
 export async function setPinIcon(anchorDoc: any, src: string | null): Promise<boolean> {
   if (!isGM() || !anchorDoc) return false;
-  const pin = readPin(anchorDoc);
-  if (!pin || pin.source.kind !== "document") return false;
-  const next = src?.trim() || PLACEHOLDER_TEXTURE;
-  if (anchorDoc.texture?.src === next) return false;
-  await anchorDoc.update({ "texture.src": next });
-  return true;
+  return store.setTexture(anchorDoc, src?.trim() || PLACEHOLDER_TEXTURE);
 }
 
 /**
@@ -1063,7 +1186,7 @@ export async function unpin(anchorDoc: any): Promise<void> {
  * players may be reading at that moment. Only the source moves, and the ownership grant
  * that follows it.
  *
- * **Never wrap this in `enqueue`.** `store.update` queues itself on the same anchor,
+ * **Never wrap this in `enqueue`.** `store.updateWith` queues itself on the same anchor,
  * and `enqueue` chains a task after the tracked promise it has already registered — so an
  * outer task awaiting an inner one on the same anchor awaits its own completion. Neither ever
  * settles: no error, no timeout, the button simply does nothing forever. `fitToContent`
@@ -1074,59 +1197,14 @@ export async function unpin(anchorDoc: any): Promise<void> {
  * safe direction: a half-done retarget leaves a player over-granted on a document they
  * already had access to, where release-first would revoke access to the document the pin
  * is still showing them.
+ *
+ * A source given in part is completed from a blank one (`completeSource`), never from the
+ * old: the page, the PDF page and the text field named places in the document it leaves.
+ * One that names the document the pin already shows writes nothing and resolves false.
  */
-export async function retarget(anchorDoc: any, source: DpSource): Promise<boolean> {
-  if (!isGM() || !anchorDoc || refused(source)) return false;
-
-  const before = readPin(anchorDoc);
-  if (!before) return false;
-
-  const oldUuid = before.source.uuid;
-  const sameDocument =
-    before.source.kind === source.kind &&
-    before.source.uuid === source.uuid &&
-    before.source.src === source.src;
-  if (sameDocument) return false;
-
-  // The WHOLE source object, never a partial patch: `mergePin` deep-merges, so omitting
-  // `pageId` would leave a page id of the OLD journal pointing into the new one. The
-  // same for `field`, which a source built by the picker, a menu or `/pin` does not name:
-  // left out, the text the GM chose for one actor would be read off the next — whatever
-  // that path holds there, a private biography included — and the automatic choice,
-  // which never picks GM text, would never be asked. The texture follows only when the
-  // KIND changes: from one document to another, the icon the GM chose for this pin is
-  // part of the pin, like its size and its effect.
-  const keepIcon = before.source.kind === "document" && source.kind === "document";
-  // A pin that comes to show an actor starts with access off, as one placed on it does
-  // (DESIGN A28, D2): a journal shared with access on, retargeted onto an NPC, would
-  // otherwise list the NPC in every sidebar its audience reaches at the very next sync.
-  // Switching off never widens anything. A pin already on an actor keeps what the GM chose
-  // for it.
-  const syncOff =
-    before.audience.ownershipSync.enabled &&
-    adapterOf(before.source).syncOnCreate &&
-    !adapterOf(source).syncOnCreate;
-  await store.update(
-    anchorDoc,
-    {
-      source: { ...source, field: source.field ?? null },
-      ...(syncOff
-        ? { audience: { ownershipSync: { ...before.audience.ownershipSync, enabled: false } } }
-        : {}),
-    },
-    keepIcon ? {} : { "texture.src": anchorTexture(source) }
-  );
-  if (syncOff) notify({ key: "DP.notice.retargetSyncOff" }, "info");
-
-  // The old uuid rides along precisely for this: the payload no longer names the old
-  // document, so the sync cannot find it on its own any more. One call, not a sync and
-  // then a release, because a pin moved between a journal and one of its own pages has
-  // an old document and a new one in the same family — and releasing the old family
-  // after granting the new one took back the grant just made.
-  await syncAnchor(anchorDoc, oldUuid);
-  warnIfPlayersCannotRead(source);
-
-  return true;
+export async function retarget(anchorDoc: any, source: Partial<DpSource>): Promise<boolean> {
+  if (!isGM() || !anchorDoc) return false;
+  return (await writeSourced(anchorDoc, { source }, { plain: false })).moved;
 }
 
 /** Adopt an existing tile as a pin — the one-click path from the Tile config sheet. */

@@ -13,7 +13,7 @@
  * on what the pin and each document end up holding, as a player's client would read them.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { FLAGS, MODULE_ID } from "../src/const";
+import { FLAGS, INTERNAL_OPTION, MODULE_ID } from "../src/const";
 import { readLedger } from "../src/data/ownership-plan";
 import { defaultPin } from "../src/data/pin-schema";
 import type { DpAudience, DpPinFlags } from "../src/types/dp";
@@ -346,5 +346,124 @@ describe("a bulk reveal's access", () => {
     expect(
       world.notifications.filter((n) => n.message === "DP.notice.ownershipWriteFailed")
     ).toHaveLength(1);
+  });
+});
+
+/**
+ * `patch` is public — other modules reach it through the module's API — and it was a bare
+ * store write: a patched audience showed the pin and granted nothing, and a patched source
+ * moved the pin onto another document still naming the old one's page.
+ */
+describe("patch, as other modules call it", () => {
+  it("brings ownership in line with a patched audience, and returns the update", async () => {
+    await install(pinnedTile({ kind: "hidden" }));
+
+    const result = await api.patch(tile, { audience: { kind: "everyone" } });
+
+    expect(result).toBe(tile);
+    expect(tile.hidden).toBe(false);
+    expect(entry.ownership.default).toBe(1);
+    expect(pages.p1.ownership.default).toBe(2);
+  });
+
+  it("moves a pin to the document a patched uuid names, as a retarget does", async () => {
+    const other = journal("k", "Chapter 4");
+    await install(
+      pinnedTile(
+        { kind: "selected", users: ["ali"] },
+        {
+          source: {
+            ...defaultPin().source,
+            uuid: "JournalEntry.j",
+            pageId: "p1",
+            pdfPage: 3,
+            field: "details.biography.value",
+            followName: false,
+          },
+        }
+      ),
+      [other]
+    );
+    await sync.syncAnchor(tile);
+    expect(pages.p1.ownership.ali).toBe(2);
+
+    const result = await api.patch(tile, { source: { uuid: "JournalEntry.k" } });
+
+    expect(result).toBe(tile);
+    expect(pinOf(tile).source).toMatchObject({
+      kind: "document",
+      uuid: "JournalEntry.k",
+      pageId: null,
+      pdfPage: null,
+      field: null,
+      followName: false,
+    });
+    // The old uuid reached the sync: the journal the pin left gave everything back.
+    expect(entry.ownership).toEqual({ default: 0 });
+    expect(pages.p1.ownership).toEqual({ default: -1 });
+    expect(other.ownership.ali).toBe(2);
+  });
+
+  it("still patches a page of the same document in place, and moves the grant with it", async () => {
+    await install(pinnedTile({ kind: "selected", users: ["ali"] }));
+    await sync.syncAnchor(tile);
+
+    await api.patch(tile, { source: { uuid: "JournalEntry.j", pageId: "p2" } });
+
+    expect(pinOf(tile).source).toMatchObject({ uuid: "JournalEntry.j", pageId: "p2" });
+    expect(pages.p2.ownership.ali).toBe(2);
+    expect(pages.p1.ownership.ali).toBeUndefined();
+  });
+});
+
+describe("retarget, given part of a source", () => {
+  it("clears the page fields the old document's source named", async () => {
+    const other = journal("k", "Chapter 4");
+    await install(
+      pinnedTile(
+        { kind: "selected", users: ["ali"] },
+        { source: { ...defaultPin().source, uuid: "JournalEntry.j", pageId: "p1", pdfPage: 3 } }
+      ),
+      [other]
+    );
+
+    await expect(api.retarget(tile, { uuid: "JournalEntry.k" })).resolves.toBe(true);
+
+    expect(pinOf(tile).source).toMatchObject({
+      kind: "document",
+      uuid: "JournalEntry.k",
+      pageId: null,
+      pdfPage: null,
+      field: null,
+    });
+  });
+
+  it("writes nothing for the document the pin already shows", async () => {
+    await install(pinnedTile({ kind: "everyone" }));
+    await expect(api.retarget(tile, { uuid: "JournalEntry.j" })).resolves.toBe(false);
+    expect(tile.updates).toEqual([]);
+  });
+});
+
+describe("setPinIcon", () => {
+  it("writes the icon as the module's own change", async () => {
+    await install(pinnedTile({ kind: "everyone" }));
+
+    await expect(api.setPinIcon(tile, "icons/svg/skull.svg")).resolves.toBe(true);
+
+    expect(tile.texture.src).toBe("icons/svg/skull.svg");
+    expect(tile.lastContext?.[INTERNAL_OPTION]).toBe(true);
+  });
+
+  it("waits for a retarget still landing, and leaves the image it brought alone", async () => {
+    await install(pinnedTile({ kind: "everyone" }));
+
+    const toImage = api.retarget(tile, { kind: "image", src: "maps/letter.webp" });
+    const icon = api.setPinIcon(tile, "icons/svg/skull.svg");
+
+    await expect(toImage).resolves.toBe(true);
+    await expect(icon).resolves.toBe(false);
+    expect(tile.texture.src).toBe("maps/letter.webp");
+    expect(tile.updates.filter((u: any) => "texture.src" in u)).toHaveLength(1);
   });
 });
