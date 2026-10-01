@@ -17,6 +17,8 @@
  * that knowledge lives; every rect function here takes a top-left rect and says so.
  */
 
+import { cv } from "../fvtt";
+
 export interface Mat {
   a: number;
   b: number;
@@ -241,10 +243,9 @@ export function apparentWidth(m: Mat, width: number): number {
 }
 
 // ---------------------------------------------------------------------------
-// Foundry-facing wrappers. Everything above stays global-free.
+// Foundry-facing wrappers. Everything above stays global-free; these reach the canvas
+// through `fvtt.ts`, so a read before core defines it is an identity, not a throw.
 // ---------------------------------------------------------------------------
-
-declare const canvas: any;
 
 /**
  * The stage's transform as it is NOW, not as it was last drawn.
@@ -260,7 +261,7 @@ declare const canvas: any;
  * dirty-checked recompute of one matrix, not a walk of the scene graph.
  */
 export function stageMatrix(): Mat {
-  const stage = canvas?.stage;
+  const stage = cv()?.stage;
   let t = stage?.worldTransform;
   if (stage && !stage.parent && typeof stage.transform?.updateLocalTransform === "function") {
     stage.transform.updateLocalTransform();
@@ -279,6 +280,6 @@ export function screenToScene(p: Point): Point {
 }
 
 export function visibleSceneRect(pad = 0): Rect {
-  const screen = canvas?.app?.renderer?.screen ?? { width: 0, height: 0 };
+  const screen = cv()?.app?.renderer?.screen ?? { width: 0, height: 0 };
   return viewportRect(stageMatrix(), screen, pad);
 }
