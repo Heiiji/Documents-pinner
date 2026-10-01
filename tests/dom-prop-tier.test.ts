@@ -270,6 +270,39 @@ describe("syncDomTier", () => {
     expect(resolveCard).toHaveBeenCalledTimes(2);
   });
 
+  /**
+   * The dressing is drawn from the effect's speed and motion, and neither was in the key:
+   * a GM who stopped a preset's loop, or slowed it, saw the card go on as it was until a
+   * rung happened to be crossed.
+   */
+  it.each([
+    ["speed", { speed: 0.5 }],
+    ["motion", { motion: "none" as const }],
+  ])("re-resolves when the effect's %s changes", async (_what, change) => {
+    syncDomTier([entry()]);
+    await settle();
+    syncDomTier([entry({ pin: pin({ effect: { ...defaultPin().effect, ...change } }) })]);
+    await settle();
+    expect(resolveCard).toHaveBeenCalledTimes(2);
+  });
+
+  /**
+   * The natural height is measured at the card's width, so a narrower prop with the same
+   * height kept the old measurement and its overflow mark said the wrong thing. A cached
+   * body makes the re-resolve one measurement. Height alone still costs nothing.
+   */
+  it("re-resolves when a text prop's width changes, and not when only its height does", async () => {
+    syncDomTier([entry({ pin: sized() })]);
+    await settle();
+    syncDomTier([entry({ pin: sized(), doc: doc({ height: 900 }) })]);
+    await settle();
+    expect(resolveCard).toHaveBeenCalledTimes(1);
+
+    syncDomTier([entry({ pin: sized(), doc: doc({ width: 300, height: 900 }) })]);
+    await settle();
+    expect(resolveCard).toHaveBeenCalledTimes(2);
+  });
+
   it("re-resolves when the pin's own typeface changes, and not before", async () => {
     const faced = (font: string | null) =>
       pin({ display: { ...defaultPin().display, typeSize: 12, margin: 1.5, font } });
@@ -378,6 +411,179 @@ describe("the overflow mark", () => {
     await settle();
     const card = overlay()!.querySelector<HTMLElement>(".dp-prop .dp-card")!;
     expect(card.dataset.dpOverflow).toBeUndefined();
+  });
+});
+
+/**
+ * The resolved markup and its overflow mark land in ONE write, in the frame. The mark is
+ * set on the `.dp-card` the markup creates; decided before the write applied, it read the
+ * card being replaced — on a first mount, no card at all.
+ */
+describe("landing a resolved card", () => {
+  it("writes the markup inside the frame, with its overflow mark, not in the middle of one", async () => {
+    let land = () => {};
+    vi.mocked(resolveCard).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          land = () =>
+            resolve({
+              html: '<div class="dp-card">letter</div>',
+              title: "Letter",
+              readable: true,
+              contentHash: "h",
+              missing: false,
+              naturalHeight: 800,
+            });
+        })
+    );
+    syncDomTier([entry({ pin: sized() })]);
+    await settle();
+    const prop = overlay()!.querySelector<HTMLElement>(".dp-prop")!;
+
+    land();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(prop.querySelector(".dp-card")).toBeNull();
+
+    await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
+    const card = prop.querySelector<HTMLElement>(".dp-card")!;
+    expect(card.textContent).toBe("letter");
+    expect(card.dataset.dpOverflow).toBe("true");
+  });
+
+  it("does not rewrite a card whose markup did not change, so its animations run on", async () => {
+    const { invalidateDomProps } = await import("../src/canvas/DomPropTier");
+    syncDomTier([entry()]);
+    await settle();
+    const card = overlay()!.querySelector(".dp-prop .dp-card");
+    expect(card).not.toBeNull();
+
+    invalidateDomProps(["t1"]);
+    syncDomTier([entry()]);
+    await settle();
+
+    expect(resolveCard).toHaveBeenCalledTimes(2);
+    expect(overlay()!.querySelector(".dp-prop .dp-card")).toBe(card);
+  });
+});
+
+/**
+ * Every card that changed key started its resolve in the same pass: fifty cards crossing a
+ * rung began fifty enrichments at once. Two at a time now, started at once when a slot is
+ * free, and a queued resolve nobody wants any more is passed over.
+ */
+describe("the resolve queue", () => {
+  /** Resolves that wait to be told to land, in the order they started. */
+  function holding() {
+    const pending: { id: string; land: () => void }[] = [];
+    vi.mocked(resolveCard).mockImplementation(
+      (p: DpPinFlags) =>
+        new Promise((resolve) => {
+          pending.push({
+            id: p.source.uuid ?? "",
+            land: () =>
+              resolve({
+                html: `<div class="dp-card">${p.source.uuid}</div>`,
+                title: "Letter",
+                readable: true,
+                contentHash: "h",
+                missing: false,
+                naturalHeight: null,
+              }),
+          });
+        })
+    );
+    return pending;
+  }
+
+  const card = (n: number, over: Record<string, any> = {}) =>
+    entry({
+      id: `t${n}`,
+      doc: doc({ id: `t${n}` }),
+      pin: pin({ source: { ...pin().source, uuid: `JournalEntry.j${n}` } }),
+      ...over,
+    });
+
+  afterEach(() => {
+    vi.mocked(resolveCard).mockReset();
+    vi.mocked(resolveCard).mockImplementation(async () => ({
+      html: '<div class="dp-card">letter</div>',
+      title: "Letter",
+      readable: true,
+      contentHash: "h",
+      missing: false,
+      naturalHeight: null,
+    }));
+  });
+
+  it("runs at most two resolves at once, and starts the next as one lands", async () => {
+    const pending = holding();
+    syncDomTier([1, 2, 3, 4, 5].map((n) => card(n)));
+    expect(resolveCard).toHaveBeenCalledTimes(2);
+
+    pending[0].land();
+    await settle();
+    expect(resolveCard).toHaveBeenCalledTimes(3);
+    expect(pending.map((job) => job.id)).toEqual([
+      "JournalEntry.j1",
+      "JournalEntry.j2",
+      "JournalEntry.j3",
+    ]);
+  });
+
+  it("starts a resolve at once when a slot is free", () => {
+    holding();
+    syncDomTier([card(1)]);
+    expect(resolveCard).toHaveBeenCalledTimes(1);
+  });
+
+  it("passes over a queued resolve whose card changed again, or left the view", async () => {
+    const pending = holding();
+    syncDomTier([card(1), card(2), card(3), card(4)]);
+    expect(resolveCard).toHaveBeenCalledTimes(2);
+
+    // Card 3 is re-keyed while it waits: its newer job keeps its place. Card 4 goes off
+    // screen (L0), which unmounts it.
+    const glitched = card(3, {
+      pin: pin({
+        source: { ...pin().source, uuid: "JournalEntry.j3" },
+        effect: { ...defaultPin().effect, id: "glitch" },
+      }),
+    });
+    syncDomTier([card(1), card(2), glitched, card(4, { tier: "L0" })]);
+
+    pending[0].land();
+    pending[1].land();
+    await settle();
+
+    expect(resolveCard).toHaveBeenCalledTimes(3);
+    expect(vi.mocked(resolveCard).mock.calls[2][0].effect.id).toBe("glitch");
+  });
+
+  it("forgets its queue with the scene, and the next scene starts with both slots free", async () => {
+    holding();
+    syncDomTier([1, 2, 3].map((n) => card(n)));
+    expect(resolveCard).toHaveBeenCalledTimes(2);
+
+    clearDomTier();
+    syncDomTier([card(7), card(8)]);
+    expect(resolveCard).toHaveBeenCalledTimes(4);
+    await settle();
+    expect(resolveCard).toHaveBeenCalledTimes(4);
+  });
+
+  it("stops waiting for a resolve that never settles", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      holding();
+      syncDomTier([1, 2, 3].map((n) => card(n)));
+      expect(resolveCard).toHaveBeenCalledTimes(2);
+
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(resolveCard).toHaveBeenCalledTimes(3);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

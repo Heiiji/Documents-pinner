@@ -2,9 +2,9 @@
  * Props drawn as DOM, for the clients that cannot draw them into the scene.
  *
  * IMPURE. This is the other half of `A7`: the setting offered a "DOM (compatibility)"
- * choice and the WebKit probe fell back to it, and there was nothing on the other side
- * — every Safari user, and everyone who picked the documented compatibility option, got
- * invisible props and a `console.warn`. `OverlayRoot.mount` had exactly two callers,
+ * choice and the rasterisation probe fell back to it, and there was nothing on the other
+ * side — every Safari user, and everyone who picked the documented compatibility option,
+ * got invisible props and a `console.warn`. `OverlayRoot.mount` had exactly two callers,
  * neither of them a prop.
  *
  * What this tier gives up is stated plainly in the README and in DESIGN §6: a card
@@ -22,8 +22,12 @@
  * 2. **Positioned in SCENE space.** The overlay root already carries the stage matrix,
  *    so a card is placed once at document coordinates and stays glued through any pan
  *    or zoom with no per-frame write at all.
- * 3. **One resolve per content key.** Card resolution enriches a document; doing it per
- *    LOD pass would enrich fifty documents after every pan.
+ * 3. **One resolve per content key, two at a time.** The key carries the LOD rung and
+ *    the effects level, because the dressing depends on both — and each rung crossed, each
+ *    focus and each level flip used to enrich and measure the document again. The words
+ *    and their height are now kept in the card cache (`render/card-cache.ts`, DESIGN A29),
+ *    so a rung change costs a string; and resolves go through a two-slot queue, so fifty
+ *    cards entering the view do not start fifty enrichments in one frame.
  *
  * One thing the canvas gives for free is taken back by hand: the scene's GLOBAL darkness.
  * A bright sheet of paper floating over a black crypt was the loudest of the losses, and
@@ -37,7 +41,7 @@ import { cv } from "../fvtt";
 import { curveFor } from "../motion";
 import { escapeAttr } from "../html";
 import { cardMetrics } from "../data/pin-schema";
-import { resolveCard } from "../render/ContentResolver";
+import { resolveCard, type ResolvedCard } from "../render/ContentResolver";
 import { currentLevel } from "../effects/level";
 import { mount, overlay, write } from "../apps/OverlayRoot";
 import { tileRect, type PlacedRect } from "./transform";
@@ -78,6 +82,8 @@ interface DomProp {
   alpha: number | null;
   /** The height at which the whole card fits, from the resolver; null when unknown. */
   naturalHeight: number | null;
+  /** The card markup last written, so a resolve that changed nothing writes nothing. */
+  html: string | null;
   /** Consecutive failed resolves, so a card that cannot be drawn stops being retried. */
   failures: number;
 }
@@ -100,17 +106,22 @@ let generations = 0;
 /**
  * What the card's CONTENT depends on.
  *
- * Geometry is deliberately absent for HTML: the card fills its box and CSS re-lays it
- * out, so a resize costs no resolve. That used to be a claim rather than a fact — the
- * card carried its own width, height and font size as inline pixels, and nothing ever
- * re-laid it out — which is why a resized prop sat clipped or short inside its new box
- * until an LOD boundary happened to be crossed.
+ * The HEIGHT is deliberately absent for HTML: the card fills its box and CSS re-lays it
+ * out, so making a prop taller or shorter costs no resolve. That used to be a claim rather
+ * than a fact — the card carried its own width, height and font size as inline pixels,
+ * and nothing ever re-laid it out — which is why a resized prop sat clipped or short
+ * inside its new box until an LOD boundary happened to be crossed.
  *
  * What IS in the key is what the card's pixels are drawn from: the type size and the
  * pad. For a pin whose metrics are stored those never follow the tile; for one that
  * predates stored metrics they derive from the short edge, so a legacy prop still
- * re-resolves when that changes — exactly as its look demands. A PDF page is rendered
- * at a size, so its geometry is in outright.
+ * re-resolves when that changes — exactly as its look demands. The WIDTH is in, because
+ * the card's natural height is measured at it: without it a narrowed prop kept the
+ * height of its old width, and its overflow mark said the wrong thing. A cached body
+ * makes that a measurement, not an enrichment. The effect's speed and motion are in,
+ * because the dressing is drawn from them — a GM who stopped a preset's loop saw it go on
+ * looping until a rung was crossed. A PDF page is rendered at a size, so its geometry is
+ * in outright.
  */
 function contentKeyOf(entry: DomPropEntry, level: EffectsLevel): string {
   const { pin, doc } = entry;
@@ -129,6 +140,8 @@ function contentKeyOf(entry: DomPropEntry, level: EffectsLevel): string {
     pin.effect.id,
     pin.effect.intensity,
     pin.effect.seed,
+    pin.effect.speed,
+    pin.effect.motion,
     pin.display.paper,
     // The pin's own face; a preset's is covered by the effect id above.
     pin.display.font ?? "",
@@ -136,6 +149,7 @@ function contentKeyOf(entry: DomPropEntry, level: EffectsLevel): string {
     padPx,
     pin.display.showTitle ? 1 : 0,
     pin.display.label,
+    size.width,
     entry.pdf ? `${size.width}x${size.height}` : "",
     entry.tier,
     level,
@@ -195,6 +209,7 @@ function upsert(entry: DomPropEntry, level: EffectsLevel): void {
       placedAt: null,
       alpha: null,
       naturalHeight: null,
+      html: null,
       failures: 0,
     };
     props.set(entry.id, prop);
@@ -216,28 +231,149 @@ function upsert(entry: DomPropEntry, level: EffectsLevel): void {
 
   const generation = ++generations;
   prop.generation = generation;
+  const { id, pin, tier } = entry;
   const size = { width: entry.doc.width, height: entry.doc.height };
-  void resolveCard(entry.pin, size, { tier: entry.tier, baked: false })
-    .then((card) => {
-      const current = props.get(entry.id);
-      // The scene may have changed, or a newer resolve may already have landed.
-      if (!current || current.generation !== generation) return;
-      current.element.innerHTML = card.html;
-      current.naturalHeight = card.naturalHeight ?? null;
-      current.failures = 0;
-      write(current.element, () => markOverflow(current));
-    })
-    .catch((error) => {
-      log.warn(`DOM prop failed to resolve:`, error);
-      // The key was claimed before the resolve, so keeping it would leave this card blank
-      // for the rest of the session. Forgotten, the next pass tries again — a few times,
-      // not on every pan forever: a card that always throws would otherwise warn after
-      // each one. A change to its content, or an edit to its source, starts it over.
-      const current = props.get(entry.id);
-      if (current && current.generation === generation && ++current.failures <= RETRIES) {
-        current.key = "";
-      }
-    });
+  enqueue({ id, generation, run: () => resolveInto(id, generation, pin, size, tier) });
+}
+
+/** Resolve one card and hand it to `land`, if it is still the card this resolve was for. */
+async function resolveInto(
+  id: string,
+  generation: number,
+  pin: DpPinFlags,
+  size: { width: number; height: number },
+  tier: LodTier
+): Promise<void> {
+  try {
+    const card = await resolveCard(pin, size, { tier, baked: false });
+    const current = props.get(id);
+    // The scene may have changed, or a newer resolve may already have landed.
+    if (!current || current.generation !== generation) return;
+    land(current, card);
+  } catch (error) {
+    log.warn(`DOM prop failed to resolve:`, error);
+    // The key was claimed before the resolve, so keeping it would leave this card blank
+    // for the rest of the session. Forgotten, the next pass tries again — a few times,
+    // not on every pan forever: a card that always throws would otherwise warn after
+    // each one. A change to its content, or an edit to its source, starts it over.
+    const current = props.get(id);
+    if (current && current.generation === generation && ++current.failures <= RETRIES) {
+      current.key = "";
+    }
+  }
+}
+
+/**
+ * Put a resolved card on the element: the markup and its overflow mark in ONE write.
+ *
+ * Both inside the write, never the mark after it: the mark is set on the `.dp-card` the
+ * markup creates, and a mark decided before the write applies reads the card being
+ * replaced — on a first mount, no card at all, so an overflowing letter arrived unmarked.
+ *
+ * And not at all when the markup is the one already there. A rung or a level crossed and
+ * crossed back, or an edit to a source that changed nothing on this card, resolves to the
+ * same string; writing it again tore down the card and restarted every animation on it —
+ * a scanline sweep jumping back to the top for nothing. The mark still follows the height.
+ */
+function land(prop: DomProp, card: ResolvedCard): void {
+  prop.naturalHeight = card.naturalHeight ?? null;
+  prop.failures = 0;
+  const element = prop.element;
+  if (prop.html === card.html) {
+    write(element, () => markOverflow(prop));
+    return;
+  }
+  const html = card.html;
+  prop.html = html;
+  write(element, () => {
+    element.innerHTML = html;
+    markOverflow(prop);
+  });
+}
+
+// ---------------------------------------------------------------------------
+// The resolve queue
+// ---------------------------------------------------------------------------
+
+/**
+ * How many cards resolve at once.
+ *
+ * Every card that changed key started its resolve in the same pass: a zoom that moved fifty
+ * cards across a rung began fifty enrichments, fifty probe layouts and fifty `.then`s
+ * writing markup in one burst — on the main thread, during the frames right after the
+ * gesture, which are the ones the GM is watching. Two at a time is enough to keep a cached
+ * card instant and an uncached one moving, and leaves the frame to the map.
+ *
+ * Here and not in the resolver: the reader resolves the card a player just clicked, and
+ * that must never wait behind the map's fifty.
+ */
+const RESOLVE_SLOTS = 2;
+
+/**
+ * How long one resolve may hold a slot before the queue stops waiting for it.
+ *
+ * A resolve waits on a document load, an enricher and a PDF render, none of which promise
+ * to settle. Two that never did would have stopped every other card on the scene; the
+ * resolve goes on, and lands if it is still wanted, but its slot is freed.
+ */
+const SLOT_HOLD_MS = 10_000;
+
+interface ResolveJob {
+  id: string;
+  generation: number;
+  run: () => Promise<void>;
+}
+
+/** Waiting jobs, oldest first — at most one per card. */
+let waiting: ResolveJob[] = [];
+let running = 0;
+/**
+ * Bumped by `clearDomTier`. A job started for a scene since torn down does not hold a slot
+ * any more, and must not free one the next scene's jobs now hold.
+ */
+let lane = 0;
+
+/**
+ * Start a card's resolve now when a slot is free — synchronously, so a quiet scene's card
+ * arrives exactly as it did before there was a queue — or queue it. A card already queued
+ * keeps its place with its newer job.
+ */
+function enqueue(job: ResolveJob): void {
+  const queued = waiting.findIndex((other) => other.id === job.id);
+  if (queued >= 0) {
+    waiting[queued] = job;
+    return;
+  }
+  if (running < RESOLVE_SLOTS) start(job);
+  else waiting.push(job);
+}
+
+function start(job: ResolveJob): void {
+  running += 1;
+  const mine = lane;
+  let released = false;
+  let timer = 0;
+  const release = () => {
+    if (released) return;
+    released = true;
+    window.clearTimeout(timer);
+    if (mine !== lane) return;
+    running -= 1;
+    next();
+  };
+  timer = window.setTimeout(release, SLOT_HOLD_MS);
+  void job.run().finally(release);
+}
+
+/** Fill the free slots from the queue, passing over a job nobody wants any more. */
+function next(): void {
+  while (running < RESOLVE_SLOTS && waiting.length) {
+    const job = waiting.shift()!;
+    // Superseded by a newer resolve of the same card, or the card is gone: unmounted at
+    // L0, or its scene torn down.
+    if (props.get(job.id)?.generation !== job.generation) continue;
+    start(job);
+  }
 }
 
 /**
@@ -474,6 +610,11 @@ export function setDomPropAlpha(id: string, alpha: number): void {
 export function clearDomTier(): void {
   for (const prop of props.values()) prop.element.remove();
   props.clear();
+  // The queue is about cards that no longer exist, and the slots their resolves hold are
+  // the old scene's: the next scene starts with both free.
+  waiting = [];
+  running = 0;
+  lane += 1;
   // The overlay this value was written on goes with the scene. A stale memo would
   // swallow the next scene's first value whenever it happened to match the last one's.
   sceneDim = null;
