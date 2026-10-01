@@ -142,3 +142,16 @@ export function obj(value: unknown): Record<string, unknown> {
     ? (value as Record<string, unknown>)
     : {};
 }
+
+/**
+ * Fold case and diacritics so a French GM typing "epee" finds "Épée".
+ *
+ * Search that only matches the exact accents is search that fails precisely when
+ * someone is in a hurry, which is the only time this box gets used.
+ */
+export function fold(value: string): string {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLowerCase();
+}

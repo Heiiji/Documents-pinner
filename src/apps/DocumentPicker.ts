@@ -1,9 +1,10 @@
 /**
  * Choosing what to pin.
  *
- * IMPURE. A flat, searchable list of every journal and page in the world, then the
- * journals of every compendium once the search has two letters, plus a route into the
- * file browser for a map scrap that has no journal behind it.
+ * IMPURE. A flat, searchable list of every journal, page, actor and item in the world,
+ * then those of every compendium once the search has two letters, with chips to show one
+ * kind alone, plus a route into the file browser for a map scrap that has no journal
+ * behind it. The search itself is `sources/search.ts`; this file is the window.
  *
  * Deliberately not a tree. A GM reaching for this knows the name of the thing they
  * want and does not want to remember which journal they filed it in — so pages are
@@ -12,172 +13,50 @@
  * out of the way, because the questions that remain are all about the map.
  */
 
-import { g, ns, packs } from "../fvtt";
+import { ns } from "../fvtt";
 import { t, tOr } from "../i18n";
 import { escapeAttr, escapeHtml } from "../html";
-import { fold } from "./pinboard-model";
 import { arm } from "./PlacementGhost";
 import * as api from "../api";
 import { importForPin } from "../sources/import";
-import { packFacts, playersCanRead } from "../sources/packs";
+import {
+  filterEntries,
+  packEntries,
+  PINNABLE,
+  worldEntries,
+  type PickerEntry,
+  type Pinnable,
+} from "../sources/search";
 import type { DpSource } from "../types/dp";
 
 let PickerClass: any = null;
 let instance: any = null;
 
-export interface PickerEntry {
-  uuid: string;
-  name: string;
-  context: string;
-  kind: "entry" | "page";
-  /** Page type — `text`, `image`, `pdf`, `video` — shown so a GM can tell them apart. */
-  pageType: string | null;
-  /** A world document, or one in a compendium pack. */
-  origin: "world" | "pack";
-  /** The pack a compendium row is from, and whether some player's role cannot read it. */
-  pack?: { id: string; title: string; locked: boolean };
-}
+/** What can be picked, searched and filtered: the search itself is `sources/search.ts`. */
+export { filterEntries, packEntries, pickerEntries, type PickerEntry } from "../sources/search";
 
-/**
- * Every pinnable document, entries and pages alike.
- *
- * Entries whose only page shares their name are listed once: a single-page journal is
- * one thing to a GM, and showing it twice makes the list look broken.
- */
-export function pickerEntries(): PickerEntry[] {
-  const out: PickerEntry[] = [];
+/** The chips above the list: every kind at once, or one. Images stay the Browse button. */
+type PickerKind = "all" | Pinnable;
+const KINDS: { kind: PickerKind; key: string }[] = [
+  { kind: "all", key: "DP.picker.kindAll" },
+  { kind: "JournalEntry", key: "DP.picker.kindJournals" },
+  { kind: "Actor", key: "DP.picker.kindActors" },
+  { kind: "Item", key: "DP.picker.kindItems" },
+];
 
-  for (const entry of g()?.journal?.contents ?? []) {
-    const pages = entry.pages?.contents ?? [];
-    out.push({
-      uuid: entry.uuid,
-      name: entry.name ?? "",
-      context: "",
-      kind: "entry",
-      pageType: null,
-      origin: "world",
-    });
+/** What one chip lets through. */
+const kindsOf = (kind: PickerKind): readonly Pinnable[] => (kind === "all" ? PINNABLE : [kind]);
 
-    if (pages.length === 1 && pages[0].name === entry.name) continue;
-    for (const page of pages) {
-      out.push({
-        uuid: page.uuid,
-        name: page.name ?? "",
-        context: entry.name ?? "",
-        kind: "page",
-        pageType: page.type ?? null,
-        origin: "world",
-      });
-    }
-  }
-  return out;
-}
-
-/** Search both the name and the parent journal, accent- and case-insensitively. */
-export function filterEntries(entries: readonly PickerEntry[], search: string): PickerEntry[] {
-  const needle = fold(search.trim());
-  if (!needle) return [...entries];
-  return entries.filter((e) => fold(e.name).includes(needle) || fold(e.context).includes(needle));
-}
-
-/** A compendium is searched only from this many folded characters. */
-const PACK_QUERY_MIN = 2;
-/** At most this many compendium rows; the rest are counted, and the GM keeps typing. */
-const PACK_ROWS_MAX = 50;
-
-/**
- * An index entry's folded name, and the name it was folded from, for as long as core
- * keeps that entry. The name is checked on every read: a document renamed in an unlocked
- * compendium may be merged INTO its existing entry rather than replace it (RECALLED:
- * `indexDocument` merges), and a cache keyed on the entry alone would go on matching the
- * old name until a reload.
- */
-const foldedNames = new WeakMap<object, { name: string; folded: string }>();
-/** Packs whose empty index this session has already asked core to load. */
-const indexAsked = new WeakSet<object>();
-
-function foldedName(entry: any): string {
-  const name = String(entry?.name ?? "");
-  const cached = foldedNames.get(entry);
-  if (cached?.name === name) return cached.folded;
-  const folded = fold(name);
-  if (entry && typeof entry === "object") foldedNames.set(entry, { name, folded });
-  return folded;
-}
-
-/**
- * The journals of every JournalEntry compendium whose name, or whose pack's title,
- * contains the search — read from the index core already holds, never per keystroke from
- * the server.
- *
- * Only from two folded characters: one letter matches most of a rulebook. Packs in title
- * order, entries in index order, at most `PACK_ROWS_MAX`, the rest counted in `more`.
- * Entries only: a page of a compendium journal is chosen afterwards, in Pin Studio.
- *
- * A pack whose index is empty and not yet loaded is asked to load once per session, and
- * `onIndexed` runs when it has — for the caller to search again if it still can.
- */
-export function packEntries(
-  search: string,
-  onIndexed?: () => void
-): { entries: PickerEntry[]; more: number } {
-  const needle = fold(search.trim());
-  const entries: PickerEntry[] = [];
-  let more = 0;
-  if (needle.length < PACK_QUERY_MIN) return { entries, more };
-
-  const journals = packs()
-    .filter((pack: any) => packFacts(pack).documentName === "JournalEntry")
-    .map((pack: any) => ({ pack, facts: packFacts(pack) }))
-    .sort((a, b) => a.facts.title.localeCompare(b.facts.title));
-
-  for (const { pack, facts } of journals) {
-    const index = pack.index;
-    if (!index?.size) {
-      if (!pack.indexed && typeof pack.getIndex === "function" && !indexAsked.has(pack)) {
-        indexAsked.add(pack);
-        void Promise.resolve()
-          .then(() => pack.getIndex())
-          .then(
-            () => onIndexed?.(),
-            () => {}
-          );
-      }
-      continue;
-    }
-
-    const titleMatches = fold(facts.title).includes(needle);
-    let locked: boolean | null = null;
-    for (const entry of index.values?.() ?? index.contents ?? []) {
-      if (!titleMatches && !foldedName(entry).includes(needle)) continue;
-      const uuid = entry?.uuid ?? pack.getUuid?.(entry?._id);
-      if (typeof uuid !== "string" || !uuid) continue;
-      if (entries.length >= PACK_ROWS_MAX) {
-        more++;
-        continue;
-      }
-      locked ??= !playersCanRead(pack);
-      entries.push({
-        uuid,
-        name: String(entry.name ?? ""),
-        context: facts.title,
-        kind: "entry",
-        pageType: null,
-        origin: "pack",
-        pack: { id: facts.id, title: facts.title, locked },
-      });
-    }
-  }
-  return { entries, more };
+/** A row's icon: a compendium's, or the kind of document it is. */
+function iconOf(entry: PickerEntry): string {
+  if (entry.origin === "pack") return "fa-book-atlas";
+  if (entry.documentName === "Actor") return "fa-user";
+  if (entry.documentName === "Item") return "fa-suitcase";
+  return entry.kind === "entry" ? "fa-book" : "fa-file-lines";
 }
 
 function entryMarkup(entry: PickerEntry, index: number, active: boolean, busy: boolean): string {
-  const icon =
-    entry.origin === "pack"
-      ? "fa-book-atlas"
-      : entry.kind === "entry"
-        ? "fa-book"
-        : "fa-file-lines";
+  const icon = iconOf(entry);
   const locked = entry.pack?.locked === true;
   return (
     `<li class="dp-picker__item${locked ? " dp-picker__item--locked" : ""}` +
@@ -214,7 +93,8 @@ export function pickerMarkup(
   search: string,
   activeIndex = 0,
   more = 0,
-  importing: string | null = null
+  importing: string | null = null,
+  kind: PickerKind = "all"
 ): string {
   const active = Math.max(0, Math.min(entries.length - 1, activeIndex));
   const list =
@@ -237,6 +117,14 @@ export function pickerMarkup(
     entries.length ? ` aria-activedescendant="dp-picker-opt-${active}"` : "",
     ` value="${escapeAttr(search)}" placeholder="${escapeAttr(t("DP.picker.search"))}"`,
     ` aria-label="${escapeAttr(t("DP.picker.search"))}">`,
+    `<div class="dp-picker__kinds" role="group" aria-label="${escapeAttr(t("DP.picker.kinds"))}">`,
+    ...KINDS.map(
+      (chip) =>
+        `<button type="button" class="dp-picker__kind" data-action="kind"` +
+        ` data-dp-kind="${chip.kind}" aria-pressed="${chip.kind === kind}">` +
+        `${escapeHtml(t(chip.key))}</button>`
+    ),
+    `</div>`,
     `<ul class="dp-picker__list" id="dp-picker-list" role="listbox" aria-label="${escapeAttr(t("DP.picker.list"))}">`,
     list,
     `</ul>`,
@@ -263,10 +151,12 @@ export function definePicker(): any {
       tag: "section",
       window: { title: "DP.picker.title", icon: "fa-solid fa-thumbtack", resizable: true },
       position: { width: 460, height: 520 },
-      actions: { browse: onBrowse },
+      actions: { browse: onBrowse, kind: onKind },
     };
 
     search = "";
+    /** Which chip is on: every kind of document, or journals, actors or items alone. */
+    kind: PickerKind = "all";
     /** The row the arrows have moved to, which Enter takes. Reset by typing. */
     activeIndex = 0;
     /**
@@ -284,16 +174,22 @@ export function definePicker(): any {
       // World rows first, then the compendiums': a GM's own world is what they reach for
       // most, and a rulebook's hundred matches must not bury it. A pack whose index arrives
       // later searches again, if this picker is still open to show it.
-      const { entries, more } = packEntries(this.search, () => {
-        if (this.rendered) void this.render();
-      });
+      const kinds = kindsOf(this.kind);
+      const { entries, more } = packEntries(
+        this.search,
+        () => {
+          if (this.rendered) void this.render();
+        },
+        kinds
+      );
       const wrapper = document.createElement("div");
       wrapper.innerHTML = pickerMarkup(
-        [...filterEntries(pickerEntries(), this.search), ...entries],
+        [...filterEntries(worldEntries(kinds), this.search), ...entries],
         this.search,
         this.activeIndex,
         more,
-        this.importing
+        this.importing,
+        this.kind
       );
       return wrapper.firstElementChild ?? wrapper;
     }
@@ -453,6 +349,15 @@ export function definePicker(): any {
   };
 
   return PickerClass;
+}
+
+/** A chip: show one kind of document, or every kind, and start again at the first row. */
+function onKind(this: any, _event: Event, target: HTMLElement) {
+  const kind = target?.dataset?.dpKind;
+  if (!KINDS.some((chip) => chip.kind === kind)) return;
+  this.kind = kind;
+  this.activeIndex = 0;
+  this.render();
 }
 
 /** The file-browser route, for a map scrap with no journal behind it. */

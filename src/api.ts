@@ -34,6 +34,15 @@ import * as settings from "./settings";
 import { centreOf, docPositionFor } from "./canvas/transform";
 import { nextToReveal, type PinboardQuery, type RowFacts } from "./apps/pinboard-model";
 import { describeSource, rememberShown } from "./sources/describe";
+import { fieldsFor, rankDefault, type FieldChoice } from "./sources/fields";
+import {
+  adapterFor,
+  adapterForDoc,
+  adapterOrJournal,
+  isRefusal,
+  type PageChoice,
+  type Refusal,
+} from "./sources/index";
 import { packFacts, packLockedHere, packOf, packReadableBy, playersCanRead } from "./sources/packs";
 import { isPackUuid } from "./sources/uuid";
 import type { DpAudience, DpMode, DpPinFlags, DpSource } from "./types/dp";
@@ -46,38 +55,21 @@ const log = logger("api");
 // Sources
 // ---------------------------------------------------------------------------
 
-const DOCUMENT_SOURCES = ["JournalEntry", "JournalEntryPage"];
-
 /**
- * A pin source from a sidebar drag payload.
+ * A pin source from a sidebar drag payload — or, for a document of a type the module
+ * knows but will not pin (an item an actor owns, a token's actor), the notice that says
+ * why, so the drop can be refused rather than left to core as if it were not ours.
  *
- * v1 pins journals, journal pages and bare image files. Actors, items and tables are a
- * later adapter; returning `null` for them lets the drop fall through to whatever core
- * or another module would have done, rather than producing a pin of the wrong thing.
+ * A document of a type some adapter answers for (`sources/index.ts`) becomes a document
+ * source, and bare image files an image source. Anything else returns `null`, which lets
+ * the drop fall through to whatever core or another module would have done, rather than
+ * producing a pin of the wrong thing.
  */
-export function sourceFromDropData(data: any): DpSource | null {
+export function dropOutcome(data: any): DpSource | Refusal | null {
   if (!data) return null;
 
-  if (data.type === "JournalEntryPage" && data.uuid) {
-    return {
-      kind: "document",
-      uuid: data.uuid,
-      src: null,
-      pageId: null,
-      pdfPage: null,
-      followName: true,
-    };
-  }
-  if (data.type === "JournalEntry" && data.uuid) {
-    return {
-      kind: "document",
-      uuid: data.uuid,
-      src: null,
-      pageId: typeof data.pageId === "string" ? data.pageId : null,
-      pdfPage: null,
-      followName: true,
-    };
-  }
+  const named = adapterFor(data.type)?.fromDrop(data);
+  if (named) return named;
   // Core's file browser drags a TILE: `{type: "Tile", texture: {src}, fromFilePicker}`
   // (foundry.mjs 14.367, 33809). Reading only a bare `src` or `path` missed it, so an
   // Alt-drop of an image from the browser fell through to core and made a plain tile.
@@ -92,16 +84,21 @@ export function sourceFromDropData(data: any): DpSource | null {
   return null;
 }
 
+/** `dropOutcome`, for a caller that only wants a source: a refused drop is none. */
+export function sourceFromDropData(data: any): DpSource | null {
+  const outcome = dropOutcome(data);
+  return isRefusal(outcome) ? null : outcome;
+}
+
+/** A source from a document — the menus, the sheet header — or null for one not pinned. */
 export function sourceFromDocument(doc: any): DpSource | null {
-  if (!doc?.uuid || !DOCUMENT_SOURCES.includes(doc.documentName)) return null;
-  return {
-    kind: "document",
-    uuid: doc.uuid,
-    src: null,
-    pageId: null,
-    pdfPage: null,
-    followName: true,
-  };
+  const outcome = adapterFor(doc?.documentName)?.fromDocument(doc) ?? null;
+  return isRefusal(outcome) ? null : outcome;
+}
+
+/** The adapter for the document a source names, by its uuid or its pack: no load. */
+function adapterOf(source: DpSource) {
+  return adapterOrJournal(source.kind === "document" ? describeSource(source).documentName : null);
 }
 
 /**
@@ -114,8 +111,7 @@ export async function resolveSource(pin: DpPinFlags): Promise<any> {
   if (packLockedHere(pin.source.uuid)) return null;
   const doc = await resolveUuid(pin.source.uuid);
   if (!doc) return null;
-  const shown =
-    pin.source.pageId && doc.pages?.get ? (doc.pages.get(pin.source.pageId) ?? doc) : doc;
+  const shown = adapterForDoc(doc).shown(doc, pin.source.pageId);
   // A compendium page's name and type are not in its pack's index; now they are known.
   rememberShown(pin.source, shown);
   return shown;
@@ -140,16 +136,8 @@ export async function shownSource(pin: DpPinFlags): Promise<any> {
   return isPackUuid(pin.source.uuid) ? resolveSource(pin) : resolveSourceSync(pin);
 }
 
-/** The pages of a journal, or none when there is no choice to make. */
-function pagesOf(named: any): { id: string; name: string; type: string }[] {
-  const pages = named?.pages?.contents ?? [];
-  if (pages.length < 2) return [];
-  return pages.map((page: any) => ({
-    id: page.id,
-    name: page.name ?? "",
-    type: page.type ?? "text",
-  }));
-}
+/** The parts of a document a GM may choose between: a journal's pages, or none. */
+const pagesOf = (named: any): PageChoice[] => adapterForDoc(named).pages(named);
 
 /**
  * The pages a GM may choose between for this pin.
@@ -163,26 +151,48 @@ function pagesOf(named: any): { id: string; name: string; type: string }[] {
  * the chosen page, which is the wrong document to enumerate siblings of. World sources
  * only — a compendium journal's pages exist only once it has loaded: `pageChoicesFor`.
  */
-export function pageChoices(pin: DpPinFlags): { id: string; name: string; type: string }[] {
+export function pageChoices(pin: DpPinFlags): PageChoice[] {
   if (pin.source.kind !== "document") return [];
   return pagesOf(describeSource(pin.source).doc);
 }
 
 /** `pageChoices`, for any source: a compendium journal is loaded to list its pages. */
-export async function pageChoicesFor(
-  pin: DpPinFlags
-): Promise<{ id: string; name: string; type: string }[]> {
+export async function pageChoicesFor(pin: DpPinFlags): Promise<PageChoice[]> {
   if (pin.source.kind !== "document") return [];
   if (!isPackUuid(pin.source.uuid)) return pageChoices(pin);
   if (packLockedHere(pin.source.uuid)) return [];
   return pagesOf(await resolveUuid(pin.source.uuid));
 }
 
+/** The text fields a GM may choose between for an actor's or an item's card. */
+export interface FieldChoices {
+  fields: FieldChoice[];
+  /** The label of the field the automatic choice shows, or null when none would. */
+  automatic: string | null;
+}
+
+/**
+ * The fields of the document a portrait pin shows, or null for a pin that has none to
+ * choose — a journal, an image. A compendium document needs no load: its type is in the
+ * pack's index, and its fields are its type's.
+ */
+export function fieldChoices(pin: DpPinFlags): FieldChoices | null {
+  if (pin.source.kind !== "document") return null;
+  const summary = describeSource(pin.source);
+  const documentName = summary.documentName;
+  if (!documentName || adapterOrJournal(documentName).layout !== "portrait") return null;
+  const fields = fieldsFor(documentName, summary.doc?.type ?? summary.index?.type, summary.doc);
+  const automatic = rankDefault(fields);
+  return { fields, automatic: fields.find((field) => field.path === automatic)?.label ?? null };
+}
+
 /** What revealing a pin shares, for the Studio to say where the choice is made. */
 export type GrantScope =
   | { kind: "page"; page: string; entry: string }
   | { kind: "journal"; entry: string; pages: number }
-  | { kind: "pack"; pack: string; entry: string };
+  | { kind: "pack"; pack: string; entry: string }
+  | { kind: "actor"; name: string; level: number }
+  | { kind: "item"; name: string; level: number };
 
 /**
  * One page and its journal's listing, a whole journal, or a compendium document — which
@@ -200,12 +210,13 @@ export function grantScope(pin: DpPinFlags): GrantScope | null {
   }
   const named = summary.doc;
   if (!named) return null;
-  const [shown, entry] = grantTargets(
-    named,
-    pin.source.pageId,
-    pin.audience.ownershipSync.level
-  ).map((target) => target.doc);
+  const targets = grantTargets(named, pin.source.pageId, pin.audience.ownershipSync.level);
+  const [shown, entry] = targets.map((target) => target.doc);
   if (!shown) return null;
+  if (summary.documentName === "Actor" || summary.documentName === "Item") {
+    const kind = summary.documentName === "Actor" ? ("actor" as const) : ("item" as const);
+    return { kind, name: shown.name ?? "", level: targets[0].level };
+  }
   if (entry) return { kind: "page", page: shown.name ?? "", entry: entry.name ?? "" };
   return { kind: "journal", entry: shown.name ?? "", pages: shown.pages?.contents?.length ?? 0 };
 }
@@ -297,7 +308,9 @@ export async function pinAt(scene: any, source: DpSource, at: PinPlacement): Pro
     audience: audience.makeAudience({
       kind,
       ownershipSync: {
-        enabled: settings.get("defaultOwnershipSync"),
+        // An actor's pin starts with it off: a poster reads in place without any grant,
+        // and a grant lists the NPC in every sidebar it reaches (DESIGN A28, D2).
+        enabled: adapterOf(source).syncOnCreate && settings.get("defaultOwnershipSync"),
         level: 2,
       },
     }),
@@ -505,8 +518,9 @@ export function canUserOpen(anchorDoc: any, userId: string): boolean {
 
   const source = describeSource(pin.source).shown;
   if (!source) return false;
-  // OBSERVER is the level at which a text page actually opens; LIMITED is the tease.
-  if (source.testUserPermission?.(user, "OBSERVER") === true) return true;
+  // The level the document's own sheet asks for: for a journal, OBSERVER is the level at
+  // which a text page actually opens, and LIMITED is the tease.
+  if (source.testUserPermission?.(user, adapterForDoc(source).openLevel) === true) return true;
   return readsInPlace(pin) && canUserSee(anchorDoc, userId);
 }
 
@@ -549,6 +563,13 @@ export function patch(anchorDoc: any, changes: PinPatch): Promise<any> {
 export async function showToAudience(anchorDoc: any): Promise<void> {
   const pin = readPin(anchorDoc);
   if (!pin || !isGM()) return;
+
+  // Core shows journals only; anything else resolves without opening a window anywhere.
+  // An actor's or an item's pin is revealed by its audience, and reads in place.
+  if (pin.source.kind === "document" && !adapterOf(pin.source).canShow) {
+    notify({ key: "DP.notice.showJournalsOnly" }, "warn");
+    return;
+  }
 
   const source = await resolveSource(pin);
   if (!source) {
@@ -620,25 +641,17 @@ export async function openLocally(anchorDoc: any): Promise<void> {
   // The player-side half of the key glyph. A GM sees ⚿ on a chip whose player can see
   // the pin but not open the document; the player used to get core's generic refusal,
   // or nothing. Say what the state is — not a fault, a "not yet".
+  const adapter = adapterForDoc(source);
   const canOpen = source.testUserPermission
-    ? source.testUserPermission(g()?.user, "OBSERVER") === true
+    ? source.testUserPermission(g()?.user, adapter.openLevel) === true
     : true;
   if (!isGM() && !canOpen) {
     notify({ key: "DP.notice.cannotOpenYet" }, "info");
     return;
   }
 
-  // A page opens inside its parent's sheet, which is where its navigation lives. This
-  // branch takes BOTH page cases: a pin whose uuid names a page, and a pin on an entry
-  // with a page chosen — `resolveSource` has already resolved the second to the page.
-  if (source.documentName === "JournalEntryPage" && source.parent?.sheet) {
-    source.parent.sheet.render(true, { pageId: source.id });
-    return;
-  }
-  // So anything reaching here is an entry with no page chosen, or one whose chosen page
-  // has been deleted. Passing the stored id on would ask the sheet for a page that is
-  // not there; the entry opens where it opens.
-  source.sheet.render(true);
+  // Where it opens is the document's to say: a journal page inside its journal's sheet.
+  adapter.open(source);
 }
 
 /**
@@ -1076,14 +1089,32 @@ export async function retarget(anchorDoc: any, source: DpSource): Promise<boolea
 
   // The WHOLE source object, never a partial patch: `mergePin` deep-merges, so omitting
   // `pageId` would leave a page id of the OLD journal pointing into the new one. The
-  // texture follows only when the KIND changes: from one document to another, the icon
-  // the GM chose for this pin is part of the pin, like its size and its effect.
+  // same for `field`, which a source built by the picker, a menu or `/pin` does not name:
+  // left out, the text the GM chose for one actor would be read off the next — whatever
+  // that path holds there, a private biography included — and the automatic choice,
+  // which never picks GM text, would never be asked. The texture follows only when the
+  // KIND changes: from one document to another, the icon the GM chose for this pin is
+  // part of the pin, like its size and its effect.
   const keepIcon = before.source.kind === "document" && source.kind === "document";
+  // A pin that comes to show an actor starts with access off, as one placed on it does
+  // (D2): a journal shared with access on, retargeted onto an NPC, would otherwise list
+  // the NPC in every sidebar its audience reaches at the very next sync. Switching off
+  // never widens anything. A pin already on an actor keeps what the GM chose for it.
+  const syncOff =
+    before.audience.ownershipSync.enabled &&
+    adapterOf(before.source).syncOnCreate &&
+    !adapterOf(source).syncOnCreate;
   await store.update(
     anchorDoc,
-    { source },
+    {
+      source: { ...source, field: source.field ?? null },
+      ...(syncOff
+        ? { audience: { ownershipSync: { ...before.audience.ownershipSync, enabled: false } } }
+        : {}),
+    },
     keepIcon ? {} : { "texture.src": anchorTexture(source) }
   );
+  if (syncOff) notify({ key: "DP.notice.retargetSyncOff" }, "info");
 
   // The old uuid rides along precisely for this: the payload no longer names the old
   // document, so the sync cannot find it on its own any more. One call, not a sync and
@@ -1109,7 +1140,10 @@ export async function adoptTile(tileDoc: any, source: DpSource): Promise<void> {
         ? "prop"
         : settings.get("defaultMode"),
     source,
-    audience: audience.makeAudience({ kind: tileDoc.hidden ? "hidden" : "everyone" }),
+    audience: audience.makeAudience({
+      kind: tileDoc.hidden ? "hidden" : "everyone",
+      ownershipSync: { enabled: adapterOf(source).syncOnCreate, level: 2 },
+    }),
   };
   // A tile adopted as a prop is drawn at its own size from the first frame; freeze the
   // proportional look there, exactly as the migration does for an existing prop.

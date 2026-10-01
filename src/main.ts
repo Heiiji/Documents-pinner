@@ -12,7 +12,7 @@
 
 import { MODULE_ID } from "./const";
 import { logger } from "./log";
-import { cv, g, isOurs } from "./fvtt";
+import { cv, g } from "./fvtt";
 import { publicApi } from "./api";
 import * as settings from "./settings";
 import { concernsPins, definePinData } from "./data/PinData";
@@ -50,17 +50,27 @@ import {
 } from "./ui/entry-points";
 import { flashDomProp, setDomPropHover, syncSceneDim } from "./canvas/DomPropTier";
 import { onboardingReady } from "./ui/onboarding";
+import { sourceUpdateHandler } from "./sources/hooks";
+import { hookedDocumentNames } from "./sources/index";
 
 const log = logger("boot");
 
 declare const Hooks: any;
 
-/** Context-menu hooks core has used across generations. Unknown names never fire. */
+/**
+ * Context-menu hooks core has used across generations, for every directory a pin's source
+ * can be listed in: journals, actors, items — the sidebar's and a compendium window's,
+ * which fire the same family. Unknown names never fire.
+ */
 const CONTEXT_HOOKS = [
   "getJournalEntryContextOptions",
   "getJournalDirectoryEntryContext",
   "getJournalSheetPageContextOptions",
   "getJournalEntryPageContextOptions",
+  "getActorContextOptions",
+  "getActorDirectoryEntryContext",
+  "getItemContextOptions",
+  "getItemDirectoryEntryContext",
 ];
 
 Hooks.once("init", () => {
@@ -258,15 +268,15 @@ for (const hook of ["updateToken", "createToken", "deleteToken"]) {
   Hooks.on(hook, () => propManager().applyAlpha());
 }
 
-for (const type of ["JournalEntry", "JournalEntryPage"]) {
-  Hooks.on(`update${type}`, (doc: any, changed: any, options: any, userId: string) => {
-    if (isOurs(options)) return;
-    void onSourceOwnershipEdited(doc, changed, options, userId);
-    onSourceRenamed(doc, changed, options);
-    propManager().invalidate(doc.uuid);
-    refreshPinboard();
-  });
-}
+// Every type of document a pin can show: an edit to one may rename a pin, change who holds
+// it, or change what its card says — and for an actor, mostly does none of these.
+const onSourceUpdated = sourceUpdateHandler({
+  rebase: onSourceOwnershipEdited,
+  rename: onSourceRenamed,
+  invalidate: (uuid) => propManager().invalidate(uuid),
+  refresh: refreshPinboard,
+});
+for (const type of hookedDocumentNames()) Hooks.on(`update${type}`, onSourceUpdated);
 
 // A user connecting or disconnecting changes who is in an audience, and therefore what
 // every chip shows and which props this client should be drawing at all.

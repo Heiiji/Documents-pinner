@@ -61,6 +61,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   pin*: the journal is copied into a "Documents Pinner" folder and the copy is pinned, to
   be shared like any journal — choosing it again pins the same copy. A page of a
   compendium journal is chosen afterwards in Pin Studio, which now lists them.
+- **Pin a wanted poster: the bandit's portrait, his name and the bounty line from his
+  biography.** An actor or an item can now be pinned as a journal is — from its context
+  menu in the sidebar or a compendium window, its sheet's header, *Pin a document* or
+  `/pin`, and an item also by the modifier drag. The prop is a portrait card on the same
+  paper, with the same effects: its picture — an actor's portrait, else its token's — its
+  name, and the text you choose in Pin Studio's *Text shown*, which lists every rich-text
+  field your game system gives that kind of actor or item. *Automatic* prefers public
+  text, then a biography or a description, and never a field named for the GM; secret
+  sections reach only the document's owners and you. Its icon opens its sheet. *Pin a
+  document* gains chips — All · Journals · Actors · Items — and searches the world's
+  actors and items after its journals, then every kind of compendium; one some player
+  cannot open offers *Import & pin* into a folder of its own type. An item an actor owns
+  and a token's own actor cannot be pinned, and a drop of one says so.
 
 ### Changed
 
@@ -75,10 +88,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Aged Parchment and Sealed & Wax in a serif.** A terminal set in the interface font read
   as a letter held up to a lamp. Generic faces only, so they look right in every world
   with no font installed; a pin that should keep the old face can choose it in Pin Studio.
-- **Pins are stored in format 5 and presets in format 3, for the typeface and the reveal
-  sound.** Opening a scene updates its pins silently and the rest of the world is offered
-  once, as before; nothing changes on any map. A preset exported from this version and
-  imported into an older one is reported there as newer, and loses only its typeface.
+- **Pins are stored in format 5 and presets in format 3, for the typeface, the reveal
+  sound and the text an actor's or an item's card shows.** Opening a scene updates its
+  pins silently and the rest of the world is offered once, as before; nothing changes on
+  any map. A preset exported from this version and imported into an older one is reported
+  there as newer, and loses only its typeface.
 - **"Reveal all" asks first, and has left the footer.** It sat one button from "Hide all",
   and it is the one reveal whose slip is a whole scene's worth of spoilers — hiding again
   does not take back what the table has read. It is now in the bulk bar, apart from the
@@ -97,6 +111,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   client no longer asks the server for it. "Show to players" reaches only the players who
   can open it, and says when that leaves someone out. A PDF page from a compendium is
   always drawn as a card.
+- **Revealing an actor shares it at Limited at most, and a new actor pin starts with access
+  off.** Observer would open an NPC's whole sheet, stats included, so a reveal never grants
+  more than Limited, and the Audience tab offers Limited alone and says that what a
+  Limited sheet shows is your game system's choice. The poster reads in place without any
+  access, so granting it — which lists the actor in your players' sidebar — is yours to
+  switch on, pin by pin; a pin pointed at an actor from Pin Studio switches it off and
+  says so, and starts again on the automatic text. *Show to players* opens journals only:
+  the Pinboard no longer offers it on an actor's or an item's row, and `Shift+S` says so
+  rather than claiming it was shown.
+- **Alt-dragging an actor still places Foundry's hidden token.** Alt is the default drag
+  modifier, and Foundry already uses it on actors; an actor is pinned by dragging only
+  when the modifier is Ctrl or Shift, and the setting's hint says so. With no modifier
+  set, an actor drag still places a token. Items take the modifier as journals do.
 
 ### Fixed
 

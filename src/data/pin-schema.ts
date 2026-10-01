@@ -135,6 +135,7 @@ export function defaultSource(): DpSource {
     pageId: null,
     pdfPage: null,
     followName: true,
+    field: null,
   };
 }
 
@@ -231,6 +232,38 @@ function pageNumber(value: unknown): number | null {
   return n === null ? null : Math.floor(n);
 }
 
+/**
+ * The shape of a field path: up to eight identifiers, dotted. Validated here as a SHAPE —
+ * whether the document actually has that field is asked when the card is drawn, against
+ * the fields its type declares (`sources/fields.ts`), since only a running core knows.
+ */
+const FIELD_PATH = /^[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*){0,7}$/;
+const FIELD_PATH_MAX = 128;
+/** Segments that would walk off the data and into the object machinery behind it. */
+const FORBIDDEN_SEGMENT = new Set(["__proto__", "prototype", "constructor"]);
+
+/**
+ * Whether a string is a field path this module may follow: the shape above, no longer
+ * than `FIELD_PATH_MAX`, and no segment that names an object's machinery rather than its
+ * data. PURE; shared with the read in `sources/fields.ts`.
+ */
+export function isFieldPath(value: unknown): value is string {
+  if (typeof value !== "string" || value.length > FIELD_PATH_MAX) return false;
+  if (!FIELD_PATH.test(value)) return false;
+  return !value.split(".").some((segment) => FORBIDDEN_SEGMENT.has(segment));
+}
+
+/** `source.field`: a path, or null — with a warning when something unusable was stored. */
+function fieldPath(value: unknown, warnings: DpNotice[]): string | null {
+  if (value === null || value === undefined || value === "") return null;
+  if (isFieldPath(value)) return value;
+  warnings.push({
+    key: "DP.pin.warn.badField",
+    data: { path: "source.field", value: String(value).slice(0, 64) },
+  });
+  return null;
+}
+
 function normaliseSource(raw: unknown, warnings: DpNotice[], errors: DpNotice[]): DpSource {
   const d = defaultSource();
   const s = obj(raw);
@@ -257,6 +290,7 @@ function normaliseSource(raw: unknown, warnings: DpNotice[], errors: DpNotice[])
     // payload is stable — which is what keeps `planMigration` idempotent.
     pdfPage: pageNumber(s.pdfPage) ?? legacyPdfPage,
     followName: bool(s.followName, d.followName),
+    field: fieldPath(s.field, warnings),
   };
 
   // The anchor survives a source it cannot resolve — it draws a placeholder — but the

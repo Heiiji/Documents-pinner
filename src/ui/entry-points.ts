@@ -23,8 +23,10 @@ import { escapeHtml } from "../html";
 import * as api from "../api";
 import * as settings from "../settings";
 import { armAt } from "../apps/PlacementGhost";
-import { openPicker, packEntries } from "../apps/DocumentPicker";
+import { openPicker } from "../apps/DocumentPicker";
 import { readPin } from "../data/PinData";
+import { isRefusal } from "../sources/index";
+import { firstWorldMatch, packEntries, PINNABLE } from "../sources/search";
 
 /** Whether the configured drag modifier is currently held. */
 export function modifierHeld(event?: DragEvent | MouseEvent): boolean {
@@ -43,16 +45,39 @@ export function modifierHeld(event?: DragEvent | MouseEvent): boolean {
 }
 
 /**
+ * Whether a drop is core's whatever the modifier says: an Actor's, unless the modifier is
+ * Ctrl or Shift.
+ *
+ * Core makes a token of an Actor dropped on the map, and a HIDDEN token when Alt is held
+ * (RECALLED, unverified). Alt is this module's default modifier, so taking an Alt-dropped
+ * actor would take the GM's hidden-token gesture away — and under "no modifier", every
+ * token drop. Native drags are not hijacked (DESIGN §5.1). An actor is pinned from its
+ * menus, its sheet, the picker and `/pin`, and by drop when the modifier is one core does
+ * not use for actors.
+ */
+function leftToCore(data: any): boolean {
+  if (data?.type !== "Actor") return false;
+  const which = settings.get("dropModifier");
+  return which !== "ctrl" && which !== "shift";
+}
+
+/**
  * `dropCanvasData`. Returns `false` to suppress core's own handling.
  *
  * Anything we do not recognise, or any drop without the modifier, falls straight
- * through to core untouched.
+ * through to core untouched. A document the module knows but will not pin — an item an
+ * actor owns, a token's actor — is refused with a word, and swallowed: the gesture was
+ * ours, and leaving it to core would do something else the GM did not ask for.
  */
 export function onDropCanvasData(canvas: any, data: any, event?: DragEvent): boolean | void {
-  if (!isGM() || !modifierHeld(event)) return;
+  if (!isGM() || !modifierHeld(event) || leftToCore(data)) return;
 
-  const source = api.sourceFromDropData(data);
+  const source = api.dropOutcome(data);
   if (!source) return;
+  if (isRefusal(source)) {
+    notify({ key: source.refused }, "info");
+    return false;
+  }
 
   const point = {
     x: data?.x ?? canvas?.mousePosition?.x ?? 0,
@@ -68,11 +93,12 @@ export function onDropCanvasData(canvas: any, data: any, event?: DragEvent): boo
 }
 
 /**
- * "Pin to scene" in a journal sheet's header.
+ * "Pin to scene" in a journal's, an actor's or an item's sheet header.
  *
  * `getHeaderControlsApplicationV2` fires for every ApplicationV2, so the guard is on
  * the document type rather than on the application class — sheets get replaced by
- * systems and modules, document types do not.
+ * systems and modules, document types do not. Not on the sheet of an item an actor owns
+ * or of a token's actor: those cannot be pinned, and the button would only say so.
  */
 export function onGetHeaderControls(app: any, controls: any[]): void {
   if (!isGM()) return;
@@ -89,9 +115,10 @@ export function onGetHeaderControls(app: any, controls: any[]): void {
 }
 
 /**
- * Sidebar, page and compendium-window context menus. The hook name differs by collection,
- * so all of them wire here, with the application that fired the hook: a compendium window
- * fires the same hook as the sidebar, and only its `collection` says the row is in a pack.
+ * Sidebar, page and compendium-window context menus — journals', actors' and items'. The
+ * hook name differs by collection, so all of them wire here, with the application that
+ * fired the hook: a compendium window fires the same hook as the sidebar, and only its
+ * `collection` says the row is in a pack.
  */
 export function addContextOption(options: any[], app?: any): void {
   if (!isGM()) return;
@@ -158,8 +185,9 @@ function uuidFromContextTarget(target: any, app?: any): string | null {
 /**
  * `/pin <search>` in chat.
  *
- * Returns `false` to swallow the message when it matched, so the command never posts
- * itself to the log.
+ * The first match in the picker's order: a world journal or page, then an actor, then an
+ * item, then a compendium document. Returns `false` to swallow the message when it
+ * matched, so the command never posts itself to the log.
  */
 export function onChatMessage(_log: any, message: string): boolean | void {
   if (!isGM()) return;
@@ -172,18 +200,13 @@ export function onChatMessage(_log: any, message: string): boolean | void {
     return false;
   }
 
-  const needle = query.toLowerCase();
-  const candidates = (g()?.journal?.contents ?? []).flatMap((entry: any) => [
-    entry,
-    ...(entry.pages?.contents ?? []),
-  ]);
-  const found = candidates.find((doc: any) => doc.name?.toLowerCase().includes(needle));
+  const found = firstWorldMatch(query);
 
   // The world first, as ever; then the compendiums, from the index core already holds. A
   // match only in packs some player cannot open is not armed as a reference they will
   // see as a placeholder: the picker opens on the search, where its row offers to import.
-  const inPacks = found ? [] : packEntries(query).entries;
-  const uuid = found?.uuid ?? inPacks.find((entry) => !entry.pack?.locked)?.uuid;
+  const inPacks = found ? [] : packEntries(query, undefined, PINNABLE).entries;
+  const uuid = found ?? inPacks.find((entry) => !entry.pack?.locked)?.uuid;
   if (!uuid && inPacks.length) {
     openPicker({ search: query });
     return false;

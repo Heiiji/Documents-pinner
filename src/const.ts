@@ -26,7 +26,9 @@ export const MODULE_ID = "documents-pinner";
  * 5: `display.font` and `effect.revealSound`, a pin's own typeface and its own reveal
  *    sound. Null means "the preset decides" for both, and the NORMALISER supplies that
  *    null, so a version 4 payload on a player's client already draws and sounds exactly as
- *    it will once the primary GM's sweep has rewritten it.
+ *    it will once the primary GM's sweep has rewritten it. And `source.field`, which text
+ *    of an Actor or an Item the card shows; null means the automatic choice, and the
+ *    NORMALISER supplies it too. Version 5 was never released, so it carries all three.
  */
 export const SCHEMA_VERSION = 5;
 

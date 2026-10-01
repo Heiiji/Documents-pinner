@@ -33,6 +33,7 @@ import { anchorHidden, revealed, sameAudience, wouldReveal } from "../data/audie
 import type { DpAudience } from "../types/dp";
 import { readPin } from "../data/PinData";
 import { describeSource, type SourceSummary } from "../sources/describe";
+import { adapterOrJournal } from "../sources/index";
 import { releaseAnchor, syncAnchor } from "../data/ownership-sync";
 import { allPresets, findPreset } from "../effects/preset-library";
 import { swatchStyle } from "../effects/preset-css";
@@ -122,6 +123,7 @@ export function rowsFor(scene: any): PinboardRow[] {
       locked: doc.locked === true,
       thumbnail: thumbnailFor(doc, summary),
       icon: summary.icon,
+      canShow: adapterOrJournal(summary.documentName).canShow,
       users,
     };
   });
@@ -338,7 +340,9 @@ function menuMarkup(row: PinboardRow, at: MenuPlacement): string {
     ` style="${menuStyle(at)}">` +
     item("visibility", row.visible ? "DP.hud.hide" : "DP.hud.reveal") +
     item("spotlight", "DP.board.menuSpotlight") +
-    item("show", "DP.board.menuShow") +
+    // Not offered where core cannot show it — an actor, an item. `Shift+S` and the API,
+    // which cannot hide a choice, say so instead.
+    (row.canShow === false ? "" : item("show", "DP.board.menuShow")) +
     item("shape", "DP.board.menuShape") +
     (row.mode === "prop" ? item("fit", "DP.board.menuFit") : "") +
     item("locate", "DP.board.locate") +

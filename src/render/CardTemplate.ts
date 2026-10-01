@@ -76,6 +76,16 @@ export interface CardOptions {
   font?: string | null;
   /** Placeholder mode: the source is gone, so say so instead of drawing a blank sheet. */
   missing?: boolean;
+  /**
+   * A picture set above the title — an actor's portrait, an item's image. Already built,
+   * escaped and scrubbed, like the body; never raw input.
+   */
+  figureHtml?: string;
+  /**
+   * The portrait layout: a picture above the name, the text below. Derived from the source
+   * and exposed as `data-dp-layout` for the stylesheet; a page of text has none.
+   */
+  layout?: "portrait";
   /** The content does not fit the box, so the stylesheet fades its tail. */
   overflow?: boolean;
 }
@@ -125,8 +135,10 @@ export function cardHtml(options: CardOptions): string {
     // bloom and its technical caps are a property of the PAPER, not of any preset.
     ` data-dp-paper="${escapeAttr(options.paper)}"${attrs}` +
     `${options.missing ? ' data-dp-missing="true"' : ""}` +
+    `${options.layout ? ` data-dp-layout="${escapeAttr(options.layout)}"` : ""}` +
     `${options.overflow ? ' data-dp-overflow="true"' : ""} style="${escapeAttr(style)}">` +
-    `<div class="dp-card__sheet">${title}${body}</div>` +
+    `<div class="dp-card__sheet">${options.missing ? "" : (options.figureHtml ?? "")}` +
+    `${title}${body}</div>` +
     // Emitted only when the preset asks for it, so a parchment prop's markup is byte-
     // identical to what it was and the ten presets without an overlay pay nothing.
     (options.effectAttrs?.["data-dp-hud"] === "true"

@@ -15,7 +15,7 @@
  * add their own holder and write back, and the slower would erase the faster's claim.
  */
 
-import { DELETE_PREFIX, FLAGS, MODULE_ID, OWNERSHIP } from "../const";
+import { DELETE_PREFIX, FLAGS, MODULE_ID } from "../const";
 import { logger } from "../log";
 import {
   forcedDeletion,
@@ -44,6 +44,7 @@ import {
 } from "./ownership-plan";
 import { enqueue } from "./PinStore";
 import { readPin } from "./PinData";
+import { adapterForDoc, type GrantTarget } from "../sources/index";
 import { isPackUuid } from "../sources/uuid";
 
 const log = logger("grants");
@@ -141,57 +142,24 @@ function writeLedger(
   if (doc?.flags?.[MODULE_ID]?.[FLAGS.GRANTS] !== undefined) data[path] = forcedDeletion() ?? null;
 }
 
-/** One document an anchor's grant lands on, and the level it is raised to there. */
-export interface GrantTarget {
-  doc: any;
-  level: number;
-}
+export type { GrantTarget } from "../sources/index";
 
 /**
- * Where one anchor's grant lands, and at what level.
- *
- * The document the pin SHOWS gets the level its audience asks for. When that is a page,
- * its journal gets LIMITED beside it: enough for the journal to be listed in the player's
- * sidebar and for its sheet to open on the page — which a grant on the page alone does
- * not do (DESIGN A22) — and not enough to open any page that inherits from it, because
- * at LIMITED a text page is not even listed (DESIGN §4).
- *
- * It used to be the level on the journal, whatever page the pin showed. Every page with
- * `default: -1` inherits, so revealing page 3 of "Chapter 3 — GM notes" put the whole
- * chapter in every player's sidebar, and the sidebar access outlives the pin by design.
- *
- * A chosen page that no longer exists grants nothing. The card falls back to the
- * journal's first page, but a page the GM picked and then deleted is not a request to
- * share the whole journal.
+ * Where one anchor's grant lands, and at what level: the source's adapter says (for a
+ * journal, the page the pin shows and LIMITED on its journal beside it — DESIGN A22).
  */
 export function grantTargets(named: any, pageId: string | null, level: number): GrantTarget[] {
-  if (!named) return [];
-  let shown = named;
-  if (pageId && named.pages?.get) {
-    shown = named.pages.get(pageId);
-    if (!shown) return [];
-  }
-  const entry = shown.documentName === "JournalEntryPage" ? shown.parent : null;
-  if (!entry) return [{ doc: shown, level }];
-  return [
-    { doc: shown, level },
-    { doc: entry, level: Math.min(level, OWNERSHIP.LIMITED) },
-  ];
+  return adapterForDoc(named).grantTargets(named, pageId, level);
 }
 
 /**
- * Every document a grant for this source can sit on: its journal and each of its pages.
- *
- * A pin's grants never leave that family — choosing another page moves them between its
- * members — so this is the whole set a stale grant can be found in without walking the
- * world. Changing the pin's DOCUMENT is the one move that leaves it, and `syncAnchor`
- * takes the old uuid for exactly that.
+ * Every document a grant for this source can sit on — for a journal, itself and each of
+ * its pages. A pin's grants never leave that family, so this is the whole set a stale
+ * grant can be found in without walking the world. Changing the pin's DOCUMENT is the one
+ * move that leaves it, and `syncAnchor` takes the old uuid for exactly that.
  */
 function familyOf(doc: any): any[] {
-  if (!doc) return [];
-  const entry = doc.documentName === "JournalEntryPage" ? (doc.parent ?? null) : doc;
-  if (!entry) return [doc];
-  return [entry, ...(entry.pages?.contents ?? [])];
+  return doc ? adapterForDoc(doc).family(doc) : [];
 }
 
 /** Compendium ownership is role-based and pack-wide: there is no per-user grant to make. */
@@ -485,8 +453,8 @@ export async function reconcile(): Promise<number> {
 /**
  * Every world document that carries a ledger.
  *
- * Only the collections a v1 pin can target are walked. Actors, items and tables become
- * sources through the adapter interface later, and this list grows with it.
+ * The collections a pin's source can be in — journals and their pages, actors, items —
+ * and scenes and tables beside them, which cost nothing to check.
  */
 function sourcesWithLedger(): any[] {
   const game = g();

@@ -37,8 +37,9 @@ import { fontChoices, fontLabel, fontOptionsMarkup } from "../effects/typeface";
 import { registeredFontFamilies } from "../render/AssetInliner";
 import { playRevealSound, revealSoundOf } from "../canvas/PropManager";
 import { soundPath } from "../normalise";
-import { pdfPageCount, pdfSourceOf } from "../render/PdfPage";
+import { pdfPageCount } from "../render/PdfPage";
 import { describeSource, pdfSourceForPin } from "../sources/describe";
+import { adapterForDoc, adapterOrJournal } from "../sources/index";
 import { chipsMarkup, describeChips } from "./chips";
 import { openPicker } from "./DocumentPicker";
 import { chipUsersFor } from "./PinHUD";
@@ -186,39 +187,69 @@ export interface StudioOptions {
   fonts?: string[];
   /** Whether this core has a file browser to choose a sound with. No browser, no button. */
   canBrowse?: boolean;
+  /**
+   * The text fields of the actor or item a portrait pin shows, and the one the automatic
+   * choice reads; absent for a journal or an image, which have pages or nothing instead.
+   */
+  fields?: api.FieldChoices | null;
+}
+
+/**
+ * Which text of an actor or an item lies on the map, below its picture and its name: one
+ * of the HTML fields its game system declares, or the automatic choice — named, so the GM
+ * sees what "automatic" is before choosing anything else.
+ */
+function textField(pin: DpPinFlags, fields: api.FieldChoices): string {
+  return field(
+    "DP.studio.textShown",
+    select("source.field", pin.source.field ?? "", [
+      {
+        value: "",
+        label: t("DP.studio.textAutomatic", {
+          label: fields.automatic ?? t("DP.studio.textNone"),
+        }),
+      },
+      ...fields.fields.map((choice) => ({ value: choice.path, label: choice.label })),
+    ]),
+    "DP.studio.textShownHint"
+  );
 }
 
 function contentTab(pin: DpPinFlags, options: StudioOptions, attrs = ""): string {
   const summary = describeSource(pin.source);
   const isPage = summary.isPage;
   const pages = options.pages ?? [];
+  // A portrait card has a text to choose, and no page and no PDF.
+  const portrait = options.fields ?? null;
 
   // Removed rather than disabled, unlike the PDF-inert controls on the Appearance tab.
   // A15 disabled a whole tab because a blank tab reads as broken; one absent field among
   // six reads as "not applicable", which is what it is.
-  const pageField = pages.length
-    ? field(
-        "DP.studio.page",
-        select("source.pageId", pin.source.pageId ?? "", [
-          { value: "", label: t("DP.studio.pageFirst") },
-          ...pages.map((page) => ({
-            value: page.id,
-            // The raw page type beside the name, only where it disambiguates: two pages
-            // called "Map" can be a text page and an image, and the list cannot say which.
-            label:
-              page.type === "text"
-                ? page.name
-                : `${page.name} (${tOr(`DP.pageType.${page.type}`, page.type)})`,
-          })),
-        ]),
-        "DP.studio.pageHint"
-      )
-    : isPage
-      ? `<p class="dp-studio__note">${escapeHtml(t("DP.studio.pageIsOne"))}</p>`
-      : "";
+  const pageField = portrait
+    ? textField(pin, portrait)
+    : pages.length
+      ? field(
+          "DP.studio.page",
+          select("source.pageId", pin.source.pageId ?? "", [
+            { value: "", label: t("DP.studio.pageFirst") },
+            ...pages.map((page) => ({
+              value: page.id,
+              // The raw page type beside the name, only where it disambiguates: two pages
+              // called "Map" can be a text page and an image, and the list cannot say which.
+              label:
+                page.type === "text"
+                  ? page.name
+                  : `${page.name} (${tOr(`DP.pageType.${page.type}`, page.type)})`,
+            })),
+          ]),
+          "DP.studio.pageHint"
+        )
+      : isPage
+        ? `<p class="dp-studio__note">${escapeHtml(t("DP.studio.pageIsOne"))}</p>`
+        : "";
 
   const pdfField =
-    isPdfPin(pin) || options.shownIsPdf
+    !portrait && (isPdfPin(pin) || options.shownIsPdf)
       ? field(
           "DP.studio.pdfPage",
           `<input type="number" name="source.pdfPage" min="1"` +
@@ -286,9 +317,15 @@ function isPdfPin(pin: DpPinFlags): boolean {
   return pdfSourceForPin(pin) !== null;
 }
 
+/**
+ * The PDF a shown document is, asked of its own adapter: an actor whose game system
+ * names a type "pdf" is not one.
+ */
+const pdfOf = (shown: any): string | null => (shown ? adapterForDoc(shown).pdf(shown) : null);
+
 /** How many pages the PDF a pin shows has, or 0 when there is no answer. */
 async function pdfPageCountOf(shown: any): Promise<number> {
-  const src = pdfSourceOf(shown);
+  const src = pdfOf(shown);
   if (!src) return 0;
   try {
     return await pdfPageCount(src);
@@ -537,8 +574,12 @@ function grantNote(pin: DpPinFlags): string {
       ? t("DP.studio.grantsPack", { pack: scope.pack, entry: scope.entry })
       : scope.kind === "page"
         ? t("DP.studio.grantsPage", { page: scope.page, entry: scope.entry })
-        : t("DP.studio.grantsJournal", { entry: scope.entry }) +
-          (scope.pages > 1 ? ` ${t("DP.studio.grantsJournalHint")}` : "");
+        : scope.kind === "actor" || scope.kind === "item"
+          ? t(scope.kind === "actor" ? "DP.studio.grantsActor" : "DP.studio.grantsItem", {
+              name: scope.name,
+            })
+          : t("DP.studio.grantsJournal", { entry: scope.entry }) +
+            (scope.pages > 1 ? ` ${t("DP.studio.grantsJournalHint")}` : "");
   return `<p class="dp-studio__note" data-dp-grants="${scope.kind}">${escapeHtml(text)}</p>`;
 }
 
@@ -553,6 +594,29 @@ function grantNote(pin: DpPinFlags): string {
 function fogNote(pin: DpPinFlags): string {
   if (pin.mode !== "prop" || isPdfPin(pin)) return "";
   return `<p class="dp-studio__note" data-dp-fog="true">${escapeHtml(t("DP.studio.fogNote"))}</p>`;
+}
+
+/**
+ * The level a reveal grants. An actor is offered Limited alone, since that is all it is
+ * ever granted (`grantTargets` caps it): Observer would open an NPC's whole sheet, and a
+ * choice the grant would not honour is worse than none.
+ */
+function syncLevelField(pin: DpPinFlags): string {
+  const documentName =
+    pin.source.kind === "document" ? describeSource(pin.source).documentName : null;
+  const capped = adapterOrJournal(documentName).maxGrant < 2;
+  return field(
+    "DP.studio.syncLevel",
+    select(
+      "audience.ownershipSync.level",
+      capped ? "1" : String(pin.audience.ownershipSync.level),
+      [
+        ...(capped ? [] : [{ value: "2", label: t("DP.studio.syncObserver") }]),
+        { value: "1", label: t("DP.studio.syncLimited") },
+      ]
+    ),
+    capped ? "DP.studio.syncLevelActorHint" : "DP.studio.syncLevelHint"
+  );
 }
 
 function audienceTab(doc: any, pin: DpPinFlags, attrs = ""): string {
@@ -582,14 +646,7 @@ function audienceTab(doc: any, pin: DpPinFlags, attrs = ""): string {
       "DP.studio.syncHint"
     ) +
     grantNote(pin) +
-    field(
-      "DP.studio.syncLevel",
-      select("audience.ownershipSync.level", String(pin.audience.ownershipSync.level), [
-        { value: "2", label: t("DP.studio.syncObserver") },
-        { value: "1", label: t("DP.studio.syncLimited") },
-      ]),
-      "DP.studio.syncLevelHint"
-    ) +
+    syncLevelField(pin) +
     // No "remember who has discovered it": `audience.sticky` is read only under the
     // `discovered` kind, which this tab deliberately does not offer (A9), so the box was
     // a control that could not be honoured.
@@ -760,6 +817,8 @@ export function valueOf(element: HTMLInputElement | HTMLSelectElement): unknown 
   }
   // `ownershipSync.level` is the one select carrying a number rather than an enum.
   if (element.name.endsWith(".level")) return Number(element.value);
+  // "Automatic" is the absence of a choice, not a field called "".
+  if (element.name === "source.field") return element.value || null;
   return element.value;
 }
 
@@ -946,7 +1005,8 @@ export function definePinStudio(): any {
             // markup builder must stay synchronous and world-free. A count that fails to
             // arrive leaves the field with no ceiling, which is still a usable control.
             pdfPages: await pdfPageCountOf(shown),
-            shownIsPdf: pdfSourceOf(shown) !== null,
+            shownIsPdf: pdfOf(shown) !== null,
+            fields: api.fieldChoices(pin),
             icons: noteIcons(),
             fonts: registeredFontFamilies(),
             canBrowse: !!ns("applications.apps.FilePicker.implementation"),

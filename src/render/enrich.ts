@@ -239,10 +239,29 @@ export async function enrichFor(source: any, text: string): Promise<EnrichedCont
     rolls: true,
     embeds: true,
     relativeTo: source,
-    rollData: source?.parent?.getRollData?.() ?? {},
+    rollData: rollDataOf(source),
   });
 
   return { html: sanitise(html, isOwner), isOwner };
+}
+
+/**
+ * The data inline rolls read. An actor's or an item's own — a `[[/r 1d20 + @abilities.str.mod]]`
+ * in a biography reads that actor's, as its sheet would — and a journal page's parent's,
+ * as it always was.
+ *
+ * A system's `getRollData` runs its own derived data, which on a player's client can
+ * throw — a value it may not see, a preparation that has not run. A card must not fail to
+ * draw for a roll it may not even contain, so a throw reads as no roll data at all.
+ */
+function rollDataOf(source: any): Record<string, unknown> {
+  const own = source?.documentName === "Actor" || source?.documentName === "Item";
+  try {
+    return (own ? source?.getRollData?.() : source?.parent?.getRollData?.()) ?? {};
+  } catch (error) {
+    log.warn(`no roll data for ${source?.uuid}; inline rolls read none`, error);
+    return {};
+  }
 }
 
 /**

@@ -219,6 +219,14 @@ describe("syncDomTier", () => {
     expect(resolveCard).toHaveBeenCalledTimes(2);
   });
 
+  it("re-resolves when the text an actor or an item shows changes", async () => {
+    syncDomTier([entry()]);
+    await settle();
+    syncDomTier([entry({ pin: pin({ source: { ...pin().source, field: "details.notes" } }) })]);
+    await settle();
+    expect(resolveCard).toHaveBeenCalledTimes(2);
+  });
+
   it("re-resolves when the PDF page changes", async () => {
     syncDomTier([entry()]);
     await settle();

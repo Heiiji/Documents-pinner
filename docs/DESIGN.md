@@ -20,13 +20,29 @@ Three requirements shape everything downstream:
 2. **Subtle, immersive per-pin effects.**
 3. A stack capable of carrying those effects.
 
+What can be pinned, from the world or from a compendium:
+
+- **A journal, or one of its pages** — the card is the page: text, an image, a PDF page.
+- **An Actor** — a wanted poster: its portrait, its name, and one text of its system data
+  the GM chooses (a public biography, by default). A reveal grants it Limited at most.
+- **An Item** — a found object: its picture, its name and its description.
+- **An image file** with no document behind it — a map scrap.
+
+Each kind of document answers for itself through a source adapter (`src/sources/`): how it
+is found, what its card holds, which sheet opens it and at what level, where a reveal's
+grant lands, which edits redraw it. Handing an item over, or what a Limited actor sheet
+shows, stays the game system's business.
+
 ### 1.1 Out of scope
 
 - Editing document content from the map. Props are a view; the sheet is the editor.
 - Replacing core Map Notes. Native drag-to-canvas keeps making a plain `Note`; we add a
   modified gesture and a one-click "adopt this note" path instead.
 - Player-authored pins. Players read; only the GM places and reveals.
-- Rolling a pinned RollTable from the map. That needs OWNER, which we never grant.
+- Pinning a RollTable, a Scene or a Macro. Rolling a table from the map needs OWNER,
+  which we never grant; a scene and a macro have nothing a card could show.
+- Pinning an item an actor owns, or a token's own actor. Their ownership is their
+  parent's, so a grant would land on the wrong document; they are refused with a notice.
 - Animated video content inside a prop.
 - Guaranteeing secrecy beyond what core Foundry itself guarantees. See §3.
 

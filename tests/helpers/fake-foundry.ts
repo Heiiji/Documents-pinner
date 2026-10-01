@@ -1069,6 +1069,11 @@ export interface FakePackEntry {
   _id: string;
   name: string;
   pages?: FakePackPage[];
+  /** An Actor's or an Item's artwork and system subtype, which its index entry carries. */
+  img?: string;
+  type?: string;
+  /** An Actor's or an Item's system data, once loaded. */
+  system?: Record<string, unknown>;
 }
 
 export interface FakePackOptions {
@@ -1092,7 +1097,8 @@ export interface FakePackOptions {
  * A `CompendiumCollection` (TYPES, client/documents/collections/compendium-collection.d.mts).
  *
  * - `index` is a Collection of FROZEN PLAIN OBJECTS carrying only a JournalEntry's default
- *   index fields — `_id`, `uuid`, `name`, `sort`, `folder` (:517-520; journal-entry.d.mts:35).
+ *   index fields — `_id`, `uuid`, `name`, `sort`, `folder` (:517-520; journal-entry.d.mts:35)
+ *   — and an Actor's or Item's `img` and `type` beside them (actor.d.mts:40, item.d.mts:41).
  *   No `id`, no `documentName`, no `pages`, no methods. TYPES.
  * - `get(id)` answers from the document cache only — what a load put there, for the five
  *   minutes core keeps it (:52-57, :151-155; the cache RECALLED). `holdInCache` puts a
@@ -1111,6 +1117,7 @@ export function fakePack(options: FakePackOptions): any {
   const cache = new FakeCollection<any>();
   const index = new FakeCollection<any>();
   const uuidOf = (id: string) => `Compendium.${options.id}.${documentName}.${id}`;
+  const portrait = documentName === "Actor" || documentName === "Item";
   const fillIndex = () => {
     for (const entry of entries) {
       index.set(
@@ -1121,6 +1128,7 @@ export function fakePack(options: FakePackOptions): any {
           name: entry.name,
           sort: 0,
           folder: null,
+          ...(portrait ? { img: entry.img ?? null, type: entry.type ?? "base" } : {}),
         })
       );
     }
@@ -1128,6 +1136,19 @@ export function fakePack(options: FakePackOptions): any {
   if (!options.unindexed) fillIndex();
 
   const build = (entry: FakePackEntry) => {
+    if (portrait) {
+      return systemDoc(documentName, {
+        id: entry._id,
+        uuid: uuidOf(entry._id),
+        name: entry.name,
+        type: entry.type ?? "base",
+        img: entry.img,
+        system: entry.system ?? {},
+        pack: options.id,
+        // Pack documents answer by ROLE, through the pack (document.d.mts:342-358).
+        permission: (user: any, level: unknown) => pack.testUserPermission(user, level),
+      });
+    }
     const doc: any = {
       _id: entry._id,
       id: entry._id,
@@ -1250,13 +1271,24 @@ export interface InstalledSources {
  */
 export function installSources(
   world: InstalledWorld,
-  options: { packs?: any[]; journals?: any[] } = {}
+  options: {
+    packs?: any[];
+    journals?: any[];
+    actors?: any[];
+    items?: any[];
+    /** `game.model`: a template.json system's data, per document name and type. */
+    model?: Record<string, Record<string, unknown>>;
+  } = {}
 ): InstalledSources {
   const game = world.game;
   const packs = new FakeCollection<any>();
   for (const pack of options.packs ?? []) packs.set(pack.collection, pack);
   const journal: any = new FakeCollection<any>();
   for (const entry of options.journals ?? []) journal.set(entry.id, entry);
+  const actors: any = new FakeCollection<any>();
+  for (const actor of options.actors ?? []) actors.set(actor.id, actor);
+  const items: any = new FakeCollection<any>();
+  for (const item of options.items ?? []) items.set(item.id, item);
 
   const installed: InstalledSources = {
     packs,
@@ -1268,29 +1300,42 @@ export function installSources(
   };
 
   const folders = new FakeCollection<any>();
-  journal.importFromCompendium = async (pack: any, id: string, updateData: any = {}) => {
-    installed.imports.push({ pack: pack.collection, id, updateData });
-    const source = await pack.getDocument(id);
-    if (!source) return undefined;
-    const copy = ownedDoc({
-      id: `copy-${id}`,
-      uuid: `JournalEntry.copy-${id}`,
-      documentName: pack.documentName,
-      name: source.name,
-      folder: null,
-      ownership: { [game.user.id]: OWNERSHIP_LEVELS.OWNER },
-      _stats: { compendiumSource: source.uuid },
-    });
-    copy.pages = new FakeCollection<any>();
-    applyUpdate(copy, updateData);
-    journal.set(copy.id, copy);
-    return copy;
-  };
+  const importer =
+    (collection: any, documentName: string) =>
+    async (pack: any, id: string, updateData: any = {}) => {
+      installed.imports.push({ pack: pack.collection, id, updateData });
+      const source = await pack.getDocument(id);
+      if (!source) return undefined;
+      const data = {
+        id: `copy-${id}`,
+        uuid: `${documentName}.copy-${id}`,
+        name: source.name,
+        folder: null,
+        ownership: { [game.user.id]: OWNERSHIP_LEVELS.OWNER },
+        _stats: { compendiumSource: source.uuid },
+      };
+      const copy =
+        documentName === "JournalEntry"
+          ? ownedDoc({ ...data, documentName: pack.documentName })
+          : systemDoc(documentName, { ...data, type: source.type, img: source.img });
+      if (documentName === "JournalEntry") copy.pages = new FakeCollection<any>();
+      applyUpdate(copy, updateData);
+      collection.set(copy.id, copy);
+      return copy;
+    };
+  journal.importFromCompendium = importer(journal, "JournalEntry");
+  actors.importFromCompendium = importer(actors, "Actor");
+  items.importFromCompendium = importer(items, "Item");
 
   const worldDoc = (uuid: string) => {
     for (const entry of journal.values()) {
       if (entry.uuid === uuid) return entry;
       for (const page of entry.pages?.values?.() ?? []) if (page.uuid === uuid) return page;
+    }
+    for (const doc of [...actors.values(), ...items.values()]) {
+      if (doc.uuid === uuid) return doc;
+      // An actor's owned items, by their embedded uuid (`Actor.a.Item.i`).
+      for (const owned of doc.items?.values?.() ?? []) if (owned.uuid === uuid) return owned;
     }
     return null;
   };
@@ -1322,9 +1367,23 @@ export function installSources(
 
   game.packs = packs;
   game.journal = journal;
+  game.actors = actors;
+  game.items = items;
   game.folders = folders;
-  game.collections = new FakeCollection<any>([["JournalEntry", journal]]);
+  game.model = options.model ?? {};
+  game.collections = new FakeCollection<any>([
+    ["JournalEntry", journal],
+    ["Actor", actors],
+    ["Item", items],
+  ]);
   const foundry = (globalThis as any).foundry;
+  // `foundry.data.fields` (TYPES, client/data/fields.d.mts:69-72 re-exporting the common
+  // fields); `CONST.DEFAULT_TOKEN` (TYPES, common/constants.d.mts:316).
+  foundry.data.fields = DATA_FIELDS;
+  foundry.CONST.DEFAULT_TOKEN = DEFAULT_TOKEN;
+  const config = (globalThis as any).CONFIG;
+  config.Actor = documentConfig(ACTOR_ICON);
+  config.Item = documentConfig(ITEM_ICON);
   foundry.utils.fromUuidSync = fromUuidSync;
   foundry.utils.fromUuid = fromUuid;
   foundry.documents = {
@@ -1376,4 +1435,167 @@ export function fakeJournal(options: {
     });
   }
   return entry;
+}
+
+// ---------------------------------------------------------------------------
+// Actors, items and their system data
+// ---------------------------------------------------------------------------
+
+/**
+ * `foundry.data.fields`, the classes field discovery tells apart (TYPES,
+ * common/data/fields.d.mts): `HTMLField extends StringField` (:5555), `SchemaField` with its
+ * `fields` (:1243, :1280), `DataModelSchemaField extends SchemaField` (:3251) and
+ * `EmbeddedDataField extends DataModelSchemaField` (:3434), whose fields are its model's;
+ * `ArrayField` (:2818) and `TypedSchemaField extends DataField` (:6448), which have no
+ * single path to walk. Every field carries a `label` and a `hint` (:148-158).
+ */
+class DataField {
+  label: string;
+  hint: string;
+  constructor(options: { label?: string; hint?: string } = {}) {
+    this.label = options.label ?? "";
+    this.hint = options.hint ?? "";
+  }
+}
+class StringField extends DataField {}
+class HTMLField extends StringField {}
+class SchemaField extends DataField {
+  fields: Record<string, DataField>;
+  constructor(fields: Record<string, DataField>, options: { label?: string; hint?: string } = {}) {
+    super(options);
+    this.fields = fields;
+  }
+}
+class DataModelSchemaField extends SchemaField {}
+class EmbeddedDataField extends DataModelSchemaField {
+  constructor(model: { schema: SchemaField }, options: { label?: string } = {}) {
+    super(model.schema.fields, options);
+  }
+}
+class ArrayField extends DataField {
+  constructor(
+    readonly element: DataField,
+    options: { label?: string } = {}
+  ) {
+    super(options);
+  }
+}
+class TypedSchemaField extends DataField {
+  constructor(
+    readonly types: Record<string, unknown>,
+    options: { label?: string } = {}
+  ) {
+    super(options);
+  }
+}
+export const DATA_FIELDS = {
+  DataField,
+  StringField,
+  HTMLField,
+  SchemaField,
+  DataModelSchemaField,
+  EmbeddedDataField,
+  ArrayField,
+  TypedSchemaField,
+};
+
+/** A system data model class, as `CONFIG[documentName].dataModels[type]` holds one: its static `schema`. */
+export function dataModel(fields: Record<string, DataField>): { schema: SchemaField } {
+  return { schema: new SchemaField(fields) };
+}
+
+/** `CONST.DEFAULT_TOKEN` (TYPES, common/constants.d.mts:316). */
+export const DEFAULT_TOKEN = "icons/svg/mystery-man.svg";
+/** `Actor.DEFAULT_ICON` = `CONST.DEFAULT_TOKEN` (TYPES, common/documents/actor.d.mts:58-62). */
+const ACTOR_ICON = DEFAULT_TOKEN;
+/** `Item.DEFAULT_ICON` (TYPES, common/documents/item.d.mts:57-61). */
+const ITEM_ICON = "icons/svg/item-bag.svg";
+
+/**
+ * `CONFIG.Actor` / `CONFIG.Item` (TYPES, client/config.d.mts:735-752): the document class's
+ * `DEFAULT_ICON` and `getDefaultArtwork` (actor.d.mts:64-69, item.d.mts:69 — core's
+ * versions, which a system may override), the system's `dataModels` and `typeLabels`, empty
+ * until a test registers some.
+ */
+function documentConfig(icon: string): any {
+  return {
+    documentClass: {
+      DEFAULT_ICON: icon,
+      getDefaultArtwork: () => ({ img: icon, texture: { src: icon } }),
+    },
+    dataModels: {} as Record<string, unknown>,
+    typeLabels: {} as Record<string, string>,
+  };
+}
+
+/**
+ * An Actor or an Item (TYPES, client/documents/actor.d.mts:381-400, :1247, :1321): `type`, a
+ * system subtype; `img`; `system` data; `getRollData()`; a sheet that records its renders;
+ * `parent`, null unless it is owned; `isToken`, false unless synthetic; `isOwner`, for
+ * `game.user` (client-document.d.mts:77). Permission is COMPUTED, as `ownedDoc`'s — an owned
+ * document's is its parent's, and a pack document's is the pack's role-based answer
+ * (`permission`) — never `fakeDoc`'s permissive default.
+ */
+export function systemDoc(documentName: string, options: Record<string, any>): any {
+  const { permission, ...rest } = options;
+  const doc = ownedDoc({
+    documentName,
+    type: "base",
+    img: null,
+    system: {},
+    parent: null,
+    isToken: false,
+    ...rest,
+  });
+  if (permission) doc.testUserPermission = permission;
+  else if (doc.parent) {
+    doc.testUserPermission = (user: any, level: unknown) =>
+      doc.parent.testUserPermission(user, level);
+  }
+  doc.getRollData = () => ({ ...doc.system });
+  doc.items ??= new FakeCollection<any>();
+  Object.defineProperty(doc, "isOwner", {
+    get: () => doc.testUserPermission((globalThis as any).game?.user, "OWNER") === true,
+    enumerable: false,
+    configurable: true,
+  });
+  return doc;
+}
+
+/** A world Actor; `token` is its prototype token's texture, its `img` unless given. */
+export function fakeActor(options: {
+  id: string;
+  name: string;
+  type?: string;
+  img?: string | null;
+  token?: string | null;
+  system?: Record<string, unknown>;
+  ownership?: Record<string, number>;
+  [key: string]: unknown;
+}): any {
+  const { token, ...rest } = options;
+  return systemDoc("Actor", {
+    uuid: `Actor.${options.id}`,
+    prototypeToken: { texture: { src: token === undefined ? (options.img ?? null) : token } },
+    ...rest,
+  });
+}
+
+/** A world Item, or one owned by `parent` — whose uuid is then embedded in the actor's. */
+export function fakeItem(options: {
+  id: string;
+  name: string;
+  type?: string;
+  img?: string | null;
+  system?: Record<string, unknown>;
+  ownership?: Record<string, number>;
+  parent?: any;
+  [key: string]: unknown;
+}): any {
+  const item = systemDoc("Item", {
+    uuid: options.parent ? `${options.parent.uuid}.Item.${options.id}` : `Item.${options.id}`,
+    ...options,
+  });
+  options.parent?.items?.set(options.id, item);
+  return item;
 }

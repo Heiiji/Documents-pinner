@@ -33,6 +33,16 @@ export interface DpSource {
   pdfPage: number | null;
   /** Keep the label in step with the source document's name. */
   followName: boolean;
+  /**
+   * Which text of an Actor or an Item the card shows: the dotted path of one of its
+   * system data's HTML fields, under `system` — `details.biography.public`. Null means
+   * the automatic choice, made when the card is drawn (`sources/fields.ts`). Meaningless
+   * for a journal or an image, where it stays null.
+   *
+   * Optional in this type only so a source built for the placement ghost need not name
+   * one: the NORMALISER writes it on every stored payload.
+   */
+  field?: string | null;
 }
 
 export interface DpDisplay {

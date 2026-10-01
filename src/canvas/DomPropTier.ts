@@ -112,6 +112,8 @@ function contentKeyOf(entry: DomPropEntry): string {
     // card never re-resolves.
     pin.source.pageId ?? "",
     pin.source.pdfPage ?? "",
+    // Which text of an Actor or an Item the card shows, chosen like a page.
+    pin.source.field ?? "",
     pin.mode,
     pin.effect.id,
     pin.effect.intensity,

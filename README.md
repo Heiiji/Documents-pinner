@@ -1,7 +1,7 @@
 # Documents Pinner
 
-Pin any journal, page or image onto the map — as a small **icon** players click, or as a
-full-size **readable prop lying on the scene**.
+Pin any journal, page, actor, item or image onto the map — as a small **icon** players
+click, or as a full-size **readable prop lying on the scene**.
 
 Per-pin visibility the GM changes in one click. Foundry VTT **v14+**.
 
@@ -45,8 +45,8 @@ would be worse than saying nothing.
 
 ## Use
 
-**Alt-drag** a journal or page from the sidebar onto the map. A ghost of the real prop
-follows the cursor; click to place.
+**Alt-drag** a journal, a page or an item from the sidebar onto the map. A ghost of the
+real prop follows the cursor; click to place.
 
 **A new pin is visible to players the moment it lands.** That is the default of the
 *Default visibility* setting. Press `V` while placing to put this one down hidden, or set
@@ -69,7 +69,7 @@ sidebar — so if you prepare scenes while players are connected, change the def
 | `Alt+Shift+V` / `Alt+M` / `Alt+Shift+F` | cycle audience · switch shape · fit to content |
 | hold `Alt` | peek: props fade so the map can be read (players too) |
 | *Reveal the next hidden pin* | Reveal next from anywhere, in the Pinboard's view when it is open — no key until you give it one in Configure Controls |
-| `/pin <name>` | place by name from chat — a world journal or page, else a compendium journal |
+| `/pin <name>` | place by name from chat — a world journal or page, then an actor, then an item, else a compendium document |
 
 | Pinboard | |
 |---|---|
@@ -110,8 +110,23 @@ their Environment volume — you hear it through ▶, since your own screen neve
 arrive — and must be a file on your own server: a shared preset naming a web address is
 refused on import.
 
-Also: a journal sheet header button, the Notes scene controls, sidebar context menus, a
-checkbox on any tile's config sheet to adopt it, and a button on a map note to convert it.
+**An actor becomes a wanted poster, an item a found object.** The prop shows its picture
+— an actor's portrait, else its token's — its name, and one of its texts: Pin Studio's
+*Text shown* lists every rich-text field your game system gives that kind of actor or
+item, and *Automatic* picks public text first, then a biography or a description, never a
+field named for the GM. Its secret sections reach only its owners and you. Revealing an
+actor shares it at Limited at most, and a new actor pin — or a pin pointed at an actor
+from Pin Studio — starts with *Grant document access* off: the poster reads in place
+without it. An actor is pinned from its context
+menu, its sheet, *Pin a document* or `/pin`; dragging one onto the map stays Foundry's
+token unless the drag modifier is Ctrl or Shift.
+
+*Pin a document* searches journals, actors and items — the world's, then every
+compendium's from two letters — with a chip to show one kind alone.
+
+Also: a header button on journal, actor and item sheets, the Notes scene controls,
+context menus in the sidebar and in compendium windows, a checkbox on any tile's config
+sheet to adopt it, and a button on a map note to convert it.
 
 **Two surfaces for visibility.** The HUD on a selected pin answers *this one, now*; the
 Pinboard answers *the whole scene*, with bulk select and a hand-sorted order that doubles
@@ -133,7 +148,7 @@ Anything about your machine is per-client; anything about how the table plays is
 | Texture memory budget | client | Past it, the least-recently-seen props drop detail |
 | Reduce detail automatically | client | One step down if the frame rate will not hold |
 | Console detail | client | `Debug` is what a useful bug report needs |
-| Drag-to-pin modifier | client | Alt, Ctrl, Shift, none |
+| Drag-to-pin modifier | client | Alt, Ctrl, Shift, none — an actor only with Ctrl or Shift |
 | Default shape / visibility | world | What a newly placed document becomes — a prop, visible to everyone, until you change it |
 | Grant document access on reveal | world | Whether revealing also raises ownership |
 
@@ -184,13 +199,25 @@ map for any visible pin, as its label says.
 7. A compendium document can be pinned, and shows to the players whose role can open
    that compendium — Observer for their role. Anyone else sees a placeholder that says
    why, and you are told so when you place it: *Pin a document* greys such a row and
-   offers *Import & pin*, which makes a copy in a "Documents Pinner" folder that you share
-   like any journal. Compendium permissions are per role and pack-wide, so a reveal never
+   offers *Import & pin*, which makes a copy — of a journal, an actor or an item — in a
+   "Documents Pinner" folder of its kind, which you share like anything else in your world. Compendium permissions are per role and pack-wide, so a reveal never
    changes them and adds nothing to anyone's sidebar. A PDF page from a compendium is
    drawn as a card.
 8. Pins are real Tiles and appear in `scene.tiles` to other modules, by design.
 9. *Fit to content* cannot measure a bare image pin — an image has no text to measure —
    so it leaves that one's height alone and says so.
+10. An actor's portrait or an item's picture hosted on another server — an asset host, a
+    CDN — shows on the HTML layer, but is dropped wherever a prop is drawn into the scene,
+    like any image the module cannot fetch (4).
+11. An actor is shared at Limited at most. What a Limited sheet shows — the portrait, the
+    biography, or the whole sheet — is your game system's choice, not this module's.
+    *Show to players* opens journals only: an actor's or an item's pin is shown by
+    revealing it.
+12. An item an actor owns and a token's own actor cannot be pinned: their permissions are
+    their owner's. Pin the actor, or the item from the sidebar.
+13. With Alt as the drag modifier — the default — Alt-dragging an actor still places
+    Foundry's hidden token, and with no modifier set an actor drag still places a token.
+    Set the modifier to Ctrl or Shift to pin actors by dragging them.
 
 ## Development
 
@@ -214,9 +241,9 @@ MIT — see [LICENSE](LICENSE).
 
 # Documents Pinner (français)
 
-Épinglez n'importe quel journal, page ou image sur la carte — sous forme d'une petite
-**icône** sur laquelle les joueurs cliquent, ou d'un **accessoire lisible posé à même la
-scène**.
+Épinglez n'importe quel journal, page, acteur, objet ou image sur la carte — sous forme
+d'une petite **icône** sur laquelle les joueurs cliquent, ou d'un **accessoire lisible posé
+à même la scène**.
 
 Une visibilité que le MJ change en un clic. Foundry VTT **v14+**.
 
@@ -260,8 +287,8 @@ serait pire que de ne rien dire.
 
 ## Utilisation
 
-**Alt-glissez** un journal ou une page depuis la barre latérale sur la carte. Un fantôme de
-l'accessoire réel suit le curseur ; cliquez pour poser.
+**Alt-glissez** un journal, une page ou un objet depuis la barre latérale sur la carte. Un
+fantôme de l'accessoire réel suit le curseur ; cliquez pour poser.
 
 **Une nouvelle épingle est visible des joueurs dès qu'elle est posée.** C'est la valeur par
 défaut du réglage *Visibilité par défaut*. Appuyez sur `V` pendant le placement pour poser
@@ -286,7 +313,7 @@ réglage.
 | `Alt+Maj+V` / `Alt+M` / `Alt+Maj+F` | faire défiler le public · changer de forme · ajuster au contenu |
 | `Alt` maintenu | coup d'œil : les accessoires s'estompent (les joueurs aussi) |
 | *Révéler l'épingle masquée suivante* | révéler la suivante de n'importe où, dans la vue du tableau de bord s'il est ouvert — sans touche tant que vous ne lui en donnez pas une dans Configurer les contrôles |
-| `/pin <nom>` | poser par son nom depuis le chat — un journal ou une page du monde, sinon un journal de compendium |
+| `/pin <nom>` | poser par son nom depuis le chat — un journal ou une page du monde, puis un acteur, puis un objet, sinon un document de compendium |
 
 | Tableau de bord | |
 |---|---|
@@ -332,9 +359,27 @@ joué pour chaque joueur quand l'accessoire apparaît sur son écran, au volume 
 fichier de votre propre serveur : un préréglage partagé qui nomme une adresse web est
 refusé à l'import.
 
-Également : un bouton dans l'en-tête d'une fiche de journal, les contrôles de scène Notes,
-les menus contextuels de la barre latérale, une case sur la fiche de n'importe quelle tuile
-pour l'adopter, et un bouton sur une note de carte pour la convertir.
+**Un acteur devient un avis de recherche, un objet une trouvaille.** L'accessoire montre
+son image — le portrait d'un acteur, sinon celui de son jeton —, son nom, et l'un de ses
+textes : *Texte affiché*, dans le Studio, liste chaque champ de texte enrichi que votre
+système de jeu donne à ce type d'acteur ou d'objet, et *Automatique* choisit d'abord un
+texte public, puis une biographie ou une description, jamais un champ que son nom réserve
+au MJ. Ses sections secrètes n'atteignent que ses propriétaires et vous. Révéler un acteur
+le partage en accès Limité au plus, et une nouvelle épingle d'acteur — ou une épingle
+dirigée vers un acteur depuis le Studio — commence avec *Accorder l'accès au document*
+désactivé : l'avis se lit sur place sans lui. Un acteur
+s'épingle depuis son menu contextuel, sa fiche, *Épingler un document* ou `/pin` ; le
+glisser sur la carte reste le jeton de Foundry, sauf si la touche de glisser-épingler est
+Ctrl ou Maj.
+
+*Épingler un document* cherche dans les journaux, les acteurs et les objets — ceux du
+monde, puis ceux de chaque compendium dès deux lettres — avec une pastille pour n'en
+montrer qu'un type.
+
+Également : un bouton dans l'en-tête des fiches de journal, d'acteur et d'objet, les
+contrôles de scène Notes, les menus contextuels de la barre latérale et des fenêtres de
+compendium, une case sur la fiche de n'importe quelle tuile pour l'adopter, et un bouton
+sur une note de carte pour la convertir.
 
 **Deux surfaces pour la visibilité.** Le HUD d'une épingle sélectionnée répond *celle-ci,
 maintenant* ; le tableau de bord répond *toute la scène*, avec sélection groupée et un ordre
@@ -357,7 +402,7 @@ monde.
 | Budget mémoire des textures | client | Au-delà, les accessoires les plus anciens perdent en détail |
 | Réduire le détail automatiquement | client | Un cran plus bas si la fluidité ne tient pas |
 | Détail de la console | client | `Débogage` est ce dont un rapport de bogue a besoin |
-| Modificateur de glisser-épingler | client | Alt, Ctrl, Maj, aucun |
+| Modificateur de glisser-épingler | client | Alt, Ctrl, Maj, aucun — un acteur seulement avec Ctrl ou Maj |
 | Forme / visibilité par défaut | monde | Ce que devient un document nouvellement posé — un accessoire visible de tous, tant que vous ne le changez pas |
 | Accorder l'accès au document à la révélation | monde | Si révéler élève aussi les permissions |
 
@@ -415,7 +460,8 @@ joueur pour toute épingle visible, comme son libellé l'indique.
    rôle peut ouvrir ce compendium — Observateur pour leur rôle. Les autres voient un
    substitut qui dit pourquoi, et vous en êtes prévenu en le posant : *Épingler un
    document* grise une telle ligne et propose *Importer et épingler*, qui en crée une copie
-   dans un dossier « Documents Pinner » que vous partagez comme n'importe quel journal.
+   — d'un journal, d'un acteur ou d'un objet — dans un dossier « Documents Pinner » de son
+   type, que vous partagez comme tout autre document de votre monde.
    Les permissions d'un compendium valent par rôle et pour tout le pack : une révélation ne
    les change jamais et n'ajoute rien à la barre latérale de quiconque. Une page PDF d'un
    compendium est dessinée comme une carte.
@@ -423,6 +469,21 @@ joueur pour toute épingle visible, comme son libellé l'indique.
    par conception.
 9. *Ajuster au contenu* ne peut pas mesurer une épingle d'image nue — une image n'a pas
    de texte à mesurer — et laisse alors sa hauteur inchangée en le disant.
+10. Le portrait d'un acteur ou l'image d'un objet hébergés sur un autre serveur — un
+    hébergeur de fichiers, un CDN — s'affichent sur la couche HTML, mais sont retirés là
+    où un accessoire est dessiné dans la scène, comme toute image que le module ne peut pas
+    récupérer (4).
+11. Un acteur est partagé en accès Limité au plus. Ce que montre une fiche en accès Limité
+    — le portrait, la biographie ou toute la fiche — dépend de votre système de jeu, pas
+    de ce module. *Montrer aux joueurs* n'ouvre que des journaux : l'épingle d'un acteur
+    ou d'un objet se montre en la révélant.
+12. Un objet possédé par un acteur et l'acteur propre d'un jeton ne peuvent pas être
+    épinglés : leurs permissions sont celles de leur propriétaire. Épinglez l'acteur, ou
+    l'objet depuis la barre latérale.
+13. Avec Alt comme touche de glisser-épingler — la valeur par défaut —, glisser un acteur
+    avec Alt pose toujours le jeton caché de Foundry, et sans touche réglée, glisser un
+    acteur pose toujours un jeton. Réglez la touche sur Ctrl ou Maj pour épingler un
+    acteur en le glissant.
 
 ## Développement
 

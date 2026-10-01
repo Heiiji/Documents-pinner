@@ -19,6 +19,32 @@
   inline-size: 100%;
 }
 
+/* One kind of document at a time, or all of them: the Pinboard's filter chips, again. */
+.dp-picker__kinds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.dp-picker__kind {
+  flex: none;
+  inline-size: auto;
+  padding: 0.1rem 0.55rem;
+  border: 1px solid var(--color-border-light-1, #7a7971);
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  font-size: 0.85em;
+  line-height: 1.6;
+  cursor: pointer;
+
+  &[aria-pressed="true"] {
+    background: var(--color-warm-1, #c9ad6a);
+    color: #1b1b23;
+    border-color: transparent;
+  }
+}
+
 .dp-picker__list {
   flex: 1;
   margin: 0;

@@ -5,10 +5,10 @@
  * FOR THIS CLIENT'S USER, and returns the finished card markup plus everything the
  * cache needs to key on.
  *
- * The only place that knows how the different page types differ. A journal page can be
- * text, an image, a PDF or a video, and each needs a different card — but every one of
- * them goes through the same single enrichment call site, so the security properties
- * hold regardless of which branch was taken.
+ * What a source's card holds is its adapter's to say (`sources/index.ts`): a journal page
+ * can be text, an image, a PDF or a video, and each needs a different card — but every one
+ * of them goes through the same single enrichment call site here, so the security
+ * properties hold regardless of which adapter or branch it came from.
  *
  * A source that no longer exists produces a PLACEHOLDER card, never an exception and
  * never an empty one. The anchor outlives its source on purpose: deleting a pin because
@@ -25,11 +25,12 @@ import { dressing } from "../effects/EffectRegistry";
 import { currentLevel } from "../effects/level";
 import { findPreset } from "../effects/preset-library";
 import type { LodTier } from "../canvas/lod";
-import { enrichFor } from "./enrich";
-import { pdfSourceOf, renderPdfPage } from "./PdfPage";
+import { enrichFor, sanitise } from "./enrich";
+import { renderPdfPage } from "./PdfPage";
 import { hashContent } from "./TextureCache";
 import { measureCardHeight } from "./measure";
 import { cardMetrics } from "../data/pin-schema";
+import { adapterForDoc } from "../sources/index";
 import { packLockedHere } from "../sources/packs";
 import type { DpPinFlags } from "../types/dp";
 
@@ -51,46 +52,6 @@ export interface ResolvedCard {
    * what "fit to content" writes — or `null` when it cannot be measured.
    */
   naturalHeight: number | null;
-}
-
-/**
- * The raw text a source contributes, by page type.
- *
- * An image or video page contributes an `<img>`; the inliner turns it into bytes
- * later. A PDF contributes its name only — a PDF cannot be rasterised into a card, and
- * pretending otherwise would produce a blank sheet with no explanation.
- */
-function rawContentOf(source: any): { text: string; kind: string } {
-  if (!source) return { text: "", kind: "missing" };
-
-  const type = source.type ?? (source.pages ? "entry" : "text");
-  switch (type) {
-    case "text":
-      return { text: source.text?.content ?? "", kind: "text" };
-    case "image":
-      return {
-        text: source.src ? `<img src="${escapeHtml(source.src)}" alt="">` : "",
-        kind: "image",
-      };
-    case "video":
-      // A single frame at best; the design excludes animated content in a prop.
-      return {
-        text: source.src ? `<img src="${escapeHtml(source.src)}" alt="">` : "",
-        kind: "video",
-      };
-    case "pdf":
-      // The card body is a placeholder only until the page image arrives; `resolveCard`
-      // replaces it for a source this client can actually draw. A PDF the module cannot
-      // open — no pdf.js, a missing file — keeps saying so rather than showing a blank.
-      return { text: `<p>${escapeHtml(t("DP.card.pdf"))}</p>`, kind: "pdf" };
-    case "entry": {
-      // A whole journal shows its first page, which is what a GM means by pinning one.
-      const first = source.pages?.contents?.[0];
-      return first ? rawContentOf(first) : { text: "", kind: "empty" };
-    }
-    default:
-      return { text: source.text?.content ?? "", kind: type };
-  }
 }
 
 export interface ResolveOptions {
@@ -165,9 +126,14 @@ export async function resolveCard(
   const source = await api.resolveSource(pin);
   if (!source) return placeholder(common, "missing");
 
+  // Dispatched on the document's TYPE first. A journal page's `type` says text, image or
+  // PDF; an Actor's or an Item's is a system subtype (`npc`, `weapon`), which read as a
+  // page type would fall to the default branch and draw nothing.
+  const adapter = adapterForDoc(source);
+
   // A PDF is drawn, not enriched: pdf.js paints the page and the card carries the image.
   // This is also the one source type that can reach the canvas tier — see `PdfPage.ts`.
-  const pdfSrc = pdfSourceOf(source);
+  const pdfSrc = adapter.pdf(source);
   if (pdfSrc) {
     const longEdge = Math.max(size.width, size.height) * (options.tier === "L2a" ? 1 : 2);
     const rendered = await renderPdfPage(pdfSrc, pin.source.pdfPage ?? 1, Math.round(longEdge));
@@ -181,7 +147,7 @@ export async function resolveCard(
           showTitle: pin.display.showTitle && !!pin.display.label,
         }),
         title,
-        readable: source.testUserPermission?.(g()?.user, "OBSERVER") === true,
+        readable: source.testUserPermission?.(g()?.user, adapter.openLevel) === true,
         contentHash: hashContent(
           `pdf|${pdfSrc}|${pin.source.pdfPage ?? 1}|${rendered.width}x${rendered.height}`
         ),
@@ -193,25 +159,36 @@ export async function resolveCard(
     }
   }
 
-  const { text, kind } = rawContentOf(source);
+  const { text, kind, figure } = adapter.rawContent(source, pin);
   const { html, isOwner } = await enrichFor(source, text);
   const title = pin.display.label || source.name || "";
+  // The portrait is ours, built here from a path and escaped, then scrubbed exactly as an
+  // image page's own <img> is — a `javascript:` path comes out with no `src` at all. Its
+  // box is sized by the stylesheet, so the card measures right before the picture decodes.
+  const figureHtml = figure
+    ? sanitise(
+        `<figure class="dp-card__portrait"><img src="${escapeHtml(figure)}" alt=""></figure>`,
+        true
+      )
+    : "";
+  const layout = adapter.layout === "portrait" ? ("portrait" as const) : undefined;
 
   // Measured at the width it will be drawn at, then marked if the box is too short.
   // The mark is a function of the size, and the size is in every cache key already, so
   // the content hash does not carry it.
-  const build = (overflow: boolean) => cardHtml({ ...common, title, bodyHtml: html, overflow });
+  const build = (overflow: boolean) =>
+    cardHtml({ ...common, title, bodyHtml: html, overflow, figureHtml, layout });
   const naturalHeight = await measureCardHeight(build(false), size.width);
   const overflow = naturalHeight !== null && naturalHeight > size.height + 1;
 
   return {
     html: build(overflow),
     title,
-    readable: source.testUserPermission?.(g()?.user, "OBSERVER") === true,
+    readable: source.testUserPermission?.(g()?.user, adapter.openLevel) === true,
     // `isOwner` is in the hash because it changes what the HTML contains: a GM and a
     // player must never share a cache entry, and this is the second guard on that
     // after the user id already in the key.
-    contentHash: hashContent(`${kind}|${isOwner}|${html}`),
+    contentHash: hashContent(`${kind}|${isOwner}|${html}${figureHtml ? `|${figureHtml}` : ""}`),
     missing: false,
     naturalHeight,
   };
