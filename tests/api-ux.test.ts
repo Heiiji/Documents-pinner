@@ -64,6 +64,26 @@ describe("setPinIcon", () => {
   });
 });
 
+/**
+ * v14 expands a dotted key at every depth inside a flag, so a grouped override written as
+ * `tint.amount` is stored as `{ tint: { amount } }` — which the normaliser dropped as not a
+ * scalar, with a warning, on every read after the write.
+ */
+describe("patch, with a per-pin effect parameter in its group", () => {
+  it("keeps the override through Foundry's own write", async () => {
+    const tile = pinned();
+    world = installWorld({ isGM: true, tiles: [tile] });
+    const { patch } = await import("../src/api");
+    const { readPinResult } = await import("../src/data/PinData");
+
+    await patch(tile, { effect: { params: { "tint.amount": 0.5, blur: 2 } } });
+
+    const read = readPinResult(tile)!;
+    expect(read.pin.effect.params).toEqual({ tint: { amount: 0.5 }, blur: 2 });
+    expect(read.warnings).toEqual([]);
+  });
+});
+
 describe("retarget and the icon", () => {
   it("keeps the GM's icon from one document to another, like the size and the effect", async () => {
     const tile = pinned();

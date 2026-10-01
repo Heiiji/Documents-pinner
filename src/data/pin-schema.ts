@@ -90,9 +90,8 @@ const EFFECT_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
 
 /**
  * A per-pin parameter override key: a `DpPresetParams` field, optionally inside its
- * group — `blur`, or `tint.amount`. Overrides are stored as a flat dotted map rather
- * than a nested object because a nested one would have to be merged group by group,
- * and a shallow merge of `{ tint: { amount } }` silently drops the sibling colour.
+ * group — `blur`, or `tint.amount`. An override is STORED nested, `{ tint: { amount } }`,
+ * and `mergePin` merges it deeply, so a patch of one field keeps its sibling colour.
  */
 const PARAM_KEY = /^[a-z][a-zA-Z0-9]*(?:\.[a-z][a-zA-Z0-9]*)?$/;
 const MAX_PARAM_OVERRIDES = 64;
@@ -357,24 +356,43 @@ function normaliseGeometry(raw: unknown, warnings: DpNotice[]): DpGeometry {
 }
 
 /**
- * Per-pin overrides on top of the preset's parameters.
+ * Per-pin overrides on top of the preset's parameters, nested by group.
+ *
+ * Nested because v14 stores them so whatever is written: a dotted key inside a flag is
+ * expanded at every depth (foundry.mjs 14.368, `ObjectField#_cleanType`, 10554-10580). An
+ * API caller's `{ "tint.amount": 0.5 }` came back as `{ tint: { amount: 0.5 } }`, was dropped
+ * here as not a scalar, and the migration — comparing it with the stored nesting — rewrote
+ * the pin on every load. Both shapes are read; a later key wins over an earlier one.
  *
  * Bounded and shape-checked here, then re-validated by `validatePreset` once merged,
  * so a hand-edited flag cannot smuggle a value past the preset's own clamps.
  */
 function normaliseParams(raw: unknown, warnings: DpNotice[]): Record<string, unknown> {
-  const source = obj(raw);
-  const out: Record<string, unknown> = {};
-  let dropped = 0;
+  const flat: [string, unknown][] = [];
+  for (const [key, value] of Object.entries(obj(raw))) {
+    if (!isPlainObject(value)) flat.push([key, value]);
+    else for (const [inner, leaf] of Object.entries(value)) flat.push([`${key}.${inner}`, leaf]);
+  }
 
-  for (const [key, value] of Object.entries(source)) {
+  const out: Record<string, any> = {};
+  const kept = new Set<string>();
+  let dropped = 0;
+  for (const [key, value] of flat) {
     const scalar =
       typeof value === "number" || typeof value === "boolean" || typeof value === "string";
-    if (!PARAM_KEY.test(key) || !scalar || Object.keys(out).length >= MAX_PARAM_OVERRIDES) {
+    const [group, field] = key.split(".");
+    // A group cannot also be a value: `tint` beside `tint.amount` keeps whichever came first.
+    const clash =
+      field === undefined ? isPlainObject(out[group]) : !isPlainObject(out[group] ?? {});
+    const full = !kept.has(key) && kept.size >= MAX_PARAM_OVERRIDES;
+    if (!PARAM_KEY.test(key) || !scalar || clash || full) {
       dropped++;
       continue;
     }
-    out[key] = typeof value === "string" ? str(value, "", 128) : value;
+    const clean = typeof value === "string" ? str(value, "", 128) : value;
+    if (field === undefined) out[group] = clean;
+    else out[group] = { ...(out[group] ?? {}), [field]: clean };
+    kept.add(key);
   }
 
   if (dropped) warnings.push({ key: "DP.pin.warn.droppedParams", data: { count: dropped } });
