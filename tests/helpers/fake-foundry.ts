@@ -13,6 +13,9 @@
  * how a suite gets to 403 green tests over code that has never run.
  */
 
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
 const GLOBALS = ["game", "canvas", "CONFIG", "foundry", "ui", "PIXI", "Hooks", "CONST"] as const;
 const saved = new Map<string, unknown>();
 
@@ -707,7 +710,14 @@ export function installWorld(world: FakeWorld = {}): InstalledWorld {
     audio: { locked: false },
     scenes: { contents: [scene], current: scene },
     modules: { get: () => ({}) },
-    i18n: { localize: (key: string) => key, format: (key: string) => key },
+    // `localize` and `format` echo the key, so a test can assert WHICH string was asked
+    // for. `has` answers as core's does (foundry.mjs 205151): whether the table defines the
+    // key — the English table, which is the one a key must be in (`i18n.test.ts`).
+    i18n: {
+      localize: (key: string) => key,
+      format: (key: string) => key,
+      has: (key: string) => Object.hasOwn(englishTable(), key),
+    },
     settings: {
       get: (_scope: string, key: string) => settings[key],
       set: async (_scope: string, key: string, value: unknown) => {
@@ -956,6 +966,33 @@ export function uninstallWorld(): void {
     else (globalThis as any)[name] = value;
   }
   saved.clear();
+}
+
+// ---------------------------------------------------------------------------
+// Localisation
+// ---------------------------------------------------------------------------
+
+let english: Record<string, string> | null = null;
+
+/** `lang/en.json`, read once: flat dotted keys, as `i18n.test.ts` holds them to. */
+export function englishTable(): Record<string, string> {
+  english ??= JSON.parse(
+    readFileSync(join(import.meta.dirname, "..", "..", "lang", "en.json"), "utf8")
+  ) as Record<string, string>;
+  return english;
+}
+
+/**
+ * Localise for real, in English, for a test that asserts what a GM READS rather than
+ * which key was asked for. Core's rules (foundry.mjs 205196): a key the table does not
+ * define comes back unchanged, and `{name}` is replaced from the data.
+ */
+export function speakEnglish(world: InstalledWorld): void {
+  const table = englishTable();
+  const localize = (key: string) => (Object.hasOwn(table, key) ? table[key] : key);
+  world.game.i18n.localize = localize;
+  world.game.i18n.format = (key: string, data: Record<string, unknown> = {}) =>
+    localize(key).replace(/{[^}]+}/g, (k) => String(data[k.slice(1, -1)]));
 }
 
 // ---------------------------------------------------------------------------
