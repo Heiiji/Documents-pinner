@@ -453,8 +453,8 @@ export async function reconcile(): Promise<number> {
 /**
  * Every world document that carries a ledger.
  *
- * Only the collections a v1 pin can target are walked. Actors, items and tables become
- * sources through the adapter interface later, and this list grows with it.
+ * The collections a pin's source can be in — journals and their pages, actors, items —
+ * and scenes and tables beside them, which cost nothing to check.
  */
 function sourcesWithLedger(): any[] {
   const game = g();

@@ -317,7 +317,10 @@ function isPdfPin(pin: DpPinFlags): boolean {
   return pdfSourceForPin(pin) !== null;
 }
 
-/** The PDF a shown document is, by its own adapter: an actor whose system calls it "pdf" is not one. */
+/**
+ * The PDF a shown document is, asked of its own adapter: an actor whose game system
+ * names a type "pdf" is not one.
+ */
 const pdfOf = (shown: any): string | null => (shown ? adapterForDoc(shown).pdf(shown) : null);
 
 /** How many pages the PDF a pin shows has, or 0 when there is no answer. */
