@@ -132,6 +132,8 @@ function stalePaths(stored: unknown, next: unknown, prefix = ""): string[] {
   if (!isRecord(stored) || !isRecord(next)) return [];
   const out: string[] = [];
   for (const key of Object.keys(stored)) {
+    // A key no path can name is left alone; v14 expands every dotted key it stores.
+    if (key.includes(".") || key.startsWith("-=")) continue;
     const path = prefix ? `${prefix}.${key}` : key;
     if (next[key] === undefined) out.push(path);
     else out.push(...stalePaths(stored[key], next[key], path));
