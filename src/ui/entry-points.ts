@@ -107,7 +107,11 @@ export function onGetHeaderControls(app: any, controls: any[]): void {
   const source = api.sourceFromDocument(doc);
   if (!source) return;
 
+  // `action` is required of a header control (TYPES application.d.mts:259-267), and is
+  // what core and other modules key on; `onClick` is what core calls when it is there
+  // (foundry.mjs 14.368, 30784 and 30903), since no sheet defines this action.
   controls.push({
+    action: "documentsPinnerPinThis",
     icon: "fa-solid fa-thumbtack",
     label: "DP.controls.pinThis",
     onClick: () => armAt(source, viewportCentre()),
