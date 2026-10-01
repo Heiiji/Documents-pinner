@@ -33,7 +33,8 @@ import { wouldReveal } from "../data/audience";
 import { readPin } from "../data/PinData";
 import { isTextEntry } from "../ui/cheatsheet";
 import { closeCheatSheet, toggleCheatSheet } from "./CheatSheet";
-import { focusSelectorIn } from "./focus-restore";
+import { docOf, focusSelectorIn } from "./focus-restore";
+import { consume, guardActivationKeys } from "./keys";
 import {
   dropIndex,
   filterRows,
@@ -137,8 +138,9 @@ export function definePinboard(): any {
         place: onPlace,
         revealAll: onRevealAll,
         revealNext: onRevealNext,
-        cheatSheet() {
-          toggleCheatSheet("board");
+        // The target names the window the sheet goes up in: a detached board's own.
+        cheatSheet(_event: Event, target: HTMLElement) {
+          toggleCheatSheet("board", target);
         },
         hideAll(this: any) {
           return allRows(this, false);
@@ -209,7 +211,7 @@ export function definePinboard(): any {
         this.focusedId = visible[0]?.id ?? null;
       }
 
-      const wrapper = document.createElement("div");
+      const wrapper = (docOf(this.element) ?? document).createElement("div");
       wrapper.innerHTML = boardMarkup(
         this.rows,
         this.query,
@@ -235,13 +237,15 @@ export function definePinboard(): any {
     }
 
     _replaceHTML(result: HTMLElement, content: HTMLElement) {
+      // The board's own document: a detached board's focus is in its window, not the
+      // main one, and read from the main one it was lost on every render.
+      const focused = (docOf(content)?.activeElement ?? null) as HTMLElement | null;
       // Preserve the caret: re-rendering on every keystroke would otherwise send the
       // cursor to the start of the search box and make typing a word impossible.
       const active = content.querySelector<HTMLInputElement>(".dp-board__search");
-      const caret = active && active === document.activeElement ? active.selectionStart : null;
+      const caret = active && active === focused ? active.selectionStart : null;
       // `#select` re-renders, and `replaceChildren` then destroyed the focus the click
       // had just established — so a GM could focus a row but never keep it.
-      const focused = document.activeElement as HTMLElement | null;
       const hadRowFocus = !!focused?.classList?.contains("dp-row") && content.contains(focused);
       // A control — a chip, a filter, a bulk button — is found again by what it is, and
       // one inside a row by its row as well, or a chip click sent the focus to the first
@@ -260,6 +264,9 @@ export function definePinboard(): any {
       // accumulate one set per render — and because these handlers trigger renders, the
       // growth compounds.
       this.#wire(result);
+      // The window's own element, header included, once: Space on a focused button here
+      // must press the button and nothing else.
+      guardActivationKeys(this.element ?? content);
 
       if (caret !== null) {
         const search = content.querySelector<HTMLInputElement>(".dp-board__search");
@@ -321,18 +328,28 @@ export function definePinboard(): any {
     focusRow(root: ParentNode, deferred = false) {
       const focus = () =>
         root.querySelector<HTMLElement>('.dp-row[tabindex="0"]')?.focus({ preventScroll: true });
-      if (deferred) requestAnimationFrame(focus);
-      else focus();
+      // A frame of the board's own window, which for a detached board is its popup.
+      const view = docOf(root)?.defaultView;
+      if (!deferred) focus();
+      else if (view?.requestAnimationFrame) view.requestAnimationFrame(focus);
+      else requestAnimationFrame(focus);
     }
 
     #wire(root: HTMLElement) {
-      root.addEventListener("input", (event) => {
+      // A word still being composed — a dead key's accent, an IME's syllables — is not a
+      // search yet: a render mid-composition rebuilt the field under it and dropped what
+      // was being composed, so "é" or "日本" could not be typed at all. The search runs
+      // when the composition ends, and once: a browser that follows `compositionend` with
+      // a plain `input` finds the search already done.
+      const search = (event: Event) => {
         const input = event.target as HTMLInputElement;
-        if (input?.dataset?.action === "search") {
-          this.query = { ...this.query, search: input.value };
-          this.render();
-        }
-      });
+        if (input?.dataset?.action !== "search") return;
+        if ((event as InputEvent).isComposing || input.value === this.query.search) return;
+        this.query = { ...this.query, search: input.value };
+        this.render();
+      };
+      root.addEventListener("input", search);
+      root.addEventListener("compositionend", search);
 
       root.addEventListener("change", (event) => {
         const select = event.target as HTMLSelectElement;
@@ -380,13 +397,6 @@ export function definePinboard(): any {
       this.render();
     }
 
-    /**
-     * The keyboard surface.
-     *
-     * Deliberately single letters with no modifier: a GM operating this while talking
-     * cannot hold a chord. Nothing here is destructive, so a mistyped key costs one
-     * keystroke to undo.
-     */
     /** Close the row menu, remembering whose button gets the focus back. */
     closeMenu() {
       if (!this.menu) return;
@@ -394,39 +404,43 @@ export function definePinboard(): any {
       this.menu = null;
     }
 
+    /**
+     * The keyboard surface.
+     *
+     * Deliberately single letters with no modifier: a GM operating this while talking
+     * cannot hold a chord. Nothing here is destructive, so a mistyped key costs one
+     * keystroke to undo.
+     *
+     * Every key the board handles is `consume`d: prevented AND stopped. Core's keyboard
+     * listens on the window and ignores `defaultPrevented`, and a focused row is not a
+     * field to it, so a key the board only prevented went on to core's bindings — Space
+     * revealed the pin and paused the game, an arrow moved the row and panned the map
+     * (A29). A key the board does not handle goes on untouched, and so does an Escape
+     * with nothing here to clear: that one is core's, and closes the window.
+     */
     #onKey(event: KeyboardEvent) {
       const target = event.target as HTMLElement;
+      const board = event.currentTarget as HTMLElement;
 
-      // The sheet goes first, before the menu, the search and the selection.
-      // Stopped as well as prevented: core's own Escape listens on the window, and one that
-      // reached it would close this board, or the window behind, after the sheet.
-      if (event.key === "Escape" && closeCheatSheet()) {
-        event.preventDefault();
-        event.stopPropagation();
-        return;
-      }
+      // The sheet goes first, before the menu, the search and the selection — and core's
+      // own Escape, which would close this board, or the window behind, after the sheet.
+      if (event.key === "Escape" && closeCheatSheet()) return consume(event);
 
       // While the row menu is open it owns Escape and the arrows.
       if (this.menu) {
         if (event.key === "Escape") {
           this.closeMenu();
           this.render();
-          event.preventDefault();
-          return;
+          return consume(event);
         }
         if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-          const items = [
-            ...(event.currentTarget as HTMLElement).querySelectorAll<HTMLElement>(
-              ".dp-menu button"
-            ),
-          ];
-          const at = items.indexOf(document.activeElement as HTMLElement);
+          const items = [...board.querySelectorAll<HTMLElement>(".dp-menu button")];
+          const at = items.indexOf(docOf(board)?.activeElement as HTMLElement);
           const next = focusIndex(items.length, at, event.key === "ArrowDown" ? 1 : -1);
           items[next]?.focus();
           // The effect menu scrolls; the item the arrows reached must be in view.
           items[next]?.scrollIntoView?.({ block: "nearest" });
-          event.preventDefault();
-          return;
+          return consume(event);
         }
       }
       // A field's text, and a BUTTON as well, because Space and the single letters are
@@ -436,46 +450,39 @@ export function definePinboard(): any {
 
       if (event.key === "Escape") {
         if (this.query.search) this.query = { ...this.query, search: "" };
-        else this.selected = [];
+        else if (this.selected.length) this.selected = [];
+        else return;
         this.render();
-        event.preventDefault();
-        return;
+        return consume(event);
       }
       if (event.key === "/" && !typing) {
-        (event.currentTarget as HTMLElement)
-          .querySelector<HTMLInputElement>(".dp-board__search")
-          ?.focus();
-        event.preventDefault();
-        return;
+        board.querySelector<HTMLInputElement>(".dp-board__search")?.focus();
+        return consume(event);
       }
       // Shift+/ on most layouts, so it cannot be mistaken for the search's `/`.
       // Any button but a text field: focus comes back to the `?` button when the sheet
       // closes, and from there `?` has to open it again.
       if (event.key === "?" && !isTextEntry(target)) {
-        toggleCheatSheet("board");
-        event.preventDefault();
-        return;
+        toggleCheatSheet("board", board);
+        return consume(event);
       }
       // ArrowDown out of the search box is what makes "type four letters, then drive the
       // list" work — without it the search box is a one-way trip.
       if (typing && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
-        const list = event.currentTarget as HTMLElement;
-        const row = list.querySelector<HTMLElement>('.dp-row[tabindex="0"]');
+        const row = board.querySelector<HTMLElement>('.dp-row[tabindex="0"]');
         if (row) {
           row.focus({ preventScroll: true });
-          event.preventDefault();
-          return;
+          return consume(event);
         }
       }
       if (typing) return;
 
       // Reveal next: the script's play button, with no row needed under the cursor. A
       // held key repeats, and a repeat is not a GM asking for the next clue — holding N
-      // would reveal the scene. Stopped here as well as handled, so a global binding the
-      // GM set to the same key cannot reveal a second pin from the same keystroke.
+      // would reveal the scene. Stopped, so a global binding the GM set to the same key
+      // cannot reveal a second pin from the same keystroke.
       if (event.key.toLowerCase() === "n" && !event.ctrlKey && !event.metaKey && !event.altKey) {
-        event.preventDefault();
-        event.stopPropagation();
+        consume(event);
         if (!event.repeat) this.runRevealNext();
         return;
       }
@@ -487,8 +494,7 @@ export function definePinboard(): any {
         // Reorder from the keyboard: the reveal order is a script, and a script is
         // edited without reaching for the mouse.
         if (this.focusedId) void this.#move(this.focusedId, event.key === "ArrowDown" ? 1 : -1);
-        event.preventDefault();
-        return;
+        return consume(event);
       }
 
       if (event.key === "ArrowDown" || event.key === "ArrowUp") {
@@ -504,12 +510,13 @@ export function definePinboard(): any {
           // row and puts it back on whichever row is now the focused one.
           this.render();
         }
-        event.preventDefault();
-        return;
+        return consume(event);
       }
 
+      // The row's verbs. A verb key is the board's even when the row's pin has just gone
+      // (deleted elsewhere, the list not yet redrawn): Space must not fall through to
+      // core's pause for want of a pin.
       const doc = this.focusedId ? this.docFor(this.focusedId) : null;
-      if (!doc) return;
 
       // Open the document on every screen in this pin's audience, right now. Not the same
       // as revealing: it pushes the sheet up rather than making the pin visible. The one
@@ -517,10 +524,9 @@ export function definePinboard(): any {
       // the one that needs Shift: a bare letter in a list is what a GM types expecting to
       // jump to a row, and "s" for "Seal" used to put a document in front of the table.
       if (event.key.toLowerCase() === "s") {
-        if (event.shiftKey) {
-          void api.showToAudience(doc);
-          event.preventDefault();
-        }
+        if (!event.shiftKey) return;
+        consume(event);
+        if (doc) void api.showToAudience(doc);
         return;
       }
 
@@ -528,7 +534,8 @@ export function definePinboard(): any {
       // and hid a revealed pin. The Shift is still down while it pings — which is why the
       // verb states `pull` rather than letting core read it off the keyboard.
       if (event.key === " " && event.shiftKey) {
-        event.preventDefault();
+        consume(event);
+        if (!doc) return;
         void api
           .spotlight(doc)
           .then(() => this.render())
@@ -548,10 +555,9 @@ export function definePinboard(): any {
         m: () => void api.toggleMode(doc)?.then(() => this.render()),
       };
       const action = actions[event.key] ?? actions[event.key.toLowerCase()];
-      if (action) {
-        action();
-        event.preventDefault();
-      }
+      if (!action) return;
+      consume(event);
+      if (doc) action();
     }
 
     /**

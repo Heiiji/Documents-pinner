@@ -31,7 +31,7 @@ import {
   validatePin,
 } from "../data/pin-schema";
 import { scaleOf, screenToScene, stageMatrix } from "../canvas/transform";
-import { allPresets } from "../effects/preset-library";
+import { allPresets, presetName } from "../effects/preset-library";
 import { swatchStyle } from "../effects/preset-css";
 import { resolveCard } from "../render/ContentResolver";
 import { measureCardHeight } from "../render/measure";
@@ -153,7 +153,7 @@ function legendMarkup(current: GhostState): string {
     `<div class="dp-card" style="${escapeAttr(swatchStyle(preset))}"></div></div>` +
     `<div class="dp-ghost__chip">` +
     `<span class="dp-ghost__name">${escapeHtml(name)}</span>` +
-    `<span class="dp-ghost__meta">${escapeHtml(t(preset.label))} · ` +
+    `<span class="dp-ghost__meta">${escapeHtml(presetName(preset))} · ` +
     `${Math.round(current.scale * 100)}% · ${type}` +
     `${escapeHtml(t(current.audience === "everyone" ? "DP.ghost.audienceAll" : "DP.ghost.audienceNone"))}` +
     `${current.sticky ? ` · ${escapeHtml(t("DP.ghost.stamping"))}` : ""}` +

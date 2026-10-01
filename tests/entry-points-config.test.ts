@@ -160,6 +160,37 @@ describe("the Tile config section", () => {
     expect(unpin).toHaveBeenCalledWith(pinned);
     unpin.mockRestore();
   });
+
+  /**
+   * The sheet re-renders when its tile changes and keeps what the module put in it, and
+   * the section returned early when it found its own: after an adopt it still had no
+   * Studio button, and after an Unpin it still had one.
+   */
+  it("is drawn afresh on each render, once, as the tile now is", async () => {
+    const { onRenderConfig } = await import("../src/ui/entry-points");
+    const element = sheet();
+    const section = () => {
+      const all = element.querySelectorAll(".dp-config");
+      expect(all).toHaveLength(1);
+      return {
+        checked: all[0].querySelector<HTMLInputElement>(".dp-config__toggle")!.checked,
+        studio: !!all[0].querySelector(".dp-config__studio"),
+      };
+    };
+
+    onRenderConfig({ document: tile }, element);
+    expect(section()).toEqual({ checked: false, studio: false });
+
+    // Adopted: the tile carries a pin now, and core renders the sheet again.
+    tile.flags = pinnedTile().flags;
+    onRenderConfig({ document: tile }, element);
+    expect(section()).toEqual({ checked: true, studio: true });
+
+    // Unpinned.
+    tile.flags = {};
+    onRenderConfig({ document: tile }, element);
+    expect(section()).toEqual({ checked: false, studio: false });
+  });
 });
 
 describe("the Note config section", () => {

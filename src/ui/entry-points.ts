@@ -239,7 +239,11 @@ export function onRenderConfig(app: any, element: HTMLElement): void {
 
   const doc = app?.document;
   if (!doc) return;
-  if (element.querySelector(".dp-scope")) return;
+  // Drawn afresh on every render. The sheet re-renders when its tile changes, and keeps
+  // what this module put in it; the section used to stay as it was first drawn, so after
+  // an Unpin it still offered the Studio of a pin that was gone, and after an adopt it had
+  // no Studio for the pin that now was one.
+  for (const old of element.querySelectorAll(".dp-scope.dp-config")) old.remove();
 
   if (doc.documentName === "Note") {
     // Only for a note that actually exists. The config sheet also opens for the preview

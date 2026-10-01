@@ -15,6 +15,7 @@
  */
 
 import { notify } from "../fvtt";
+import { hasKey, t } from "../i18n";
 import * as settings from "../settings";
 import { CORE_PRESETS } from "./presets/core-presets";
 import { validatePreset, withComputedCost, type DpPreset } from "./preset-schema";
@@ -58,6 +59,35 @@ export function isCorePreset(id: string): boolean {
   return CORE_PRESETS.some((preset) => preset.id === id);
 }
 
+const COPY = " (copy)";
+
+/**
+ * The name of a label 0.4.0 stored as a key, or null for the GM's own words.
+ *
+ * Two such labels exist: a shipped preset's key on its own (one exported, then imported
+ * again), and the key with " (copy)" after it — once per Duplicate, as 0.4.0 wrote it.
+ */
+function storedKeyName(label: string): string | null {
+  if (label.startsWith("DP.") && hasKey(label)) return t(label);
+  if (!label.endsWith(COPY)) return null;
+  const base = storedKeyName(label.slice(0, -COPY.length));
+  return base === null ? null : t("DP.preset.copyOf", { name: base });
+}
+
+/**
+ * A preset's name as the GM reads it: every surface that shows one asks here.
+ *
+ * A shipped preset's label is an i18n key; a world's own is the GM's words, shown as they
+ * are. Both went through `t()`, which prefixes `DP.` to anything, and core's `localize`
+ * hands back a key it does not know unchanged — so "Blood Moon" read "DP.Blood Moon".
+ * What 0.4.0 stored as a key still reads as the shipped name, translated, with "(copy)"
+ * in the GM's language where its Duplicate added one (A29).
+ */
+export function presetName(preset: Pick<DpPreset, "label" | "author">): string {
+  if (preset.author === "core") return t(preset.label);
+  return storedKeyName(preset.label) ?? preset.label;
+}
+
 /**
  * A free id derived from a name.
  *
@@ -99,12 +129,17 @@ export async function savePreset(preset: DpPreset): Promise<DpPreset | null> {
   return stamped;
 }
 
-/** Duplicate any preset into an editable copy. The only way to "edit" a core one. */
+/**
+ * Duplicate any preset into an editable copy. The only way to "edit" a core one.
+ *
+ * The copy is named in words, not keys: a user preset's label is shown as it is, and a
+ * shipped one's label is a key, so "<key> (copy)" was a name no table translates.
+ */
 export async function duplicatePreset(id: string, name?: string): Promise<DpPreset | null> {
   const source = findPreset(id);
   if (!source) return null;
 
-  const label = name ?? `${source.label} (copy)`;
+  const label = name ?? t("DP.preset.copyOf", { name: presetName(source) });
   return savePreset({ ...source, id: freeId(label), label, author: "user" });
 }
 

@@ -233,12 +233,13 @@ export { bindingName };
 /**
  * Fade every prop towards transparent while peeking.
  *
- * A class on the board rather than a per-prop write: one attribute toggle, and the
- * canvas layer and the DOM overlay both key off it, so the two tiers cannot disagree
- * about whether a peek is in progress.
+ * One class on the overlay rather than a write per prop: the DOM cards and the reader
+ * are both mounted in it, so `.dp-peeking .dp-prop` and `.dp-peeking .dp-reader` reach
+ * every one. The canvas tier hears the same moment through the `peek` hook, which is
+ * what keeps the two tiers agreeing. It used to be set on `#board`'s parent as well, an
+ * element of core's that no rule of this module reads.
  */
 export function setPeek(active: boolean): void {
-  document.getElementById("board")?.parentElement?.classList.toggle(PEEK_CLASS, active);
   document.getElementById("documents-pinner-overlay")?.classList.toggle(PEEK_CLASS, active);
   // Held only while a peek is: an ordinary blur has nothing to release.
   if (active) {

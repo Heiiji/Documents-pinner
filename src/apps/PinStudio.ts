@@ -8,10 +8,10 @@
  *
  * The interaction model is the point:
  *
- * - **No Save button.** `submitOnChange` with `closeOnSubmit: false` means every change
- *   lands on the canvas as it is made. A GM adjusting an effect against a specific map
- *   is asking "does this read *here*", and a dialog that answers only after you commit
- *   and reopen cannot answer it at all.
+ * - **No Save button.** One `change` listener writes each control as it commits, so every
+ *   change lands on the canvas as it is made. A GM adjusting an effect against a specific
+ *   map is asking "does this read *here*", and a dialog that answers only after you
+ *   commit and reopen cannot answer it at all.
  * - **Three tabs, one question each.** Content is what it says, Appearance is what it
  *   looks like, Audience is who gets it. Nothing that belongs to one appears in another.
  * - **The audience tab is the same chip widget as the HUD and the Pinboard.** A GM
@@ -34,7 +34,7 @@ import { playRevealSound, revealSoundOf } from "../effects/reveal-sound";
 import { soundPath } from "../normalise";
 import { pdfPageCount } from "../render/PdfPage";
 import { openPicker } from "./DocumentPicker";
-import { restoreFocus, snapshotFocus } from "./focus-restore";
+import { docOf, restoreFocus, snapshotFocus } from "./focus-restore";
 import { resumeOne, worldId, writeHolds } from "./edit-holds";
 import {
   TABS,
@@ -111,7 +111,11 @@ export function definePinStudio(): any {
       // Tall enough for the Appearance tab's gallery to show without a scroll on a
       // laptop; the window is resizable for anything narrower.
       position: { width: 500, height: 700 },
-      form: { submitOnChange: true, closeOnSubmit: false },
+      // A `<form>`, so core counts a focused button here as a field (`hasFocus`, foundry.mjs
+      // 133689) and its keys stay the Studio's. No `submitOnChange`: with no handler it
+      // did nothing but build a `FormDataExtended` of the whole form on every change
+      // (`_onSubmitForm`, 32124); the change listener below is what writes.
+      form: { closeOnSubmit: false },
       actions: {
         setTab: onSetTab,
         browseIcon: onBrowseIcon,
@@ -273,7 +277,8 @@ export function definePinStudio(): any {
       // A compendium document is loaded to list its pages and read its PDF: the index
       // its pack keeps knows neither. A world one is at hand, as it always was.
       const shown = pin ? await api.shownSource(pin) : null;
-      const wrapper = document.createElement("div");
+      // The window's own document, which a detached Studio's popup has to itself.
+      const wrapper = (docOf(this.element) ?? document).createElement("div");
       wrapper.innerHTML = pin
         ? studioMarkup(this.doc, pin, this.tab, {
             aspectLocked: this.aspectLocked,
@@ -315,9 +320,10 @@ export function definePinStudio(): any {
 
       // ApplicationV2 writes the title bar once, when the frame is built; a pin renamed
       // while its Studio is open is renamed here too.
+      // An element, by its node type: in a detached window it is not an instance of the
+      // main window's `HTMLElement`, and the title went stale there.
       const bar = this.window?.title;
-      if (bar instanceof HTMLElement && bar.textContent !== this.title)
-        bar.textContent = this.title;
+      if (bar?.nodeType === 1 && bar.textContent !== this.title) bar.textContent = this.title;
 
       if (this.focusAfterRender) {
         content.querySelector<HTMLElement>(this.focusAfterRender)?.focus({ preventScroll: true });
@@ -328,8 +334,8 @@ export function definePinStudio(): any {
     }
 
     #wire(root: HTMLElement) {
-      // One listener for every control: `submitOnChange` fires on the form, and going
-      // through it keeps the whole form on one code path rather than one per field.
+      // One listener for every control: each `change` bubbles here, and going through it
+      // keeps the whole form on one code path rather than one per field.
       root.addEventListener("change", (event) => {
         const target = event.target as HTMLInputElement;
         if (!target?.name) return;

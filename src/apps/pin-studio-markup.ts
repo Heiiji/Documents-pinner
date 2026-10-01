@@ -17,7 +17,7 @@ import { escapeAttr, escapeHtml } from "../html";
 import * as api from "../api";
 import { cardMetrics } from "../data/pin-schema";
 import { PAPERS } from "../render/CardTemplate";
-import { allPresets, findPreset } from "../effects/preset-library";
+import { allPresets, findPreset, presetName } from "../effects/preset-library";
 import { swatchStyle } from "../effects/preset-css";
 import { fontChoices, fontLabel, fontOptionsMarkup } from "../effects/typeface";
 import { revealSoundOf } from "../effects/reveal-sound";
@@ -422,7 +422,7 @@ function appearanceTab(doc: any, pin: DpPinFlags, options: StudioOptions = {}, a
         // Named, because the grid declares a `name` area. Without the class this span was
         // auto-placed, landed on top of the cost label, and every swatch read as
         // "LégerSceau de cire" with the two strings overlapping.
-        `<span class="dp-studio__swatch-name">${escapeHtml(t(preset.label))}</span>` +
+        `<span class="dp-studio__swatch-name">${escapeHtml(presetName(preset))}</span>` +
         `<span class="dp-studio__cost" data-dp-cost="${escapeAttr(preset.cost)}">` +
         `${escapeHtml(t(`DP.cost.${preset.cost}`))}</span>` +
         `</button>`

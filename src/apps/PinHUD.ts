@@ -36,7 +36,7 @@ import * as api from "../api";
 import { previewIntensity } from "../canvas/DomPropTier";
 import { readPin } from "../data/PinData";
 import { pingsEveryone, revealed } from "../data/audience";
-import { allPresets } from "../effects/preset-library";
+import { allPresets, presetName } from "../effects/preset-library";
 import { swatchStyle } from "../effects/preset-css";
 import { isTextEntry } from "../ui/cheatsheet";
 import { chipsMarkup, describeChips, type ChipUser } from "./chips";
@@ -141,10 +141,10 @@ function effectsPaletteMarkup(pin: DpPinFlags): string {
       (preset) =>
         `<button type="button" class="dp-hud__swatch" data-action="setEffect"` +
         ` data-dp-preset="${escapeAttr(preset.id)}" aria-pressed="${pin.effect.id === preset.id}"` +
-        ` data-tooltip-text="${escapeAttr(t(preset.label))}" data-dp-fx="${escapeAttr(preset.id)}">` +
+        ` data-tooltip-text="${escapeAttr(presetName(preset))}" data-dp-fx="${escapeAttr(preset.id)}">` +
         `<span class="dp-hud__swatch-preview dp-card" aria-hidden="true"` +
         ` style="${escapeAttr(swatchStyle(preset))}"></span>` +
-        `<span class="dp-hud__swatch-label">${escapeHtml(t(preset.label))}</span></button>`
+        `<span class="dp-hud__swatch-label">${escapeHtml(presetName(preset))}</span></button>`
     )
     .join("");
 
@@ -261,6 +261,13 @@ export function definePinHUD(): any {
       id: "dp-pin-hud",
       classes: ["dp-scope", "dp-hud-app"],
       window: { frame: false, positioned: true },
+      // Still a `<form>`, from the base: that is what makes core count a focused HUD
+      // button as a field (`hasFocus`, foundry.mjs 133689), so a key on one is not also a
+      // core binding. Not its submit-on-change: every slider and checkbox commit ran core's
+      // `_onSubmit` (98041), which updated the tile with the named fields that changed —
+      // none here, so `update({})` — and every module's `preUpdateTile` with it. Each
+      // control writes through its own verb.
+      form: { ...(Base.DEFAULT_OPTIONS?.form ?? {}), submitOnChange: false },
       actions: {
         toggleVisibility: onToggleVisibility,
         togglePalette: onTogglePalette,

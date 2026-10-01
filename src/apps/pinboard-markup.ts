@@ -17,7 +17,7 @@ import * as store from "../data/PinStore";
 import { readPin } from "../data/PinData";
 import { describeSource, type SourceSummary } from "../sources/describe";
 import { adapterOrJournal } from "../sources/index";
-import { allPresets, findPreset } from "../effects/preset-library";
+import { allPresets, findPreset, presetName } from "../effects/preset-library";
 import { swatchStyle } from "../effects/preset-css";
 import { modifierGlyphs, platform } from "../ui/modifiers";
 import { chipsMarkup } from "./chips";
@@ -61,7 +61,7 @@ export function rowsFor(scene: any): PinboardRow[] {
     return {
       ...facts,
       effectId: pin.effect.id,
-      effectLabel: preset ? t(preset.label) : pin.effect.id,
+      effectLabel: preset ? presetName(preset) : pin.effect.id,
       sort: doc.sort ?? 0,
       locked: doc.locked === true,
       thumbnail: thumbnailFor(doc, summary),
@@ -258,7 +258,7 @@ function effectMenuMarkup(row: PinboardRow, at: MenuPlacement): string {
         ` data-dp-preset="${escapeAttr(preset.id)}" aria-checked="${preset.id === row.effectId}">` +
         `<span class="dp-menu__swatch dp-card" aria-hidden="true"` +
         ` style="${escapeAttr(swatchStyle(preset))}"></span>` +
-        `${escapeHtml(t(preset.label))}</button>`
+        `${escapeHtml(presetName(preset))}</button>`
     )
     .join("");
   return (
