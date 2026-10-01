@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.4.0] — 2026-10-01
+
+What can be pinned, and how it reaches the table. A handout an adventure ships in a
+compendium, a wanted poster made from an actor and a card made from an item now pin as a
+letter does, and *Pin a document* finds all of them. A prop has its own typeface and reveal
+sound and darkens with the scene; the Pinboard's order plays as *Reveal next*, and *Reveal &
+spotlight* brings the table's eyes to it. A polish pass over the whole module then fixed
+what three audits found — among them a glance at another browser tab shrinking every prop,
+a 0.1 pin whose settings could never be changed, and a whole-journal pin showing players the
+GM's notes.
+
+Compendium, actor and item pins are new and have not yet been checked in a live world:
+`docs/spike-2-sources-probe.js` and the live checklist at the end of `docs/DESIGN.md` are
+how to check them. Reports are welcome.
+
 ### Added
 
 - **A letter no longer glows in a pitch-black crypt.** Text props are drawn over the map
@@ -984,7 +1001,8 @@ occluded. The module detects this at startup rather than failing visibly.
 
 The full list is in the README and in `docs/DESIGN.md` §10.
 
-[Unreleased]: https://github.com/Heiiji/Documents-pinner/compare/v0.3.3...HEAD
+[Unreleased]: https://github.com/Heiiji/Documents-pinner/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/Heiiji/Documents-pinner/compare/v0.3.3...v0.4.0
 [0.3.3]: https://github.com/Heiiji/Documents-pinner/compare/v0.3.2...v0.3.3
 [0.3.2]: https://github.com/Heiiji/Documents-pinner/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/Heiiji/Documents-pinner/compare/v0.3.0...v0.3.1

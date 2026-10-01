@@ -1,7 +1,7 @@
 {
   "id": "documents-pinner",
   "title": "Documents Pinner",
-  "description": "Pin any journal, document or image onto the map \u2014 as a small icon players click, or as a full-size readable prop lying on the scene. Per-pin visibility the GM controls in one click, and subtle immersive effects.",
+  "description": "Pin a journal, a page, an actor, an item or an image \u2014 from your world or a compendium \u2014 onto the map, as a small icon players click or as a full-size readable prop lying on the scene. Per-pin visibility the GM controls in one click, and subtle immersive effects.",
   "version": "0.0.0",
   "compatibility": {
     "minimum": "14",
