@@ -66,7 +66,7 @@ import { svgDocument } from "../render/CardTemplate";
 import { inlineFonts, inlineImages } from "../render/AssetInliner";
 import { TextureCache, cacheKey } from "../render/TextureCache";
 import { currentLevel, frameCap, sampleFrame, sampledFps } from "../effects/level";
-import { findPreset, isCorePreset } from "../effects/preset-library";
+import { findPreset, userPresets } from "../effects/preset-library";
 import {
   clearDomTier,
   invalidateDomProps,
@@ -177,6 +177,8 @@ class Manager {
   #peeking = false;
   /** Uniform amount every prop is demoted by, after the perf guard fires. */
   #globalDemotions = 0;
+  /** What each user preset said when the props last drew from it. See `onSettingChanged`. */
+  #presets = presetSnapshot();
 
   #isPdf(pin: any): boolean {
     return isPdfPin(pin);
@@ -307,14 +309,21 @@ class Manager {
    *
    * The rendering path, the effects level and the VRAM budget are all read by the next
    * pass. A user preset is not — a card's key names its preset, not what the preset says —
-   * so every prop wearing one is dropped first; a core preset cannot change.
+   * so the props wearing one that changed are dropped first. Only those: the Preset Studio
+   * saves on every committed step of a slider, the setting is the world's, and dropping
+   * every user-preset prop redrew them all on every client at each step. A preset saved,
+   * removed, or added under an id a prop already names counts as changed; a core preset
+   * never does.
    */
   onSettingChanged(key: settings.SettingKey): void {
     if (key === "userPresets") {
+      const before = this.#presets;
+      const after = presetSnapshot();
+      this.#presets = after;
       this.#forget(
         [...this.#records.values()].filter((record) => {
-          const pin = readPin(cv()?.tiles?.get(record.id)?.document);
-          return pin !== null && !isCorePreset(pin.effect.id);
+          const id = readPin(cv()?.tiles?.get(record.id)?.document)?.effect.id;
+          return id !== undefined && before.get(id) !== after.get(id);
         })
       );
     }
@@ -1132,6 +1141,11 @@ export function teardownProps(): void {
   // The decoded grain and stains, one set per seed, intensity and preset a GM tried on a
   // PDF: bounded by editing, not by the world, and never released before this.
   clearBakeCache();
+}
+
+/** Each user preset as it stands, by id, to tell which ones a save changed. */
+function presetSnapshot(): Map<string, string> {
+  return new Map(userPresets().map((preset) => [preset.id, JSON.stringify(preset)]));
 }
 
 /** What the DOM tier needs to play a reveal: the preset's animation and duration. */

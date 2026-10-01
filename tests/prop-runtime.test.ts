@@ -163,7 +163,10 @@ describe("a change to a setting a prop is drawn from", () => {
         rendering: "canvas",
         autoDegrade: false,
         effectsLevel: "full",
-        userPresets: [{ ...getCorePreset("aged-parchment")!, id: "my-look", label: "Mine" }],
+        userPresets: [
+          { ...getCorePreset("aged-parchment")!, id: "my-look", label: "Mine" },
+          { ...getCorePreset("aged-parchment")!, id: "their-look", label: "Theirs" },
+        ],
       },
     });
     world.game.settings.register = (_scope: string, key: string, options: any) =>
@@ -178,12 +181,20 @@ describe("a change to a setting a prop is drawn from", () => {
 
   it.each([
     [
-      "a user preset the prop wears is edited",
+      "redraws the prop when a user preset it wears is edited",
       "userPresets",
-      (old: any) => [{ ...old[0], label: "Mine, aged" }],
+      (old: any) => [{ ...old[0], label: "Mine, aged" }, old[1]],
+      true,
     ],
-    ["the effects level is lowered", "effectsLevel", () => "reduced"],
-  ])("redraws the prop when %s", async (_label, key, next) => {
+    // The Preset Studio saves on every committed step of a slider, on every client.
+    [
+      "leaves the prop alone when another user preset is edited",
+      "userPresets",
+      (old: any) => [old[0], { ...old[1], label: "Theirs, aged" }],
+      false,
+    ],
+    ["redraws the prop when the effects level is lowered", "effectsLevel", () => "reduced", true],
+  ])("%s", async (_label, key, next, redraws) => {
     const { propManager } = await import("../src/canvas/PropManager");
     const { resolveCard } = await import("../src/render/ContentResolver");
     manager = propManager();
@@ -197,6 +208,6 @@ describe("a change to a setting a prop is drawn from", () => {
     registered.get(key)?.onChange?.(value);
     await settle();
 
-    expect(vi.mocked(resolveCard).mock.calls.length).toBeGreaterThan(drawn);
+    expect(vi.mocked(resolveCard).mock.calls.length > drawn).toBe(redraws);
   });
 });
