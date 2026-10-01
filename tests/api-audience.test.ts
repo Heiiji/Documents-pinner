@@ -272,6 +272,37 @@ describe("deleting pins with a chip click still landing", () => {
     expect(pages.p1.ownership).toEqual({ default: -1 });
   });
 
+  // Pin Studio's Delete released first, outside the pin's write queue, then deleted
+  // through it: a chip click still landing was written after the release, and the sync
+  // it started granted for a pin about to go (A29).
+  it("lets the click land before a single pin's release and delete, too", async () => {
+    await install(pinnedTile({ kind: "selected", users: ["ali"] }));
+    await sync.syncAnchor(tile);
+    const order = recordOrder();
+    const scene = world.canvas.scene;
+    const remove = tile.delete;
+    // A round trip, as core's is: a sync that checked for its pin before it landed found
+    // it still on the scene.
+    tile.delete = async (options: any) => {
+      order.push("delete");
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      const contents = scene.tiles.contents;
+      contents.splice(contents.indexOf(tile), 1);
+      return remove(options);
+    };
+
+    const chip = api.setUserVisible(tile, "ben", true);
+    await api.deletePin(tile);
+    await chip;
+    await landed();
+
+    expect(order).toEqual(["tile write", "delete"]);
+    expect(holdersOn(entry)).toBeNull();
+    expect(holdersOn(pages.p1)).toBeNull();
+    expect(entry.ownership).toEqual({ default: 0 });
+    expect(pages.p1.ownership).toEqual({ default: -1 });
+  });
+
   it("grants nothing for a click whose sync runs after the pin is gone", async () => {
     await install(pinnedTile({ kind: "selected", users: ["ali"] }));
     await sync.syncAnchor(tile);

@@ -880,8 +880,10 @@ export async function locate(anchorDoc: any): Promise<void> {
 /** Delete a pin, releasing its ownership claim first so no grant is orphaned. */
 export async function deletePin(anchorDoc: any): Promise<void> {
   if (!isGM()) return;
-  await releaseAnchor(anchorDoc);
-  await store.remove(anchorDoc);
+  // In the pin's own write queue, after every write already in it, as the bulk delete is
+  // (A29): released first, outside it, a chip click still landing was written after the
+  // release, and its sync granted on behalf of a pin about to be deleted.
+  await store.remove(anchorDoc, () => releaseAnchor(anchorDoc));
 }
 
 /** Turn an anchor back into an ordinary tile, keeping the tile itself. */

@@ -519,7 +519,17 @@ export function unpin(doc: any): Promise<any> {
   );
 }
 
-/** Delete the anchor entirely. The source document is never touched. */
-export function remove(doc: any): Promise<any> {
-  return enqueue(queueKey(doc), () => doc.delete(internal()));
+/**
+ * Delete the anchor entirely. The source document is never touched.
+ *
+ * `first` runs inside the same turn, before the delete — the place for the grants' release,
+ * as in `removeMany`: released before the turn, a chip click still landing on the pin was
+ * written after the release, and the sync it started granted for a pin about to go. It must
+ * not wait on a write queued on this anchor: it would wait for itself (DESIGN A22).
+ */
+export function remove(doc: any, first: () => Promise<unknown> = async () => {}): Promise<any> {
+  return enqueue(queueKey(doc), async () => {
+    await first();
+    return doc.delete(internal());
+  });
 }
