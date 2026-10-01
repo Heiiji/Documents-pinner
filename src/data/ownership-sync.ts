@@ -29,7 +29,6 @@ import {
   ns,
   playerIds,
   resolveUuid,
-  resolveUuidSync,
 } from "../fvtt";
 import type { DpGrantLedger } from "../types/dp";
 import { grantKeysFor } from "./audience";
@@ -44,6 +43,7 @@ import {
 } from "./ownership-plan";
 import { enqueue } from "./PinStore";
 import { readPin } from "./PinData";
+import { describeSource } from "../sources/describe";
 import { adapterForDoc, type GrantTarget } from "../sources/index";
 import { isPackUuid } from "../sources/uuid";
 
@@ -410,7 +410,9 @@ export async function reconcile(): Promise<number> {
     for (const tile of scene.tiles?.contents ?? []) {
       const pin = readPin(tile);
       if (!pin) continue;
-      const named = pin.source.kind === "document" ? resolveUuidSync(pin.source.uuid) : null;
+      // `describeSource`, the one reader of core's synchronous cache: a world document, or
+      // null — for a compendium source always, whatever the cache holds.
+      const named = pin.source.kind === "document" ? describeSource(pin.source).doc : null;
       const targets = grantTargets(
         grantable(named) ? named : null,
         pin.source.pageId,
