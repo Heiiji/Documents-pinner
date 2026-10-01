@@ -34,7 +34,7 @@ import { playRevealSound, revealSoundOf } from "../effects/reveal-sound";
 import { soundPath } from "../normalise";
 import { pdfPageCount } from "../render/PdfPage";
 import { openPicker } from "./DocumentPicker";
-import { restoreFocus, snapshotFocus } from "./focus-restore";
+import { docOf, restoreFocus, snapshotFocus } from "./focus-restore";
 import { resumeOne, worldId, writeHolds } from "./edit-holds";
 import {
   TABS,
@@ -273,7 +273,8 @@ export function definePinStudio(): any {
       // A compendium document is loaded to list its pages and read its PDF: the index
       // its pack keeps knows neither. A world one is at hand, as it always was.
       const shown = pin ? await api.shownSource(pin) : null;
-      const wrapper = document.createElement("div");
+      // The window's own document, which a detached Studio's popup has to itself.
+      const wrapper = (docOf(this.element) ?? document).createElement("div");
       wrapper.innerHTML = pin
         ? studioMarkup(this.doc, pin, this.tab, {
             aspectLocked: this.aspectLocked,
@@ -315,9 +316,10 @@ export function definePinStudio(): any {
 
       // ApplicationV2 writes the title bar once, when the frame is built; a pin renamed
       // while its Studio is open is renamed here too.
+      // An element, by its node type: in a detached window it is not an instance of the
+      // main window's `HTMLElement`, and the title went stale there.
       const bar = this.window?.title;
-      if (bar instanceof HTMLElement && bar.textContent !== this.title)
-        bar.textContent = this.title;
+      if (bar?.nodeType === 1 && bar.textContent !== this.title) bar.textContent = this.title;
 
       if (this.focusAfterRender) {
         content.querySelector<HTMLElement>(this.focusAfterRender)?.focus({ preventScroll: true });

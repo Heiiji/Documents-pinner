@@ -10,11 +10,28 @@
  * Identity-based, never positional: a chip is found by its user, a form control by its
  * name and a button by what it does, so the focus survives a render that changed how many
  * of anything there are.
+ *
+ * Read in the window's OWN document. Any framed application can be detached into a
+ * window of its own (foundry.mjs 31375), and core's own focus test reads the detached
+ * window's document (133682); the main `document`'s active element is then not in the
+ * application at all, and the focus was dropped on every render. For the same reason no
+ * `instanceof HTMLInputElement` here: an input of another window is an instance of THAT
+ * window's class.
  */
+
+/**
+ * The document a node lives in: a detached window's own, else the main one. Null only
+ * where there is no DOM at all.
+ */
+export function docOf(node: unknown): Document | null {
+  const at = node as Node | null | undefined;
+  if (at?.nodeType === 9) return at as Document;
+  return at?.ownerDocument ?? (typeof document === "undefined" ? null : document);
+}
 
 /** A selector that will find the focused control again in freshly built markup. */
 export function focusSelectorIn(root: ParentNode): string | null {
-  const active = typeof document === "undefined" ? null : (document.activeElement as HTMLElement);
+  const active = docOf(root)?.activeElement as HTMLElement | null | undefined;
   if (!active || !root.contains?.(active)) return null;
 
   // An element that names itself for this purpose — a disclosure's summary, which has no
@@ -74,9 +91,9 @@ const TEXT_TYPES = new Set(["text", "search", "number", "url", ""]);
 export function snapshotFocus(root: ParentNode): FocusSnapshot | null {
   const selector = focusSelectorIn(root);
   if (!selector) return null;
-  const active = document.activeElement;
+  const active = docOf(root)?.activeElement as HTMLInputElement | null | undefined;
   if (
-    active instanceof HTMLInputElement &&
+    active?.tagName === "INPUT" &&
     TEXT_TYPES.has(active.type) &&
     active.value !== active.defaultValue
   ) {
@@ -98,11 +115,12 @@ export function restoreFocus(root: ParentNode, snapshot: FocusSnapshot | null): 
   if (!snapshot) return null;
   const target = root.querySelector<HTMLElement>(snapshot.selector);
   if (!target) return null;
-  if (snapshot.draft && target instanceof HTMLInputElement) {
-    target.value = snapshot.draft.value;
+  if (snapshot.draft && target.tagName === "INPUT") {
+    const input = target as HTMLInputElement;
+    input.value = snapshot.draft.value;
     try {
       if (snapshot.draft.start !== null) {
-        target.setSelectionRange(snapshot.draft.start, snapshot.draft.end ?? snapshot.draft.start);
+        input.setSelectionRange(snapshot.draft.start, snapshot.draft.end ?? snapshot.draft.start);
       }
     } catch {
       /* a number input has no selection API */

@@ -33,7 +33,7 @@ import { wouldReveal } from "../data/audience";
 import { readPin } from "../data/PinData";
 import { isTextEntry } from "../ui/cheatsheet";
 import { closeCheatSheet, toggleCheatSheet } from "./CheatSheet";
-import { focusSelectorIn } from "./focus-restore";
+import { docOf, focusSelectorIn } from "./focus-restore";
 import { consume, guardActivationKeys } from "./keys";
 import {
   dropIndex,
@@ -138,8 +138,9 @@ export function definePinboard(): any {
         place: onPlace,
         revealAll: onRevealAll,
         revealNext: onRevealNext,
-        cheatSheet() {
-          toggleCheatSheet("board");
+        // The target names the window the sheet goes up in: a detached board's own.
+        cheatSheet(_event: Event, target: HTMLElement) {
+          toggleCheatSheet("board", target);
         },
         hideAll(this: any) {
           return allRows(this, false);
@@ -210,7 +211,7 @@ export function definePinboard(): any {
         this.focusedId = visible[0]?.id ?? null;
       }
 
-      const wrapper = document.createElement("div");
+      const wrapper = (docOf(this.element) ?? document).createElement("div");
       wrapper.innerHTML = boardMarkup(
         this.rows,
         this.query,
@@ -236,13 +237,15 @@ export function definePinboard(): any {
     }
 
     _replaceHTML(result: HTMLElement, content: HTMLElement) {
+      // The board's own document: a detached board's focus is in its window, not the
+      // main one, and read from the main one it was lost on every render.
+      const focused = (docOf(content)?.activeElement ?? null) as HTMLElement | null;
       // Preserve the caret: re-rendering on every keystroke would otherwise send the
       // cursor to the start of the search box and make typing a word impossible.
       const active = content.querySelector<HTMLInputElement>(".dp-board__search");
-      const caret = active && active === document.activeElement ? active.selectionStart : null;
+      const caret = active && active === focused ? active.selectionStart : null;
       // `#select` re-renders, and `replaceChildren` then destroyed the focus the click
       // had just established — so a GM could focus a row but never keep it.
-      const focused = document.activeElement as HTMLElement | null;
       const hadRowFocus = !!focused?.classList?.contains("dp-row") && content.contains(focused);
       // A control — a chip, a filter, a bulk button — is found again by what it is, and
       // one inside a row by its row as well, or a chip click sent the focus to the first
@@ -325,8 +328,11 @@ export function definePinboard(): any {
     focusRow(root: ParentNode, deferred = false) {
       const focus = () =>
         root.querySelector<HTMLElement>('.dp-row[tabindex="0"]')?.focus({ preventScroll: true });
-      if (deferred) requestAnimationFrame(focus);
-      else focus();
+      // A frame of the board's own window, which for a detached board is its popup.
+      const view = docOf(root)?.defaultView;
+      if (!deferred) focus();
+      else if (view?.requestAnimationFrame) view.requestAnimationFrame(focus);
+      else requestAnimationFrame(focus);
     }
 
     #wire(root: HTMLElement) {
@@ -422,7 +428,7 @@ export function definePinboard(): any {
         }
         if (event.key === "ArrowDown" || event.key === "ArrowUp") {
           const items = [...board.querySelectorAll<HTMLElement>(".dp-menu button")];
-          const at = items.indexOf(document.activeElement as HTMLElement);
+          const at = items.indexOf(docOf(board)?.activeElement as HTMLElement);
           const next = focusIndex(items.length, at, event.key === "ArrowDown" ? 1 : -1);
           items[next]?.focus();
           // The effect menu scrolls; the item the arrows reached must be in view.
@@ -450,7 +456,7 @@ export function definePinboard(): any {
       // Any button but a text field: focus comes back to the `?` button when the sheet
       // closes, and from there `?` has to open it again.
       if (event.key === "?" && !isTextEntry(target)) {
-        toggleCheatSheet("board");
+        toggleCheatSheet("board", board);
         return consume(event);
       }
       // ArrowDown out of the search box is what makes "type four letters, then drive the

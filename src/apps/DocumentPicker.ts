@@ -17,6 +17,7 @@ import { browseFiles, ns } from "../fvtt";
 import { t, tOr } from "../i18n";
 import { escapeAttr, escapeHtml } from "../html";
 import { arm } from "./PlacementGhost";
+import { docOf } from "./focus-restore";
 import { guardActivationKeys } from "./keys";
 import * as api from "../api";
 import { importForPin } from "../sources/import";
@@ -185,7 +186,7 @@ export function definePicker(): any {
         },
         kinds
       );
-      const wrapper = document.createElement("div");
+      const wrapper = (docOf(this.element) ?? document).createElement("div");
       wrapper.innerHTML = pickerMarkup(
         [...filterEntries(worldEntries(kinds), this.search), ...entries],
         this.search,
@@ -198,9 +199,11 @@ export function definePicker(): any {
     }
 
     _replaceHTML(result: HTMLElement, content: HTMLElement) {
+      // The picker's own document, which a detached picker's window has to itself.
+      const active = docOf(content)?.activeElement as HTMLInputElement | null | undefined;
       const caret =
-        content.querySelector(".dp-picker__search") === document.activeElement
-          ? (document.activeElement as HTMLInputElement).selectionStart
+        active && content.querySelector(".dp-picker__search") === active
+          ? active.selectionStart
           : null;
 
       content.replaceChildren(result);

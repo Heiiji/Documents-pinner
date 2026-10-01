@@ -18,6 +18,7 @@ import { g, ns } from "../fvtt";
 import { logger } from "../log";
 import { cheatSheetMarkup, type CheatSurface } from "../ui/cheatsheet";
 import { modifierGlyphs, platform } from "../ui/modifiers";
+import { docOf } from "./focus-restore";
 
 const log = logger("cheat");
 
@@ -72,24 +73,35 @@ export function closeCheatSheet(surface?: CheatSurface, restoreFocus = true): bo
   return true;
 }
 
-/** `?` and the `?` buttons: open this surface's sheet, or close it if it is the one up. */
-export function toggleCheatSheet(surface: CheatSurface): void {
+/**
+ * `?` and the `?` buttons: open this surface's sheet, or close it if it is the one up.
+ *
+ * `opener` is any element of the surface that asked, for the document the sheet goes up
+ * in. A Pinboard can be detached into a window of its own (foundry.mjs 31375), and its
+ * sheet then belongs there: put up in the main window, it opened where the GM was not
+ * looking, and no click in the board's window could close it. The canvas surfaces live
+ * in the main window and name none.
+ */
+export function toggleCheatSheet(surface: CheatSurface, opener?: Node | null): void {
   try {
     const was = shown?.surface;
     closeCheatSheet(undefined, was === surface);
-    if (was !== surface) show(surface);
+    if (was !== surface) show(surface, docOf(opener) ?? document);
   } catch (error) {
     log.warn("the cheat sheet failed", error);
   }
 }
 
-function show(surface: CheatSurface): void {
-  const wrapper = document.createElement("div");
+function show(surface: CheatSurface, doc: Document): void {
+  const wrapper = doc.createElement("div");
   wrapper.innerHTML = cheatSheetMarkup(surface, modifierGlyphs(platform()), currentBindings);
   const element = wrapper.firstElementChild as HTMLElement | null;
   if (!element) return;
-  const active = document.activeElement;
-  const returnTo = active instanceof HTMLElement && active !== document.body ? active : null;
+  // Not `instanceof HTMLElement`: an element of another window is not an instance of
+  // this window's class.
+  const active = doc.activeElement as HTMLElement | null;
+  const returnTo =
+    active && active !== doc.body && typeof active.focus === "function" ? active : null;
 
   // Its own keys, stopped here: an Escape that closes the sheet must not reach core's
   // Escape too, which would close the window behind it or let go of the pin.
@@ -118,13 +130,14 @@ function show(surface: CheatSurface): void {
 
   element.addEventListener("keydown", onKey);
   element.addEventListener("click", onClick);
-  document.addEventListener("pointerdown", onPointer, true);
-  document.body.appendChild(element);
+  // Listened for, and let go of, in the one document the sheet is in.
+  doc.addEventListener("pointerdown", onPointer, true);
+  doc.body.appendChild(element);
   shown = {
     surface,
     element,
     returnTo,
-    off: () => document.removeEventListener("pointerdown", onPointer, true),
+    off: () => doc.removeEventListener("pointerdown", onPointer, true),
   };
   element.querySelector<HTMLElement>("[data-dp-cheat-close]")?.focus({ preventScroll: true });
 }

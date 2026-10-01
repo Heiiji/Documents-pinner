@@ -38,7 +38,7 @@ import { logger } from "../log";
 import { soundPath } from "../normalise";
 import { playRevealSound } from "../effects/reveal-sound";
 import type { DpNotice } from "../types/dp";
-import { restoreFocus, snapshotFocus } from "./focus-restore";
+import { docOf, restoreFocus, snapshotFocus } from "./focus-restore";
 import { guardActivationKeys } from "./keys";
 
 const log = logger("presets");
@@ -598,7 +598,8 @@ export function definePresetStudio(): any {
     }
 
     async _renderHTML() {
-      const wrapper = document.createElement("div");
+      // The window's own document, which a detached studio's popup has to itself.
+      const wrapper = (docOf(this.element) ?? document).createElement("div");
       const selected = this.selected;
       const pin = this.forDoc ? readPin(this.forDoc) : null;
       wrapper.innerHTML = presetStudioMarkup(
