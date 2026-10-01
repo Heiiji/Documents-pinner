@@ -333,7 +333,13 @@ whether a public HTML sanitiser exists (assume not — strip explicitly).
 5. Source edits are debounced ~250 ms, not per-keystroke.
 6. The focus reader is always on top: not occluded, not lit. Intentional — it is a UI
    affordance, not a scene object.
-7. In a multi-level scene a prop belongs to the level its `elevation` falls in.
+7. On a v14 scene with several Scene Levels, a pin shows on every level for now. Its
+   anchor is created with no `levels` and at elevation 0, adopting a Note drops the Note's
+   level, and the module's own layers — the DOM tier, the hit layer — are not
+   level-aware, so the Pinboard's level filter groups pins by elevation. Making core's
+   tile alone level-aware would hide its mesh while the module still drew the card and
+   took the click, which is worse than a pin that shows everywhere. Deferred until it is
+   checked live on a two-level scene.
 8. Anchors are real Tiles and appear in `scene.tiles` to other modules.
 9. Deleting the source leaves the anchor showing a placeholder. It is never auto-deleted;
    that would be destructive and unrecoverable.
@@ -406,26 +412,54 @@ Test world: one scene at darkness 0.8, two lights, a roof tile, three tokens, fo
 src/
   main.ts            hook registration only, no logic
   const.ts  i18n.ts  api.ts  settings.ts  motion*  fvtt  html*  log  normalise*
-  data/       PinData  PinStore  audience*  ownership-plan*  ownership-sync
-              migrations*  pin-schema*
-  canvas/     PinnedTile  PropManager  PropHitLayer  DomPropTier  transform*  lod*
+  data/       PinData  PinStore  audience*  ownership-plan*  ownership-sync  core-hidden
+              migrations (planMigration*)  pin-schema*
+  canvas/     PinnedTile  PropManager  PropHitLayer  DomPropTier  tile-hooks  transform*
+              lod*
   render/     ContentResolver  enrich  CardTemplate*  AssetInliner  Rasterizer  TextureCache
               BakeEffects  PdfPage  measure
   effects/    EffectRegistry  preset-schema*  preset-css*  preset-library  level
-              textures*  presets/*
-  apps/       DocumentPicker  PlacementGhost  PinStudio  Pinboard  PinHUD
-              PresetStudio  ReaderOverlay  PropTooltip  OverlayRoot  pinboard-model*
-              chips
-  ui/         controls  keybindings  onboarding  entry-points
+              reveal-sound  typeface*  textures*  presets/*
+  apps/       DocumentPicker  PlacementGhost + ghost-model
+              PinStudio + pin-studio-markup + edit-holds
+              Pinboard + pinboard-markup + pinboard-model*
+              PinHUD  PresetStudio  ReaderOverlay  PropTooltip  OverlayRoot  CheatSheet
+              chips*  focus-restore
+  ui/         controls  keybindings  onboarding  entry-points  cheatsheet*  modifiers
   sources/    index (the adapter registry)  journal  actor  item  portrait  fields
-              describe  packs  uuid*  search  import  hooks
+              describe  view  packs  uuid*  search  import  hooks
 styles/       documents-pinner.css (entry) + base, card, theme, fx/*, ui/* (focus.css last)
-lang/  tests/  scripts/  docs/  .github/workflows/
+lang/  scripts/  docs/  .github/workflows/
+tests/        one file per behaviour; helpers/ holds the fake world (fake-foundry), the
+              stylesheets as the CSS-policy tests read them (styles), preset fixtures
 ```
 
-`*` marks a **pure** module: no Foundry globals, unit-tested under Node. `sources/fields`
-has a pure core (the schema walk, the ranking, the field read) behind an impure cache.
-`sources/*` imports nothing the suite mocks with a partial factory (A28).
+`*` marks a **pure** module: no Foundry globals, unit-tested under Node. Four are pure in
+part, and say where:
+
+- `data/migrations` writes documents and asks the GM; its planner, `planMigration`, is pure.
+- `sources/fields` has a pure core (the schema walk, the ranking, the field read) behind an
+  impure cache.
+- `apps/ghost-model` is pure but for one read: `E` steps through the preset library.
+- `ui/modifiers` is pure apart from `platform()`, which reads `navigator`.
+
+**An application and the files cut out of it.** `pin-studio-markup`, `edit-holds`,
+`pinboard-markup` and `ghost-model` were split from the application written beside them.
+The application re-exports every name that moved, so its callers and its tests import from
+one place. `effects/reveal-sound` was split from `PropManager` the same way, and
+`canvas/tile-hooks` from `main.ts`.
+
+**The import rule of `sources/`.** `sources/*` imports nothing the suite mocks with a
+partial factory: `api`, `data/ownership-sync`, `render/ContentResolver`, `apps/*` and
+`canvas/*` (A28). `sources/view` holds what the module asks about a pin's source — the
+source a drop makes, the document a pin shows, its page and field choices, what a reveal
+shares, its label — and `api` re-exports it. `ContentResolver` reads it there, not through
+`api`, so the module has no runtime import cycle.
+
+**Layering edges kept on purpose.** `canvas/*` imports `apps/OverlayRoot` (canvas
+infrastructure in all but its path, which two tests mock), `apps/PinHUD`,
+`apps/ReaderOverlay` and `apps/PlacementGhost`. `data/PinStore` and `data/migrations`
+import `canvas/transform` for its pure geometry.
 
 `styles/card.css` is both loaded normally (for the focus reader) and fetched and inlined
 into the SVG by the rasteriser, so the two rendering tiers cannot drift.
@@ -2160,3 +2194,16 @@ documents, make folders and change ownership.
     is pinned and Ali reads the poster.
 20. **Browser second opinion.** Repeat steps 12, 13 and 14 from Ben's Firefox for anything that
     differed.
+21. **A pin from 0.1.x migrates once** (the whole-payload write). Open a world holding pins
+    placed by 0.1.x — one of them set to click through — on scenes not opened since, and accept
+    the offer to update them.
+    - Reload: the offer does not come back, that session or the next, and the console logs no
+      second migration of the same pins.
+    - On the pin that clicked through, set *Opening* to *Double-click* in Pin Studio and
+      reload: it is still *Double-click*, not back to *Not interactive*.
+22. **Hide and show a pin with core's own controls** (the hidden fold). Reveal a prop to Ali alone,
+    then hide it with the eye of core's Tiles HUD, on the Tiles layer.
+    - It leaves Ali's map. The module's HUD eye offers to reveal it, its chips and the Pinboard
+      row say hidden, and an unrelated edit in its Studio — a paper — leaves it hidden.
+    - Show it with core's eye again: it comes back to Ali alone, not to Ben, with its access as
+      before. Hide it with *Hidden* in Tile Config, then Ctrl+Z: the same, both ways.

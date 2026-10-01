@@ -220,6 +220,10 @@ map for any visible pin, as its label says.
 13. With Alt as the drag modifier — the default — Alt-dragging an actor still places
     Foundry's hidden token, and with no modifier set an actor drag still places a token.
     Set the modifier to Ctrl or Shift to pin actors by dragging them.
+14. **Scene Levels.** On a v14 scene with several levels, a pin shows on every level for
+    now, whichever one it was placed on: the module's layers do not know about levels yet,
+    and the Pinboard's level filter groups pins by elevation. Level support waits until it
+    has been checked in a live world.
 
 ## Development
 
@@ -487,6 +491,11 @@ joueur pour toute épingle visible, comme son libellé l'indique.
     avec Alt pose toujours le jeton caché de Foundry, et sans touche réglée, glisser un
     acteur pose toujours un jeton. Réglez la touche sur Ctrl ou Maj pour épingler un
     acteur en le glissant.
+14. **Niveaux de scène.** Sur une scène v14 à plusieurs niveaux, une épingle s'affiche
+    pour l'instant à tous les niveaux, quel que soit celui où elle a été posée : les calques
+    du module ne connaissent pas encore les niveaux, et le filtre de niveau du tableau de
+    bord regroupe les épingles par élévation. Leur prise en charge attend d'avoir été vérifiée
+    dans un vrai monde.
 
 ## Développement
 
