@@ -187,6 +187,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   tiles' ids, and the Studio was found by id: opening it for a pin on the copy brought
   forward the window of its twin on the other scene, where every change then went. Each
   pin now has its own Studio.
+- **Pin Studio went on offering every control over a pin deleted elsewhere**, from the
+  Pinboard, the Tiles layer, Ctrl+Z or another GM, and each change then failed. It says the
+  pin no longer exists.
 
 ## [0.3.3] — 2026-09-30
 

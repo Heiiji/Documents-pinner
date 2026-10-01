@@ -57,6 +57,13 @@ let StudioClass: any = null;
  */
 const open = new Map<string, any>();
 
+/** Whether a pin's tile is still on its scene. Where the scene cannot say, it is. */
+function placed(doc: any): boolean {
+  const tiles = doc?.parent?.tiles;
+  if (typeof tiles?.get !== "function") return true;
+  return tiles.get(doc.id) !== undefined && tiles.get(doc.id) !== null;
+}
+
 /** A pin's key in `open`. */
 const keyOf = (doc: any): string => String(doc?.uuid ?? doc?.id ?? "");
 
@@ -999,7 +1006,10 @@ export function definePinStudio(): any {
     }
 
     async _renderHTML() {
-      const pin = readPin(this.doc);
+      // A deleted tile keeps its data, flag and all, so a Studio left open over a pin deleted
+      // elsewhere — the Pinboard, the Tiles layer, Ctrl+Z, another GM — rendered every
+      // control, and every change then failed against a document that no longer exists.
+      const pin = placed(this.doc) ? readPin(this.doc) : null;
       // Every audience change reaches an open Studio as a render — `refreshStudios` on the
       // tile's update, or the chip handler's own — so the first render that finds the pin
       // showing, outside the hide's own write, is where a hold learns it is over.

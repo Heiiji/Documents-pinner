@@ -220,6 +220,23 @@ describe("which Studios a change re-renders", () => {
   });
 });
 
+describe("a Studio over a pin deleted elsewhere", () => {
+  it("says the pin is gone, rather than offering controls that can only fail", async () => {
+    const scene = (globalThis as any).canvas.scene;
+    tile.parent = scene;
+    const { openStudio, refreshStudios } = await import("../src/apps/PinStudio");
+    const studio = openStudio(tile);
+    await tick();
+
+    scene.tiles.contents.splice(0);
+    refreshStudios([tile.uuid]);
+    await tick();
+
+    expect(contentOf(studio).querySelector(".dp-studio__gone")).not.toBeNull();
+    expect(contentOf(studio).querySelector("[name]")).toBeNull();
+  });
+});
+
 /**
  * A duplicated scene keeps every tile's id. The Studio was found by id, so opening it for a
  * pin on the copy brought forward the original's, and every edit went to the other scene.
