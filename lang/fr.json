@@ -226,6 +226,7 @@
   "DP.notice.packUnreadable": "Certains de vos joueurs ne peuvent pas ouvrir le compendium « {pack} » : ils voient un substitut à la place de ce document. Pour le leur partager, choisissez-le dans Épingler un document — Importer et épingler en crée une copie dans le monde, que vous pourrez leur ouvrir.",
   "DP.notice.peekTip": "Astuce : maintenez {key} pour estomper les documents posés sur la carte et lire ce qu'il y a dessous.",
   "DP.notice.placeFailed": "L'épingle n'a pas pu être posée. Le placement reste actif ; cliquez à nouveau pour réessayer.",
+  "DP.notice.retargetSyncOff": "Cette épingle montre désormais un acteur : la révéler n'accorde donc plus l'accès, et l'avis se lit sur place sans lui. Pour faire apparaître l'acteur dans la barre latérale de vos joueurs, en accès Limité, activez l'accès dans l'onglet Audience du Studio.",
   "DP.notice.revealNext": "Révélée : {name} — {count} restante(s).",
   "DP.notice.revealNextFailed": "L'épingle suivante n'a pas pu être révélée.",
   "DP.notice.revealNextNone": "Rien n'est masqué sur cette scène : il ne reste rien à révéler.",

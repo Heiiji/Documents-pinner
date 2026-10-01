@@ -20,6 +20,7 @@ import {
   dataModel,
   fakeActor,
   fakeItem,
+  fakeJournal,
   fakeTile,
   holdModifier,
   installSources,
@@ -371,7 +372,7 @@ describe("revealing an actor or an item", () => {
   });
 });
 
-describe("retargeting a pin onto another actor", () => {
+describe("retargeting a pin onto an actor", () => {
   const rook = () =>
     fakeActor({
       id: "rook",
@@ -395,6 +396,12 @@ describe("retargeting a pin onto another actor", () => {
       { field: null, synced: false, notices: [], listed: {} },
     ],
     [
+      "from a journal shared with access, access goes off and the GM is told",
+      "JournalEntry.letter",
+      { field: null, sync: true },
+      { field: null, synced: false, notices: ["DP.notice.retargetSyncOff"], listed: {} },
+    ],
+    [
       "from an actor the GM opened access on, access stays on",
       "Actor.jack",
       { field: null, sync: true },
@@ -404,7 +411,11 @@ describe("retargeting a pin onto another actor", () => {
     const tile = pinTile({ uuid: from, field: before.field });
     pinOf(tile).audience.ownershipSync.enabled = before.sync;
     const target = rook();
-    install({ tiles: [tile], actors: [jack(), target] });
+    install({
+      tiles: [tile],
+      journals: [fakeJournal({ id: "letter", name: "Letter" })],
+      actors: [jack(), target],
+    });
     const { retarget } = await import("../src/api");
 
     // The source the picker, a menu and `/pin` hand over: it names no field.

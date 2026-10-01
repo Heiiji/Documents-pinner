@@ -226,6 +226,7 @@
   "DP.notice.packUnreadable": "Some of your players cannot open the compendium “{pack}”: they see a placeholder instead of this document. To share it with them, choose it in Pin a document — Import & pin makes a world copy they can be given.",
   "DP.notice.peekTip": "Tip: hold {key} to fade the documents lying on the map and read what is underneath.",
   "DP.notice.placeFailed": "The pin could not be placed. Placement is still active; click again to retry.",
+  "DP.notice.retargetSyncOff": "This pin now shows an actor, so revealing it no longer grants access: the poster reads in place without it. To list the actor in your players' sidebar, at Limited, switch access on in Pin Studio's Audience tab.",
   "DP.notice.revealNext": "Revealed {name} — {count} left.",
   "DP.notice.revealNextFailed": "The next pin could not be revealed.",
   "DP.notice.revealNextNone": "Nothing on this scene is hidden: there is nothing left to reveal.",

@@ -1096,11 +1096,25 @@ export async function retarget(anchorDoc: any, source: DpSource): Promise<boolea
   // KIND changes: from one document to another, the icon the GM chose for this pin is
   // part of the pin, like its size and its effect.
   const keepIcon = before.source.kind === "document" && source.kind === "document";
+  // A pin that comes to show an actor starts with access off, as one placed on it does
+  // (D2): a journal shared with access on, retargeted onto an NPC, would otherwise list
+  // the NPC in every sidebar its audience reaches at the very next sync. Switching off
+  // never widens anything. A pin already on an actor keeps what the GM chose for it.
+  const syncOff =
+    before.audience.ownershipSync.enabled &&
+    adapterOf(before.source).syncOnCreate &&
+    !adapterOf(source).syncOnCreate;
   await store.update(
     anchorDoc,
-    { source: { ...source, field: source.field ?? null } },
+    {
+      source: { ...source, field: source.field ?? null },
+      ...(syncOff
+        ? { audience: { ownershipSync: { ...before.audience.ownershipSync, enabled: false } } }
+        : {}),
+    },
     keepIcon ? {} : { "texture.src": anchorTexture(source) }
   );
+  if (syncOff) notify({ key: "DP.notice.retargetSyncOff" }, "info");
 
   // The old uuid rides along precisely for this: the payload no longer names the old
   // document, so the sync cannot find it on its own any more. One call, not a sync and
