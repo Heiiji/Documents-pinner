@@ -138,6 +138,8 @@ export function portraitAdapter(kind: PortraitKind): SourceAdapter {
     // `Journal.show` resolves without showing anything for any other document (TYPES
     // `journal.d.mts:40-46`): claiming it was shown would be a lie.
     canShow: false,
+    // The directory's own hook, as for a journal (foundry.mjs 14.368, 131819).
+    contextHooks: [`get${documentName}ContextOptions`],
 
     fromDrop(data) {
       if (data?.type !== documentName || typeof data.uuid !== "string") return null;

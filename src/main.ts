@@ -58,28 +58,11 @@ import {
 import { flashDomProp, setDomPropHover, syncSceneDim } from "./canvas/DomPropTier";
 import { onboardingReady } from "./ui/onboarding";
 import { sourceLifecycleHandler, sourceUpdateHandler } from "./sources/hooks";
-import { hookedDocumentNames } from "./sources/index";
+import { contextHookNames, hookedDocumentNames } from "./sources/index";
 
 const log = logger("boot");
 
 declare const Hooks: any;
-
-/**
- * The context-menu hooks of every directory a pin's source can be listed in — journals,
- * actors, items, the sidebar's and a compendium window's alike — and of a journal sheet's
- * pages. A v14 directory fires `get${documentName}ContextOptions` (foundry.mjs 14.368,
- * 131819), and a sheet's pages `getJournalEntryPageContextOptions` (101133); the 14.366
- * types name the journal sidebar's `getJournalContextOptions`, so that one is registered too,
- * and `addContextOption` adds its entry once however many of them fire. The AppV1 names
- * (`get…DirectoryEntryContext`, `getJournalSheetPageContextOptions`) cannot fire on 14.
- */
-const CONTEXT_HOOKS = [
-  "getJournalEntryContextOptions",
-  "getJournalContextOptions",
-  "getJournalEntryPageContextOptions",
-  "getActorContextOptions",
-  "getItemContextOptions",
-];
 
 Hooks.once("init", () => {
   settings.register();
@@ -203,9 +186,11 @@ Hooks.on("chatMessage", onChatMessage);
 // and registering only the Tile one made adopting an existing Note impossible.
 Hooks.on("renderTileConfig", onRenderConfig);
 Hooks.on("renderNoteConfig", onRenderConfig);
-// The application rides along: a compendium window fires the same hooks as the sidebar,
-// and only its collection says that the row it was opened on is in a pack.
-for (const hook of CONTEXT_HOOKS) {
+// The context menus of every list a pin's source can be shown in — each adapter names its
+// own (`contextHooks`). The application rides along: a compendium window fires the same
+// hooks as the sidebar, and only its collection says that the row it was opened on is in a
+// pack.
+for (const hook of contextHookNames()) {
   Hooks.on(hook, (app: any, options: any[]) => addContextOption(options, app));
 }
 

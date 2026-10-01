@@ -217,6 +217,16 @@ export const journalAdapter: SourceAdapter = {
   maxGrant: 2,
   syncOnCreate: true,
   canShow: true,
+  // A v14 directory fires `get${documentName}ContextOptions` (foundry.mjs 14.368, 131819),
+  // and a sheet's pages `getJournalEntryPageContextOptions` (101133); the 14.366 types name
+  // the journal sidebar's `getJournalContextOptions`, so that one is registered too, and
+  // `addContextOption` adds its entry once however many of them fire. The AppV1 names
+  // (`get…DirectoryEntryContext`, `getJournalSheetPageContextOptions`) cannot fire on 14.
+  contextHooks: [
+    "getJournalEntryContextOptions",
+    "getJournalContextOptions",
+    "getJournalEntryPageContextOptions",
+  ],
 
   fromDrop(data) {
     if (!data?.uuid) return null;

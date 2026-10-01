@@ -42,7 +42,7 @@ export interface PickerEntry {
  * Entries whose only page shares their name are listed once: a single-page journal is
  * one thing to a GM, and showing it twice makes the list look broken.
  */
-export function pickerEntries(): PickerEntry[] {
+export function journalEntries(): PickerEntry[] {
   const out: PickerEntry[] = [];
 
   for (const entry of g()?.journal?.contents ?? []) {
@@ -97,7 +97,7 @@ function worldDocuments(documentName: "Actor" | "Item"): PickerEntry[] {
 /** Every pinnable world document of these kinds, journals first, then actors, then items. */
 export function worldEntries(kinds: readonly Pinnable[] = PINNABLE): PickerEntry[] {
   return [
-    ...(kinds.includes("JournalEntry") ? pickerEntries() : []),
+    ...(kinds.includes("JournalEntry") ? journalEntries() : []),
     ...(kinds.includes("Actor") ? worldDocuments("Actor") : []),
     ...(kinds.includes("Item") ? worldDocuments("Item") : []),
   ];
