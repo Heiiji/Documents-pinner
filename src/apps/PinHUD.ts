@@ -598,8 +598,10 @@ function onSetAudienceKind(this: any, _event: Event, target: HTMLElement) {
     });
     return;
   }
+  // A function of the audience the pin holds when the write lands, so a chip click still
+  // in flight is kept rather than replaced by the audience read above (DESIGN A29).
   void api
-    .setAudience(doc, { ...pin.audience, kind: kind as any, restore: null })
+    .setAudience(doc, (current) => ({ ...current, kind: kind as any, restore: null }))
     ?.then(() => this.render());
 }
 

@@ -218,18 +218,47 @@ function anchorTexture(source: DpSource): string {
 // ---------------------------------------------------------------------------
 
 /**
+ * A change of audience decided from the audience the pin holds when its write's turn
+ * comes; `null` leaves the pin as it is.
+ */
+export type AudienceChange = (current: DpAudience) => DpAudience | null;
+
+/**
  * Apply an audience change to an anchor.
+ *
+ * `next` is the audience to write, or — the form every verb that derives one from the
+ * current audience passes — a function of the audience the pin holds when the write's
+ * turn in the queue comes. Built before the queue, a derived audience was decided from a
+ * payload a write still in flight was about to replace: two chip clicks in one tick each
+ * read the same audience, and the second undid the first (DESIGN A29).
  *
  * The payload is written first and the ownership sync follows, so a client that has
  * just seen the pin appear can already open the document behind it. The reverse order
  * would produce a window — small, but exactly the window a player clicks in.
  */
-export async function setAudience(anchorDoc: any, next: DpAudience): Promise<void> {
-  if (!isGM()) return;
-  const before = readPin(anchorDoc);
-  await store.update(anchorDoc, { audience: next });
+export async function setAudience(
+  anchorDoc: any,
+  next: DpAudience | AudienceChange
+): Promise<void> {
+  await changeAudience(anchorDoc, next);
+}
+
+/**
+ * `setAudience`, resolving whether anything was written. The notice is decided from the
+ * payload the write was decided from, read inside the queue like the change itself.
+ */
+async function changeAudience(anchorDoc: any, next: DpAudience | AudienceChange): Promise<boolean> {
+  if (!isGM()) return false;
+  const { before, patch } = await store.updateWith(anchorDoc, (pin) => {
+    const audience = typeof next === "function" ? next(pin.audience) : next;
+    return audience ? { audience } : null;
+  });
+  if (!patch) return false;
   await syncAnchor(anchorDoc);
-  if (revealsUnopenable(before, next)) notify({ key: "DP.notice.revealedNoAccess" }, "info");
+  if (revealsUnopenable(before, patch.audience)) {
+    notify({ key: "DP.notice.revealedNoAccess" }, "info");
+  }
+  return true;
 }
 
 /**
@@ -265,27 +294,34 @@ function revealsUnopenable(before: DpPinFlags | null, next: DpAudience): boolean
  * And it says what `setAudience` says, once for the batch (`revealsUnopenable`): revealing
  * an icon pin that opens its sheet, with access off, shows a pin whose sheet refuses to
  * open. A bulk reveal used to say nothing, for as many such pins as it touched.
+ *
+ * Which pins change, and to what, is decided inside the batch's turn in the write queue,
+ * from the payloads the writes before it left (A29): decided before it, "Hide all" over a
+ * chip click still landing remembered the audience the click was replacing.
  */
 export async function setVisibilityMany(scene: any, docs: any[], reveal: boolean): Promise<number> {
   if (!isGM()) return 0;
-  const changes = docs.flatMap((doc) => {
-    const pin = readPin(doc);
-    if (!pin) return [];
-    const next = reveal ? audience.revealed(pin.audience) : audience.hidden(pin.audience);
-    const same =
-      audience.sameAudience(next, pin.audience) &&
-      (doc.hidden === true) === audience.anchorHidden(next);
-    return same ? [] : [{ doc, before: pin, patch: { audience: next } }];
-  });
-  if (!changes.length) return 0;
-
+  const changes: { doc: any; before: DpPinFlags; next: DpAudience }[] = [];
   await store.batchUpdate(
     scene,
-    changes.map(({ doc, patch }) => ({ doc, patch }))
+    docs.map((doc) => ({
+      doc,
+      patch: (pin: DpPinFlags) => {
+        const next = reveal ? audience.revealed(pin.audience) : audience.hidden(pin.audience);
+        const same =
+          audience.sameAudience(next, pin.audience) &&
+          (doc.hidden === true) === audience.anchorHidden(next);
+        if (same) return null;
+        changes.push({ doc, before: pin, next });
+        return { audience: next };
+      },
+    }))
   );
+  if (!changes.length) return 0;
+
   for (const { doc } of changes) await syncAnchor(doc);
 
-  if (changes.some(({ before, patch }) => revealsUnopenable(before, patch.audience))) {
+  if (changes.some(({ before, next }) => revealsUnopenable(before, next))) {
     notify({ key: "DP.notice.revealedNoAccess" }, "info");
   }
   return changes.length;
@@ -335,13 +371,17 @@ export async function patchAndSync(anchorDoc: any, changes: PinPatch): Promise<v
   }
 }
 
+/**
+ * A verb that derives the next audience from the current one. The change is handed to
+ * `setAudience` as a function, so it is applied to the audience the pin holds when its
+ * write's turn comes — the payload read here only says whether this is a pin at all.
+ */
 function withAudience(
   anchorDoc: any,
   change: (current: DpAudience) => DpAudience
 ): Promise<void> | undefined {
-  const pin = readPin(anchorDoc);
-  if (!pin) return undefined;
-  return setAudience(anchorDoc, change(pin.audience));
+  if (!readPin(anchorDoc)) return undefined;
+  return setAudience(anchorDoc, change);
 }
 
 /** The eye toggle: a true on/off that remembers the per-player work it hid. */
@@ -379,14 +419,16 @@ export function chipClick(
   return solo ? soloUser(anchorDoc, userId) : setUserVisible(anchorDoc, userId, !wasOn);
 }
 
-/** The HUD's access box: change who can open the document without changing who sees it. */
+/**
+ * The HUD's access box: change who can open the document without changing who sees it.
+ *
+ * One field, so a deep patch: it merges into whatever audience the pin holds when the
+ * write lands, where a whole audience built here put back the one a chip click in flight
+ * was replacing.
+ */
 export function setOwnershipSync(anchorDoc: any, enabled: boolean): Promise<void> | undefined {
-  const pin = readPin(anchorDoc);
-  if (!pin) return undefined;
-  return setAudience(anchorDoc, {
-    ...pin.audience,
-    ownershipSync: { ...pin.audience.ownershipSync, enabled },
-  });
+  if (!readPin(anchorDoc)) return undefined;
+  return patchAndSync(anchorDoc, { audience: { ownershipSync: { enabled } } } as PinPatch);
 }
 
 /**
@@ -404,14 +446,11 @@ export function isRevealed(anchorDoc: any, pin: DpPinFlags | null = readPin(anch
  *
  * Resolves to false, writing nothing, when there is nobody to choose yet: an empty
  * selection reaches nobody and would be hidden in disguise, so the caller asks the GM to
- * pick a player instead. The HUD always did; the Studio's dropdown wrote it.
+ * pick a player instead. The HUD always did; the Studio's dropdown wrote it. Who is
+ * chosen is decided when the write's turn comes, from the list the pin holds then.
  */
-export async function chooseSome(anchorDoc: any): Promise<boolean> {
-  const pin = readPin(anchorDoc);
-  const next = pin ? audience.someAudience(pin.audience) : null;
-  if (!next) return false;
-  await setAudience(anchorDoc, next);
-  return true;
+export function chooseSome(anchorDoc: any): Promise<boolean> {
+  return changeAudience(anchorDoc, audience.someAudience);
 }
 
 /** Whether a user can see this pin right now, by the same rule the canvas uses. */
@@ -735,7 +774,8 @@ export async function spotlight(anchorDoc: any): Promise<{ revealed: boolean; pu
   if (!pin) return outcome;
 
   if (anchorDoc.hidden === true || pin.audience.kind === "hidden") {
-    await setAudience(anchorDoc, audience.revealed(pin.audience));
+    // Revealed from the audience the pin holds when the write lands, not the one read here.
+    await setAudience(anchorDoc, audience.revealed);
     // A write core refused still resolves, and the pin, or its scene, may be gone.
     pin = readPin(anchorDoc);
     if (!pin || anchorDoc.hidden === true || pin.audience.kind === "hidden") {
@@ -896,7 +936,9 @@ async function revealNextNow(
     return nothing;
   }
 
-  await setAudience(doc, audience.revealed(pin.audience));
+  // The row was chosen from the payloads read here; what it reveals to is decided from the
+  // audience the pin holds when the write lands, as every reveal is (A29).
+  await setAudience(doc, audience.revealed);
   // A write core refused still resolves; the pin must be out of hiding before anything
   // points at it.
   const after = readPin(doc);
