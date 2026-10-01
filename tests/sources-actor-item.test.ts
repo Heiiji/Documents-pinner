@@ -472,3 +472,56 @@ describe("dropping an actor or an item on the map", () => {
     expect(world.notifications.map((n) => n.message)).toEqual(notices);
   });
 });
+
+describe("Pin Studio on an actor or an item", () => {
+  const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+  it("offers the actor's texts by their labels, with no page to choose, and stores the choice", async () => {
+    const tile = pinTile({ uuid: "Actor.jack" });
+    install({ tiles: [tile], actors: [jack()] });
+    world.game.i18n.format = (key: string, data: Record<string, unknown>) =>
+      `${key} ${JSON.stringify(data)}`;
+    const { definePinStudio } = await import("../src/apps/PinStudio");
+    const studio = new (definePinStudio())();
+    studio.doc = tile;
+    studio.tab = "content";
+    await studio.render();
+    const root = studio.content as HTMLElement;
+    const select = root.querySelector<HTMLSelectElement>('[name="source.field"]')!;
+
+    expect([...select.options].map((option) => [option.value, option.textContent])).toEqual([
+      ["", 'DP.studio.textAutomatic {"label":"Details › Biography › Public"}'],
+      ["details.biography.value", "Details › Biography › Value"],
+      ["details.biography.public", "Details › Biography › Public"],
+    ]);
+    expect(root.querySelector('[name="source.pageId"], [name="source.pdfPage"]')).toBeNull();
+
+    const stored: unknown[] = [];
+    for (const value of ["details.biography.value", ""]) {
+      select.value = value;
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+      await flush();
+      stored.push(pinOf(tile).source.field);
+    }
+    expect(stored).toEqual(["details.biography.value", null]);
+  });
+
+  it.each([
+    ["an actor's reveal grants Limited alone, and says why", "Actor.jack", "actor", ["1"]],
+    ["an item's reveal grants the level asked", "Item.amulet", "item", ["2", "1"]],
+  ])("%s, on the Audience tab", async (_what, uuid, scope, levels) => {
+    const tile = pinTile({ uuid });
+    pinOf(tile).audience.ownershipSync.enabled = true;
+    install({ tiles: [tile], actors: [jack()], items: [amulet()] });
+    const { studioMarkup } = await import("../src/apps/PinStudio");
+
+    const tab = document.createElement("div");
+    tab.innerHTML = studioMarkup(tile, pinOf(tile), "audience");
+
+    expect(tab.querySelector("[data-dp-grants]")?.getAttribute("data-dp-grants")).toBe(scope);
+    const options = tab.querySelectorAll<HTMLOptionElement>(
+      '[name="audience.ownershipSync.level"] option'
+    );
+    expect([...options].map((option) => option.value)).toEqual(levels);
+  });
+});
