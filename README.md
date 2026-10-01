@@ -5,7 +5,7 @@ click, or as a full-size **readable prop lying on the scene**.
 
 Per-pin visibility the GM changes in one click. Foundry VTT **v14+**.
 
-> **Beta.** Journal props are drawn as an HTML layer over the canvas, not into it, so they
+> **Beta.** Text props are drawn as an HTML layer over the canvas, not into it, so they
 > are **not lit, fogged or occluded** and do not sort behind tokens. That was the plan, and
 > it was not possible: an SVG containing a `foreignObject` tainted the canvas in every
 > browser measured, so the texture upload was refused. Verified on Chromium 144, not just
@@ -45,8 +45,8 @@ would be worse than saying nothing.
 
 ## Use
 
-**Alt-drag** a journal, a page or an item from the sidebar onto the map. A ghost of the
-real prop follows the cursor; click to place.
+**Alt-drag** a journal, a page or an item from the sidebar or a compendium onto the map. A
+ghost of the real prop follows the cursor; click to place.
 
 **A new pin is visible to players the moment it lands.** That is the default of the
 *Default visibility* setting. Press `V` while placing to put this one down hidden, or set
@@ -117,9 +117,9 @@ item, and *Automatic* picks public text first, then a biography or a description
 field named for the GM. Its secret sections reach only its owners and you. Revealing an
 actor shares it at Limited at most, and a new actor pin — or a pin pointed at an actor
 from Pin Studio — starts with *Grant document access* off: the poster reads in place
-without it. An actor is pinned from its context
-menu, its sheet, *Pin a document* or `/pin`; dragging one onto the map stays Foundry's
-token unless the drag modifier is Ctrl or Shift.
+without it. An actor is pinned from its context menu, its sheet, *Pin a document* or
+`/pin`; dragging one onto the map stays Foundry's token unless the drag modifier is Ctrl
+or Shift.
 
 *Pin a document* searches journals, actors and items — the world's, then every
 compendium's from two letters — with a chip to show one kind alone.
@@ -200,9 +200,11 @@ map for any visible pin, as its label says.
    that compendium — Observer for their role. Anyone else sees a placeholder that says
    why, and you are told so when you place it: *Pin a document* greys such a row and
    offers *Import & pin*, which makes a copy — of a journal, an actor or an item — in a
-   "Documents Pinner" folder of its kind, which you share like anything else in your world. Compendium permissions are per role and pack-wide, so a reveal never
-   changes them and adds nothing to anyone's sidebar. A PDF page from a compendium is
-   drawn as a card.
+   "Documents Pinner" folder of its kind, which you share like anything else in your
+   world. Compendium permissions are per role and pack-wide, so a reveal never changes
+   them and adds nothing to anyone's sidebar. A PDF page from a compendium is drawn as a
+   card. A hidden pin on a compendium your players can open shows the key glyph on their
+   chips: they can already read it in the compendium.
 8. Pins are real Tiles and appear in `scene.tiles` to other modules, by design.
 9. *Fit to content* cannot measure a bare image pin — an image has no text to measure —
    so it leaves that one's height alone and says so.
@@ -247,7 +249,7 @@ d'une petite **icône** sur laquelle les joueurs cliquent, ou d'un **accessoire 
 
 Une visibilité que le MJ change en un clic. Foundry VTT **v14+**.
 
-> **Bêta.** Les accessoires issus d'un journal sont dessinés en HTML par-dessus le canevas,
+> **Bêta.** Les accessoires de texte sont dessinés en HTML par-dessus le canevas,
 > pas dedans : ils ne sont donc **ni éclairés, ni embrumés, ni occultés**, et ne passent pas
 > derrière les pions. C'était le plan, et ce ne l'était pas : un SVG contenant un
 > `foreignObject` « contaminait » le canevas dans tous les navigateurs mesurés, si bien que
@@ -287,8 +289,8 @@ serait pire que de ne rien dire.
 
 ## Utilisation
 
-**Alt-glissez** un journal, une page ou un objet depuis la barre latérale sur la carte. Un
-fantôme de l'accessoire réel suit le curseur ; cliquez pour poser.
+**Alt-glissez** un journal, une page ou un objet depuis la barre latérale ou un compendium
+sur la carte. Un fantôme de l'accessoire réel suit le curseur ; cliquez pour poser.
 
 **Une nouvelle épingle est visible des joueurs dès qu'elle est posée.** C'est la valeur par
 défaut du réglage *Visibilité par défaut*. Appuyez sur `V` pendant le placement pour poser
@@ -367,10 +369,9 @@ texte public, puis une biographie ou une description, jamais un champ que son no
 au MJ. Ses sections secrètes n'atteignent que ses propriétaires et vous. Révéler un acteur
 le partage en accès Limité au plus, et une nouvelle épingle d'acteur — ou une épingle
 dirigée vers un acteur depuis le Studio — commence avec *Accorder l'accès au document*
-désactivé : l'avis se lit sur place sans lui. Un acteur
-s'épingle depuis son menu contextuel, sa fiche, *Épingler un document* ou `/pin` ; le
-glisser sur la carte reste le jeton de Foundry, sauf si la touche de glisser-épingler est
-Ctrl ou Maj.
+désactivé : l'avis se lit sur place sans lui. Un acteur s'épingle depuis son menu
+contextuel, sa fiche, *Épingler un document* ou `/pin` ; le glisser sur la carte reste le
+jeton de Foundry, sauf si la touche de glisser-épingler est Ctrl ou Maj.
 
 *Épingler un document* cherche dans les journaux, les acteurs et les objets — ceux du
 monde, puis ceux de chaque compendium dès deux lettres — avec une pastille pour n'en
@@ -461,10 +462,12 @@ joueur pour toute épingle visible, comme son libellé l'indique.
    substitut qui dit pourquoi, et vous en êtes prévenu en le posant : *Épingler un
    document* grise une telle ligne et propose *Importer et épingler*, qui en crée une copie
    — d'un journal, d'un acteur ou d'un objet — dans un dossier « Documents Pinner » de son
-   type, que vous partagez comme tout autre document de votre monde.
-   Les permissions d'un compendium valent par rôle et pour tout le pack : une révélation ne
-   les change jamais et n'ajoute rien à la barre latérale de quiconque. Une page PDF d'un
-   compendium est dessinée comme une carte.
+   type, que vous partagez comme tout autre document de votre monde. Les permissions d'un
+   compendium valent par rôle et pour tout le pack : une révélation ne les change jamais
+   et n'ajoute rien à la barre latérale de quiconque. Une page PDF d'un compendium est
+   dessinée comme une carte. Une épingle masquée sur un compendium que vos joueurs peuvent
+   ouvrir porte le glyphe de clé sur leurs pastilles : ils peuvent déjà la lire dans le
+   compendium.
 8. Les épingles sont de vraies tuiles et apparaissent dans `scene.tiles` aux autres modules,
    par conception.
 9. *Ajuster au contenu* ne peut pas mesurer une épingle d'image nue — une image n'a pas

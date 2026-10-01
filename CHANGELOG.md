@@ -158,8 +158,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   glyph sat on the wrong chips; a PDF page was a card, then a texture. Foundry answers for
   a compendium document differently once it has loaded it, for five minutes. A compendium
   pin is now read from its pack throughout, and names its page once the page has loaded.
-- **"Pin to scene" in a compendium window did nothing.** The row was looked up among the
-  world's journals, where a compendium's are not. It pins the compendium's journal now.
+- **"Pin to scene" in a compendium window did nothing**, and nor did it on a page inside a
+  compendium journal's sheet. The row was looked up among the world's journals, where a
+  compendium's are not. It pins the compendium's journal, or that page, now.
 - **Pin Studio said "No source" for a page from a compendium**, and listed no pages to
   choose from for a compendium journal. It names the page and lists them.
 - **The Audience tab said revealing a compendium document "shares the whole journal".** A
