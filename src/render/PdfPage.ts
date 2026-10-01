@@ -171,12 +171,8 @@ export async function pdfPageCount(src: string): Promise<number> {
   return doc?.numPages ?? 0;
 }
 
-/** Whether a resolved source is a PDF page this module can draw. */
-export function pdfSourceOf(source: any): string | null {
-  if (source?.type !== "pdf") return null;
-  const src = source?.src;
-  return typeof src === "string" && src ? src : null;
-}
+// Which journal page is a PDF is the journal adapter's question; its tests read it here.
+export { pdfSourceOf } from "../sources/journal";
 
 /**
  * Drop everything, and let pdf.js free what it holds. Called when the scene tears down.

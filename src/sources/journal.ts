@@ -14,7 +14,6 @@
 import { OWNERSHIP } from "../const";
 import { escapeHtml } from "../html";
 import { t } from "../i18n";
-import { pdfSourceOf } from "../render/PdfPage";
 import { documentSource } from "../data/pin-schema";
 import type { GrantTarget, PageChoice, ShownFacts, SourceAdapter, SourceFacts } from "./index";
 
@@ -26,6 +25,16 @@ function journalCrumb(shown: ShownFacts): string {
     return `${parent} › ${name}`;
   }
   return name;
+}
+
+/**
+ * The file of a resolved journal page that is a PDF this module can draw, or null. Asked
+ * of the journal adapter only: an actor whose system names a type "pdf" is not one.
+ */
+export function pdfSourceOf(source: any): string | null {
+  if (source?.type !== "pdf") return null;
+  const src = source?.src;
+  return typeof src === "string" && src ? src : null;
 }
 
 /** What kind of journal document it is, as an icon. */
