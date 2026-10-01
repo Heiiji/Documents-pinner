@@ -60,7 +60,7 @@ import {
 import { resolveCard } from "../render/ContentResolver";
 import { renderPdfPage } from "../render/PdfPage";
 import { pdfSourceForPin } from "../sources/describe";
-import { bakeEffects, copyCanvas } from "../render/BakeEffects";
+import { bakeEffects, clearBakeCache, copyCanvas } from "../render/BakeEffects";
 import { dressing } from "../effects/EffectRegistry";
 import { svgDocument } from "../render/CardTemplate";
 import { inlineFonts, inlineImages } from "../render/AssetInliner";
@@ -1129,6 +1129,9 @@ export function propManager(): Manager {
 /** Release everything. Called on `canvasTearDown` and when the module is disabled. */
 export function teardownProps(): void {
   manager?.stop();
+  // The decoded grain and stains, one set per seed, intensity and preset a GM tried on a
+  // PDF: bounded by editing, not by the world, and never released before this.
+  clearBakeCache();
 }
 
 /** What the DOM tier needs to play a reveal: the preset's animation and duration. */
