@@ -53,6 +53,10 @@ function holdFrames(view: Window) {
     get waiting() {
       return asked.length;
     },
+    /** A window gone — a closed popup: the frames it was asked for never run. */
+    drop() {
+      asked.splice(0);
+    },
     /** Paint: run every callback asked for so far, then let the renders they began land. */
     async paint() {
       for (const callback of asked.splice(0)) callback(performance.now());
@@ -173,6 +177,38 @@ describe("the board's own window", () => {
 
     await popup.paint();
     expect(board.renderCount).toBe(before + 1);
+  });
+
+  it("renders on its floor when its window paints no frame, and only once", async () => {
+    const before = board.renderCount;
+    mod.refreshPinboard();
+    expect(frames.waiting).toBe(1);
+    // A minimised popup, a hidden tab: the frame never comes.
+    await new Promise((resolve) => setTimeout(resolve, mod.RENDER_FLOOR_MS + 30));
+    for (let i = 0; i < 4; i++) await Promise.resolve();
+    expect(board.renderCount).toBe(before + 1);
+
+    // The frame arriving late finds nothing left to do.
+    await frames.paint();
+    expect(board.renderCount).toBe(before + 1);
+  });
+
+  it("is not stuck behind a request its window took with it", async () => {
+    // Asked, then the board closes before any frame: a re-attach closes the popup the
+    // frame was asked of, synchronously.
+    mod.refreshPinboard();
+    expect(frames.waiting).toBe(1);
+    await board.close();
+    frames.drop();
+
+    const again = mod.openPinboard();
+    await again.render();
+    await frames.paint();
+    const before = again.renderCount;
+    mod.refreshPinboard();
+    expect(frames.waiting).toBe(1);
+    await frames.paint();
+    expect(again.renderCount).toBe(before + 1);
   });
 
   it("renders on a microtask where there is no frame to wait for", async () => {

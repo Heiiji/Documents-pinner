@@ -179,7 +179,10 @@ export function definePinStudio(): any {
       // Held before the hide lands, so the render the hide itself triggers already shows
       // the way back, and a hide that throws still has its hold ended by the close.
       this.hold = hold;
-      this.hiding = api.setAudience(doc, next);
+      // Hidden from the audience the pin holds when the write's turn comes (A29): a chip
+      // click landing during the hold's settings round trip is in it, where the audience
+      // read above would have hidden — and later restored — the one from before the click.
+      this.hiding = api.setAudience(doc, hidden);
       try {
         await this.hiding;
       } finally {
@@ -193,6 +196,17 @@ export function definePinStudio(): any {
         await release();
         notify({ key: "DP.notice.editHoldFailed" }, "error");
         return;
+      }
+      // The hold remembers what the hide remembered. Written first, it holds the audience
+      // read before the hide; a click that landed in between is in the pin's memory and not
+      // in the hold's, and ending the hold would then find the pin "changed by hand" and
+      // leave it hidden. A reload before this line fails the same safe way.
+      if (this.hold === hold && resumeAfterEdit(after.audience, hold.restore) === null) {
+        const remembered: EditHold = { ...hold, restore: after.audience.restore };
+        this.hold = remembered;
+        await writeHolds((holds) =>
+          holds.map((h) => (h.anchor === remembered.anchor ? remembered : h))
+        );
       }
       this.render();
     }
