@@ -9,8 +9,8 @@ import { defineConfig } from "vite";
  *
  * CSS is deliberately NOT part of the build: styles/documents-pinner.css uses a
  * native `@layer` statement plus `@import ... layer()` so the cascade order is
- * fixed at runtime. Chromium 144 (Foundry v14 / Electron 40) supports all of it,
- * and keeping CSS out of the bundle means style edits need no rebuild at all.
+ * fixed at runtime. Chromium 144 supports all of it — Foundry 14.368 itself requires 146
+ * (Electron 41) — and keeping CSS out of the bundle means style edits need no rebuild.
  */
 export default defineConfig({
   build: {

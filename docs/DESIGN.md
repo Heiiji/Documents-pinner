@@ -227,11 +227,15 @@ the module's signature affordance.
   every frame. Static use only.
 - Any `PIXI.Filter` must set `filter.resolution` explicitly, or filtered props render
   visibly softer than unfiltered ones.
-- One ticker callback for the whole module; one shared `PIXI.UniformGroup`.
-- Transform sync is guarded by a dirty check on the six matrix components, **not** by
-  the `canvasPan` hook — that hook fires every tick during an animated pan.
+- One ticker callback for the whole module. (A shared `PIXI.UniformGroup` was planned for
+  a shader tier that was never built — A3, A29.)
+- Transform sync is driven by the `canvasPan` hook, which fires every tick of an animated
+  pan, so it is dirty-checked on the six matrix components and writes nothing else; it
+  writes at once, inside the ticker's frame — a write deferred to the next frame left the
+  cards a frame behind the map (A29).
 - Texture generation is a concurrency-1 priority queue; resolution tiers snap to powers
-  of two so a slow zoom cannot thrash.
+  of two so a slow zoom cannot thrash. DOM cards resolve two at a time, from a kept body
+  (A29).
 - `PIXI.Texture.from(canvas)` caches by the canvas's internal id: always
   `texture.destroy(true)` on eviction, or GPU memory leaks.
 
@@ -284,10 +288,13 @@ collapses to a blank card under `reduced`.
 **Verified:**
 
 - v14 is GA; 14.365 is v14 Stable 7 (July 2026).
+- 14.368's client requires Chromium ≥ 146 (Electron 41), Firefox ≥ 138 and Safari ≥ 18.4
+  (`#BROWSER_TESTS`, 203581); Foundry's requirements page calls Safari unsupported.
 - `Journal.show(doc, { force, users })` displays "regardless of normal permission";
   `Journal._showEntry(uuid, force)` takes only a UUID and resolves it client-side.
 - `getSceneControlButtons(controls)` receives a **Record** keyed by control name, not an
-  array. Tools are also a record. A tool with neither `onChange` nor `onClick` throws.
+  array. Tools are also a record. A tool with neither `onChange` nor `onClick` does nothing
+  (14.368, 146537 — not a throw, A29); `onClick` is deprecated since 13, until 15.
 - `CONFIG.Canvas.layers[name] = { layerClass, group }` is usable by modules.
 - v14 added `PrimaryCanvasObject#inPrimary`, `PrimaryCanvasContainer#sortLayer`,
   elevation auto-propagation, FADE occlusion in containers, `Tile#name`, `Tile#levels`,
@@ -2018,7 +2025,155 @@ modifier is Alt.
 
 ---
 
-### Live verification checklist for 14.365 — one sitting (A23, A25, A26, A27, A28)
+### A29 — An audit of 0.4.0, and A10 measured again (2026-10-01)
+
+A performance and code-quality audit of the whole module against Foundry 14.368's client
+source, in four parts (the canvas's hot path, the render pipeline, data and sources, the
+applications and their stylesheets), every finding checked against the code and against
+core before it was believed. Released as 0.4.1. Two things it found were in plain sight at
+the table; one cost nobody could see; and one was a measurement this document had been
+quoting for five weeks.
+
+#### A10, measured again
+
+A10 concluded that "an SVG image containing a `foreignObject` taints the canvas it is drawn
+into" in every current browser, and that "there is no route around it along this path".
+A21 left a contradiction open: the harness's own probe passed, in two engines. Both were
+right, about different things. `Rasterizer.decodeSvg` decodes the SVG from a **`blob:`**
+URL; the harness decodes it from a **`data:`** URL (`scripts/build-harness.mts`). Measured
+on 2026-10-01, the same SVGs, both ways:
+
+| foreignObject SVG decoded from… | Chromium 152, on a real Foundry origin | Chromium 152, an https origin | Chrome 154 |
+|---|---|---|---|
+| `blob:` URL | `SecurityError` on `getImageData` and on `texImage2D` | (refused by the site's CSP) | `SecurityError` on both |
+| `data:` URL | reads back and uploads | reads back and uploads, with text, an `@font-face` from a data URI and nested data images | reads back and uploads |
+
+A plain `<rect>` SVG is clean both ways. **The taint is the decode's, not the
+`foreignObject`'s.** Foundry is not a special case: the server measured sends no
+Content-Security-Policy (`/join` carries only `X-Frame-Options: DENY`), 14.368's client sets
+none, and Foundry's documented server options have none; core's own minimums are Chromium
+146 (Electron 41), Firefox 138 and Safari 18.4 (`#BROWSER_TESTS`, 203581). Not measured:
+Chromium 146 itself, the Electron app, Firefox, and a full card through PIXI's own upload
+loop, which A21 named as the step that decides what a failure costs.
+
+**What 0.4.1 does with it: nothing visible.** The owner's rule was to drop the HTML-to-canvas
+pipeline only if A10 was confirmed; it was not, so the pipeline stays, dormant — the probe
+still decodes from `blob:`, so it still answers `false` wherever it has been run. What
+changed is that it no longer works before the probe has answered: the prop manager's policy
+read `null` as "the canvas works", so the first LOD pass — which core runs before `ready`,
+so before the probe — sent the nearest text prop through the whole doomed path (stylesheet
+fetch, every font face base64-encoded, every picture inlined), and every client encoded
+every font at load whatever the answer. A `null` now means DOM, and the fonts are warmed
+only on a `true`.
+
+**The follow-up, for 0.5:** decode from `data:`, and verify the canvas tier in a live world
+on Electron 41 and Firefox 138. If it holds, §6's original promise — text props darkened by
+the scene, lit by its lights, masked by its fog, sorted behind tokens — is reachable after
+all. That is a rendering change for every client, which is why it is not in a patch.
+
+#### What the table saw
+
+- **Keys.** Core's keyboard listens on the window and never asks whether an event was
+  `defaultPrevented` (133518, 133898); it holds its bindings back only for a focused field
+  (`hasFocus`, 133681). A Pinboard row is an `<li>` and the board a `<section>`, so Space on a
+  row revealed the pin **and paused the game**, an Escape that cleared the search closed every
+  window, and an arrow panned the map. Every key the board handles is now consumed —
+  prevented and stopped (`apps/keys`); an Escape with nothing to clear is left to core. Space
+  and Enter on a focused button in a `<section>` window press the button and stop there.
+- **Words.** `t()` prefixes `DP.` to anything, and core hands back a key it does not know, so
+  a preset the GM named "Blood Moon" read "DP.Blood Moon", and a duplicate of a shipped one
+  stored a key with " (copy)" after it. `presetName` is the one answer; labels 0.4.0 stored
+  as keys still read as their names.
+- **Secrets.** `stripSecrets` removed every `.secret`; core removes `section.secret:not(.revealed)`
+  (35316). A passage the GM revealed is now on the players' cards and in their reader.
+- **The book.** On the DOM path the prop's mesh carries the placeholder `book.svg`, held at
+  alpha 0 by the manager's own pass. Core's `Tile#_refreshState` writes `mesh.alpha` on a
+  hover, a selection, the Alt highlight, a drag and any change of `hidden`, `sort` or `locked`
+  (150381) — after the manager — so the stretched book showed through every translucent
+  moment of a card, and the reader's restore put it back for good. The zero is now held in
+  `PinnedTile._refreshState`, where core writes over it.
+- **The ledger.** Every verb that built a whole audience did it from a payload read before
+  its turn in the anchor's queue, and `mergePin` replaces arrays: two chip clicks in one tick
+  kept only the second. The change is now decided inside the queue (`PinStore.updateWith`,
+  and a function form for `batchUpdate` — A25's own follow-up). And the `ready` sweep only
+  asked whether a holder's anchor still pointed at the document, never whether it still
+  wanted the key: a reload in the middle of "Hide all" left players with access behind hidden
+  pins, for good. It now re-syncs any anchor holding a key its audience no longer asks for,
+  which releases by the ledger's own rules — the baseline and a GM's hand edit stand, as A25
+  meant (`DP.notice.grantsRevoked`).
+
+#### The card cache
+
+The DOM tier's key carries the LOD rung and the effects level, because the dressing depends
+on both; so each rung crossed, each focus, each trip off screen and back and each level flip
+enriched, scrubbed and measured the document again — fifty enrichments after one zoom over a
+busy map, all started in the same frame. `render/card-cache` keeps two shelves:
+
+- **Bodies**: what the source and the viewer decide — the shown document, the field shown,
+  the viewer's ownership, and the hash of the raw content (which catches what reaches no
+  hook, such as the module's own grant moving a whole journal's first shown page). A PDF's
+  body is its page at one long edge, so `toDataURL` runs once per edge. Bounded by count and
+  by bytes.
+- **Measurements**: a body's height at a width, a type size, a margin, a face, a stock and a
+  title. Not the dressing: a frame is drawn on `::after`, an overlay is absolute, motion only
+  translates.
+
+Never kept: a placeholder, a missing source, an enrichment that fell back to raw text, a
+rejected resolve, a measurement that gave up on a face or a picture. Forgotten: by the source
+hooks, before their filters (`forget`); on `canvasTearDown`; on a change to this user's role
+or permissions. A card built from a kept body is byte-identical to a fresh one at every rung
+and level (`card-cache.test.ts`). The DOM tier resolves two cards at a time and writes the
+markup and its overflow mark in one write. **The trade-off, accepted:** a link or an embed in
+a card that names *another* document now stays as it was until the pin's own source is
+edited, the canvas is redrawn or this user's role changes; before, it refreshed whenever the
+card happened to re-resolve.
+
+#### Queues, and which waits on which
+
+Three now, each waiting only on the one below it: a pin's **write queue** (`queueKey`, the tile
+uuid); its **sync queue** (`sync:<anchor uuid>`), where `syncAnchor` and `releaseAnchor` run
+one at a time and read the pin when their turn comes; and each document's **grants queue**
+(`grants:<uuid>`). Only `removeMany`, the bulk delete, waits from the write queue on the sync
+queue. Nothing in a sync or a grant ever enqueues on an anchor key, so A22's self-wait cannot
+come back. A sync that runs after its anchor was deleted grants nothing — core keeps the
+deleted document object, flags and all (81362-81375), so the scene is asked, not the payload.
+
+#### Smaller
+
+- Cards follow the map inside the ticker's frame: a write deferred to the next animation frame
+  left them a frame behind an animated pan and core's resize handles.
+- A pin's texture anchor is held at its centre in the pre-hooks: every placement assumes it.
+- The rolling scanlines have their own layer, moved with `translate`; `background-position` on
+  the card's texture stack repainted the whole card every frame. The coarse rung's stop rules
+  had lost the cascade to the start rules, so its glow, sweep and scan never stopped.
+- A user's change reaches what reads it (`canvas/user-hooks`): another client storing a flag no
+  longer clears a player's tooltip.
+- The picker moves its highlight without a render and caps world rows like compendium rows; the
+  searches wait for a composition to end; a detached window keeps its focus; the Pinboard
+  renders once per frame per change; the world is checked for migrations once a session.
+- `api.ts` is the verbs' façade (`data/access`, `api/*`); the unregistered `PinData`
+  DataModel, `clearInliner` and the unheard `tileDestroyed` hook are gone.
+
+#### Corrections to earlier sections
+
+- §6.2 said transform sync is "not by the `canvasPan` hook": it is that hook, dirty-checked.
+  It promised "one shared `PIXI.UniformGroup`": there is none; the shader tier it was for was
+  never built (A3).
+- §9 said a scene tool with neither `onChange` nor `onClick` throws: in 14.368 `#onChange`
+  does nothing (146537).
+- A10's "every current browser" is corrected above; A21's open finding is closed by it.
+
+#### Not done
+
+- The `data:` decode and the canvas tier's live verification (above).
+- On the canvas tier, core's state refresh still overwrites a PDF prop's peek or token-fade
+  alpha on a hover, until the next alpha pass.
+- A scene imported in the middle of a session is offered for migration in the next one; it is
+  still migrated silently when viewed.
+
+---
+
+### Live verification checklist for 14.365 — one sitting (A23, A25, A26, A27, A28, A29)
 
 Run this in Chromium as GM, with two players: Ali in Chromium and Ben in Firefox, each in their
 own browser profile. Use a fresh world that has pins from 0.3.3, so the format-5 migration runs.
@@ -2225,3 +2380,22 @@ documents, make folders and change ownership.
       row say hidden, and an unrelated edit in its Studio — a paper — leaves it hidden.
     - Show it with core's eye again: it comes back to Ali alone, not to Ben, with its access as
       before. Hide it with *Hidden* in Tile Config, then Ctrl+Z: the same, both ways.
+23. **Keys stop at the board** (A29). Open the Pinboard as GM with the game running. Focus a row
+    and press Space: the pin's visibility toggles and the game is **not** paused. Arrow down:
+    the next row, and the map does not pan. Type in the search, Escape: the search clears and
+    the board stays; Escape again: the board closes. Tab to the *Hide all* button and press
+    Space: the pins hide, and the game is not paused.
+24. **No book under a card** (A29). With a revealed text prop on the Projection stock (the
+    lightest card), switch to the Tiles layer and hover the prop, select it, hold Alt, then
+    release; peek with Alt as a player; open and close its reader. At no moment is Foundry's
+    book icon visible through or around the card.
+25. **Cards stay on the map** (A29). Pan with the keyboard, pan to a token from the combat
+    tracker, and resize a prop with core's handles: the cards move with the map in the same
+    frame, without trailing.
+26. **The scanlines** (A29). A prop on *CRT Scanlines* rolls at full detail, stops when zoomed out
+    to the coarse level, and stops on a client set to *Reduced*; the Preset Studio's preview of
+    it rolls, and its *Freeze* stops it. Profile one pan with five such props in devtools'
+    Performance panel: no full repaint of each card on every frame.
+27. **A revealed secret** (A29). In a page Ali can see, reveal one of two secret sections from
+    the sheet. Ali's prop and reader show the revealed one and not the other; the GM's show
+    both.
