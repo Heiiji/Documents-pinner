@@ -1279,9 +1279,9 @@ function overlaps(tile: any, token: any): boolean {
  * Whether a prop is drawn as a DOM card on this client.
  *
  * A PDF is the exception, and it is the interesting one. `rasterisationAvailable()`
- * being false means the HTML pipeline cannot reach a texture — an SVG `foreignObject`
- * taints the canvas, see DESIGN A10 — but pdf.js paints with Canvas2D and its output
- * uploads fine. So a pinned PDF still gets the canvas tier, and with it the lighting,
+ * not being true means the HTML pipeline cannot reach a texture on this client — the
+ * rasteriser's `foreignObject` SVG, decoded from a `blob:` URL, taints the canvas (DESIGN
+ * A10, A29) — but pdf.js paints with Canvas2D and its output uploads fine. So a pinned PDF still gets the canvas tier, and with it the lighting,
  * fog, occlusion and token z-order that no other source type can have.
  *
  * A GM who deliberately chose DOM rendering still gets DOM, for everything. Exported
@@ -1296,7 +1296,8 @@ export function drawsAsDom(pin: DpPinFlags): boolean {
  * How this client draws props, read once per pass rather than once per prop.
  *
  * Two independent reasons to fall back to DOM: the GM chose the compatibility path, or
- * the client cannot rasterise HTML at all (WebKit taints a `foreignObject` canvas).
+ * the probe has not said this client can rasterise HTML — and it says it cannot wherever
+ * it has been measured, because its `blob:` decode taints the canvas (DESIGN A10, A29).
  * Either way `DomPropTier` takes over — it is never "no props at all". Each answer costs
  * a settings read — core builds a fresh `Setting` document for every client-scope read —
  * and asked per prop, that was one per prop on every LOD pass and every token move.

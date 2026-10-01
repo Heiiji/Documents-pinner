@@ -2,8 +2,8 @@
  * The DOM prop tier.
  *
  * One card per visible prop, mounted inside the scene-transformed overlay, for clients
- * that cannot rasterise (WebKit taints a `foreignObject` canvas) or that chose the
- * compatibility path deliberately.
+ * that cannot rasterise (the rasteriser's `blob:` decode of a `foreignObject` SVG taints
+ * the canvas, DESIGN A10 and A29) or that chose the compatibility path deliberately.
  *
  * What this tier gives up is a property of being drawn OVER the canvas rather than into
  * it: no per-light illumination, no fog mask, no roof occlusion, and no z-order against

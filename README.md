@@ -7,11 +7,11 @@ Per-pin visibility the GM changes in one click. Foundry VTT **v14+**.
 
 > **Beta.** Text props are drawn as an HTML layer over the canvas, not into it, so they
 > are **not lit, fogged or occluded** and do not sort behind tokens. That was the plan, and
-> it was not possible: an SVG containing a `foreignObject` tainted the canvas in every
-> browser measured, so the texture upload was refused. Verified on Chromium 144, not just
-> Safari — see [`docs/DESIGN.md`](docs/DESIGN.md) A10, and A21 for a measurement that may
-> reopen it. **Pinned PDFs are the exception**
-> and *are* drawn into the scene. Keep a backup.
+> it was not possible: an SVG containing a `foreignObject`, decoded the way the module
+> decodes it, tainted the canvas in every browser measured, so the texture upload was
+> refused — see [`docs/DESIGN.md`](docs/DESIGN.md) A10. A measurement made for 0.4.1 found
+> the taint comes from that decode, not from the SVG, which may reopen the plan (A29).
+> **Pinned PDFs are the exception** and *are* drawn into the scene. Keep a backup.
 
 *Version française plus bas.*
 
@@ -110,16 +110,16 @@ their Environment volume — you hear it through ▶, since your own screen neve
 arrive — and must be a file on your own server: a shared preset naming a web address is
 refused on import.
 
-**An actor becomes a wanted poster, an item a found object.** The prop shows its picture
-— an actor's portrait, else its token's — its name, and one of its texts: Pin Studio's
-*Text shown* lists every rich-text field your game system gives that kind of actor or
-item, and *Automatic* picks public text first, then a biography or a description, never a
-field named for the GM. Its secret sections reach only its owners and you. Revealing an
-actor shares it at Limited at most, and a new actor pin — or a pin pointed at an actor
-from Pin Studio — starts with *Grant document access* off: the poster reads in place
-without it. An actor is pinned from its context menu, its sheet, *Pin a document* or
-`/pin`; dragging one onto the map stays Foundry's token unless the drag modifier is Ctrl
-or Shift.
+**An actor becomes a wanted poster, an item a found object.** The prop shows its picture —
+an actor's portrait, else its token's — its name, and one of its texts: Pin Studio's *Text
+shown* lists every rich-text field your game system gives that kind of actor or item, and
+*Automatic* picks public text first, then a biography or a description, never a field named
+for the GM. Its secret sections reach only its owners and you, until you reveal one.
+Revealing an actor shares it at Limited at most, and a new actor pin — or a pin pointed at
+an actor from Pin Studio — starts with *Grant document access* off: the poster reads in
+place without it. An actor is pinned from its context menu, its sheet, *Pin a document* or
+`/pin`; dragging one onto the map stays Foundry's token unless the drag modifier is Ctrl or
+Shift.
 
 *Pin a document* searches journals, actors and items — the world's, then every
 compendium's from two letters — with a chip to show one kind alone.
@@ -193,9 +193,9 @@ map for any visible pin, as its label says.
    dropped rather than left broken.
 5. **Text props darken with the scene, but are not lit by its lights, fogged, occluded,
    or sorted behind tokens.** Drawing them into the scene needs an HTML-to-texture step:
-   an SVG with a `foreignObject`, which tainted the canvas in every browser measured, so
-   the WebGL upload threw. The module probes for this at startup and draws props as an
-   HTML layer over the canvas instead, dimmed by the scene's global darkness level and by
+   an SVG with a `foreignObject`, which — decoded as the module decodes it — tainted the
+   canvas in every browser measured, so the WebGL upload threw (DESIGN A10, A29). The
+   module probes for this at startup and draws props as an HTML layer over the canvas instead, dimmed by the scene's global darkness level and by
    nothing else — except on the Projection stock, which is light and stays bright. So a
    revealed text prop shows through fog a player has not explored: reveal it when they
    reach it — Pin Studio's Audience tab says so. *That probe now passes on current Chrome
@@ -263,10 +263,11 @@ Une visibilité que le MJ change en un clic. Foundry VTT **v14+**.
 > **Bêta.** Les accessoires de texte sont dessinés en HTML par-dessus le canevas,
 > pas dedans : ils ne sont donc **ni éclairés, ni embrumés, ni occultés**, et ne passent pas
 > derrière les pions. C'était le plan, et ce ne l'était pas : un SVG contenant un
-> `foreignObject` « contaminait » le canevas dans tous les navigateurs mesurés, si bien que
-> l'envoi de la texture était refusé. Vérifié sur Chromium 144, pas seulement Safari — voir
-> [`docs/DESIGN.md`](docs/DESIGN.md) A10, et A21 pour une mesure qui pourrait rouvrir la
-> voie. **Les PDF épinglés font exception** et sont bien dessinés dans la scène. Gardez une
+> `foreignObject`, décodé comme le module le décode, « contaminait » le canevas dans tous
+> les navigateurs mesurés, si bien que l'envoi de la texture était refusé — voir
+> [`docs/DESIGN.md`](docs/DESIGN.md) A10. Une mesure faite pour la 0.4.1 a montré que la
+> contamination vient de ce décodage, pas du SVG, ce qui pourrait rouvrir la voie (A29).
+> **Les PDF épinglés font exception** et sont bien dessinés dans la scène. Gardez une
 > sauvegarde.
 
 ## Installation
@@ -372,17 +373,17 @@ joué pour chaque joueur quand l'accessoire apparaît sur son écran, au volume 
 fichier de votre propre serveur : un préréglage partagé qui nomme une adresse web est
 refusé à l'import.
 
-**Un acteur devient un avis de recherche, un objet une trouvaille.** L'accessoire montre
-son image — le portrait d'un acteur, sinon celui de son jeton —, son nom, et l'un de ses
-textes : *Texte affiché*, dans le Studio, liste chaque champ de texte enrichi que votre
-système de jeu donne à ce type d'acteur ou d'objet, et *Automatique* choisit d'abord un
-texte public, puis une biographie ou une description, jamais un champ que son nom réserve
-au MJ. Ses sections secrètes n'atteignent que ses propriétaires et vous. Révéler un acteur
-le partage en accès Limité au plus, et une nouvelle épingle d'acteur — ou une épingle
-dirigée vers un acteur depuis le Studio — commence avec *Accorder l'accès au document*
-désactivé : l'avis se lit sur place sans lui. Un acteur s'épingle depuis son menu
-contextuel, sa fiche, *Épingler un document* ou `/pin` ; le glisser sur la carte reste le
-jeton de Foundry, sauf si la touche de glisser-épingler est Ctrl ou Maj.
+**Un acteur devient un avis de recherche, un objet une trouvaille.** L'accessoire montre son
+image — le portrait d'un acteur, sinon celui de son jeton —, son nom, et l'un de ses textes
+: *Texte affiché*, dans le Studio, liste chaque champ de texte enrichi que votre système de
+jeu donne à ce type d'acteur ou d'objet, et *Automatique* choisit d'abord un texte public,
+puis une biographie ou une description, jamais un champ que son nom réserve au MJ. Ses
+sections secrètes n'atteignent que ses propriétaires et vous, jusqu'à ce que vous en
+révéliez une. Révéler un acteur le partage en accès Limité au plus, et une nouvelle épingle
+d'acteur — ou une épingle dirigée vers un acteur depuis le Studio — commence avec *Accorder
+l'accès au document* désactivé : l'avis se lit sur place sans lui. Un acteur s'épingle
+depuis son menu contextuel, sa fiche, *Épingler un document* ou `/pin` ; le glisser sur la
+carte reste le jeton de Foundry, sauf si la touche de glisser-épingler est Ctrl ou Maj.
 
 *Épingler un document* cherche dans les journaux, les acteurs et les objets — ceux du
 monde, puis ceux de chaque compendium dès deux lettres — avec une pastille pour n'en
@@ -463,9 +464,9 @@ joueur pour toute épingle visible, comme son libellé l'indique.
    pas récupérer est retiré plutôt que laissé cassé.
 5. **Les accessoires de texte s'assombrissent avec la scène, mais ne sont ni éclairés par
    ses lumières, ni embrumés, ni occultés, ni placés derrière les pions.** Les dessiner
-   dans la scène exige une conversion HTML → texture : un SVG avec `foreignObject`, qui
-   contaminait le canevas dans tous les navigateurs mesurés, si bien que l'envoi WebGL
-   échouait. Le module teste cela au démarrage et dessine les accessoires en HTML
+   dans la scène exige une conversion HTML → texture : un SVG avec `foreignObject`, qui —
+   décodé comme le module le décode — contaminait le canevas dans tous les navigateurs
+   mesurés, si bien que l'envoi WebGL échouait (DESIGN A10, A29). Le module teste cela au démarrage et dessine les accessoires en HTML
    par-dessus le canevas, assombris par le niveau d'obscurité global de la scène et par
    rien d'autre — sauf sur le support Projection, qui est de la lumière et reste vif. Un
    accessoire de texte révélé se voit donc à travers un brouillard que le joueur n'a pas

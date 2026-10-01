@@ -148,7 +148,8 @@ function reanchor(
 /**
  * Whether a prop has been drawn as a card on this client.
  *
- * HTML never reaches a texture — an SVG `foreignObject` taints the canvas, DESIGN A10 —
+ * HTML never reaches a texture — the rasteriser's `foreignObject` SVG taints the canvas as
+ * it decodes it, DESIGN A10 and A29 —
  * so every prop but a PDF was a card. A PDF was a texture on the tile's mesh, drawn by
  * core about the point, unless this client had chosen the DOM path for everything.
  */
