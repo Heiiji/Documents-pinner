@@ -43,6 +43,7 @@ import {
   type OwnershipPlan,
 } from "./ownership-plan";
 import { enqueue } from "./PinStore";
+import { isPackUuid } from "../sources/uuid";
 import { readPin } from "./PinData";
 
 const log = logger("grants");
@@ -196,6 +197,15 @@ function familyOf(doc: any): any[] {
 /** Compendium ownership is role-based and pack-wide: there is no per-user grant to make. */
 const grantable = (doc: any) => !!doc?.update && !doc.pack;
 
+/**
+ * The document a grant could sit on, or null. A compendium uuid is answered from the uuid
+ * alone: loading the document from the server, on every audience change, only to learn
+ * that a pack grants nothing was a round trip per reveal.
+ */
+function worldDocument(uuid: string | null | undefined): Promise<any> {
+  return isPackUuid(uuid) ? Promise.resolve(null) : resolveUuid(uuid);
+}
+
 async function grantOn(doc: any, anchor: string, keys: string[], level: number): Promise<void> {
   await enqueue(`grants:${doc.uuid}`, async () => {
     const plan = planRetarget({ ...(doc.ownership ?? {}) }, ledgerOf(doc), {
@@ -240,7 +250,7 @@ export async function syncAnchor(
   if (!pin) return;
 
   const anchor = anchorDoc.uuid;
-  const named = pin.source.kind === "document" ? await resolveUuid(pin.source.uuid) : null;
+  const named = pin.source.kind === "document" ? await worldDocument(pin.source.uuid) : null;
   const own = grantable(named) ? named : null;
 
   const keys = pin.audience.ownershipSync.enabled ? grantKeysFor(pin.audience, playerIds()) : [];
@@ -250,7 +260,7 @@ export async function syncAnchor(
   for (const target of targets) await grantOn(target.doc, anchor, keys, target.level);
 
   const previous =
-    previousUuid && previousUuid !== pin.source.uuid ? await resolveUuid(previousUuid) : null;
+    previousUuid && previousUuid !== pin.source.uuid ? await worldDocument(previousUuid) : null;
   const kept = new Set(targets.map((target) => target.doc.uuid));
   const seen = new Set<string>();
   for (const doc of [...familyOf(own), ...familyOf(previous)]) {
@@ -270,7 +280,7 @@ export async function releaseAnchor(anchorDoc: any, sourceUuid?: string | null):
   const uuid = sourceUuid ?? readPin(anchorDoc)?.source.uuid ?? null;
   const anchor = anchorDoc?.uuid ?? "";
 
-  for (const doc of familyOf(await resolveUuid(uuid))) await releaseOn(doc, anchor);
+  for (const doc of familyOf(await worldDocument(uuid))) await releaseOn(doc, anchor);
 }
 
 /**

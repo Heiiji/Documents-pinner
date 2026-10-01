@@ -34,7 +34,7 @@ import * as settings from "./settings";
 import { centreOf, docPositionFor } from "./canvas/transform";
 import { nextToReveal, type PinboardQuery, type RowFacts } from "./apps/pinboard-model";
 import { describeSource, rememberShown } from "./sources/describe";
-import { packLockedHere, packOf, packReadableBy } from "./sources/packs";
+import { packFacts, packLockedHere, packOf, packReadableBy, playersCanRead } from "./sources/packs";
 import { isPackUuid } from "./sources/uuid";
 import type { DpAudience, DpMode, DpPinFlags, DpSource } from "./types/dp";
 
@@ -229,6 +229,18 @@ export function labelFor(pin: DpPinFlags): string {
   return describeSource(pin.source).name || untitled();
 }
 
+/**
+ * Tell the GM, once, when some player cannot open the compendium a pin was just pointed
+ * at. Their client shows a placeholder that says why; the GM learns it here, where the
+ * choice was made, rather than from the table.
+ */
+function warnIfPlayersCannotRead(source: DpSource): void {
+  if (source.kind !== "document") return;
+  const pack = packOf(source.uuid);
+  if (!pack || playersCanRead(pack)) return;
+  notify({ key: "DP.notice.packUnreadable", data: { pack: packFacts(pack).title } }, "warn");
+}
+
 // ---------------------------------------------------------------------------
 // Placing
 // ---------------------------------------------------------------------------
@@ -312,6 +324,7 @@ export async function pinAt(scene: any, source: DpSource, at: PinPlacement): Pro
   if (anchor) {
     await syncAnchor(anchor);
     if (source.uuid) await settings.set("lastSourceUuid", source.uuid);
+    warnIfPlayersCannotRead(source);
   }
   return anchor;
 }
@@ -546,10 +559,22 @@ export async function showToAudience(anchorDoc: any): Promise<void> {
   // Said, not swallowed. The action shows nothing on the GM's own screen, so a hidden
   // pin — or one whose audience has nobody in it — used to be a keystroke that did
   // nothing at all, indistinguishable from one that worked.
-  const recipients = playerIds().filter((id) => canUserSee(anchorDoc, id));
+  let recipients = playerIds().filter((id) => canUserSee(anchorDoc, id));
   if (!recipients.length) {
     notify({ key: "DP.notice.showNobody" }, "warn");
     return;
+  }
+
+  // A compendium document is shown only to the players whose role can open the pack: on
+  // anyone else's screen it would fail to load, and the GM would be told it was shown.
+  const pack = packOf(pin.source.uuid);
+  if (pack) {
+    const readers = recipients.filter((id) => packReadableBy(pack, g()?.users?.get(id)));
+    if (readers.length < recipients.length) {
+      notify({ key: "DP.notice.packUnreadable", data: { pack: packFacts(pack).title } }, "warn");
+    }
+    if (!readers.length) return;
+    recipients = readers;
   }
 
   // The namespaced class first: reading the bare global logs a compatibility warning.
@@ -1066,6 +1091,7 @@ export async function retarget(anchorDoc: any, source: DpSource): Promise<boolea
   // an old document and a new one in the same family — and releasing the old family
   // after granting the new one took back the grant just made.
   await syncAnchor(anchorDoc, oldUuid);
+  warnIfPlayersCannotRead(source);
 
   return true;
 }
@@ -1090,6 +1116,7 @@ export async function adoptTile(tileDoc: any, source: DpSource): Promise<void> {
   const frozen = pin.mode === "prop" ? freezeMetrics(pin, tileDoc) : pin;
   await store.attach(tileDoc, frozen);
   await syncAnchor(tileDoc);
+  warnIfPlayersCannotRead(source);
 }
 
 /**

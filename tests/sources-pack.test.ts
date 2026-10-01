@@ -278,3 +278,99 @@ describe("a player whose role cannot read the compendium", () => {
     }
   );
 });
+
+describe("the GM, pointing a pin at a compendium", () => {
+  const withNames = () => {
+    world.game.i18n.format = (key: string, data: Record<string, unknown>) =>
+      `${key} ${JSON.stringify(data)}`;
+  };
+  const warnings = () =>
+    world.notifications.filter((n) => n.message.startsWith("DP.notice.packUnreadable"));
+
+  const place = async (_tile: any, source: DpSource) => {
+    world.canvas.scene.createEmbeddedDocuments = async (_type: string, data: any[]) =>
+      data.map((d, i) => ({ ...d, id: `new${i}`, uuid: `Scene.s1.Tile.new${i}` }));
+    const { pinAt } = await import("../src/api");
+    await pinAt(world.canvas.scene, source, { x: 0, y: 0 });
+  };
+  const retarget = async (tile: any, source: DpSource) => {
+    const { retarget } = await import("../src/api");
+    await retarget(tile, source);
+  };
+  const adopt = async (tile: any, source: DpSource) => {
+    tile.flags = {};
+    const { adoptTile } = await import("../src/api");
+    await adoptTile(tile, source);
+  };
+
+  it.each([
+    ["placing", place, TRUSTED_ONLY, 1],
+    ["placing", place, undefined, 0],
+    ["retargeting", retarget, TRUSTED_ONLY, 1],
+    ["retargeting", retarget, undefined, 0],
+    ["adopting a tile", adopt, TRUSTED_ONLY, 1],
+    ["adopting a tile", adopt, undefined, 0],
+  ])(
+    "is warned once, naming the pack, when %s leaves a player out",
+    async (_verb, verb, ownership, count) => {
+      const tile = pinTile({ uuid: "JournalEntry.j" });
+      install(tile, handouts({ ownership }));
+      withNames();
+
+      await verb(tile, { ...pinOf(tile).source, uuid: ENTRY });
+
+      expect(warnings().map((n) => n.message)).toEqual(
+        Array(count).fill('DP.notice.packUnreadable {"pack":"Handouts"}')
+      );
+    }
+  );
+
+  it.each([
+    [
+      "to the players who can read it",
+      TRUSTED_ONLY,
+      [["ben"]],
+      ["DP.notice.packUnreadable", "DP.notice.shown"],
+    ],
+    [
+      "to nobody, and says so, when none can",
+      { PLAYER: "NONE", ASSISTANT: "OWNER" },
+      [],
+      ["DP.notice.packUnreadable"],
+    ],
+  ])("shows a compendium document %s", async (_who, ownership, shownTo, notices) => {
+    const tile = pinTile({ uuid: ENTRY });
+    install(tile, handouts({ ownership }));
+    const { showToAudience } = await import("../src/api");
+
+    await showToAudience(tile);
+
+    expect(sources.shown.map((call) => call.options.users)).toEqual(shownTo);
+    expect(world.notifications.map((n) => n.message)).toEqual(notices);
+  });
+
+  it.each([
+    [
+      "revealing it",
+      async (tile: any) => {
+        const { setAudience } = await import("../src/api");
+        await setAudience(tile, { ...pinOf(tile).audience, kind: "everyone" });
+      },
+    ],
+    [
+      "deleting it",
+      async (tile: any) => {
+        const { deletePin } = await import("../src/api");
+        await deletePin(tile);
+      },
+    ],
+  ])("asks the server nothing when %s, since a pack grants nothing", async (_verb, act) => {
+    const tile = pinTile({ uuid: ENTRY });
+    pinOf(tile).audience.kind = "hidden";
+    install(tile);
+
+    await act(tile);
+
+    expect(sources.fromUuidCalls).toEqual([]);
+  });
+});
