@@ -1,5 +1,6 @@
 /**
- * The module's verbs.
+ * The module's verbs: the façade every surface calls, and `publicApi()`, the same verbs
+ * handed to other modules.
  *
  * IMPURE, and deliberately the only orchestration layer: every surface — the HUD, the
  * Pinboard, the keybindings, the drop handler, the chat command, and other modules
@@ -11,14 +12,23 @@
  * documents, reads settings, and sequences the two writes a reveal actually needs — the
  * anchor's payload and the source's ownership — in that order, so a client that sees
  * the pin appear can already open it.
+ *
+ * Not everything it offers is written here (A29). What a user may do with a pin is
+ * `data/access` — questions the canvas asks of every prop, which need none of the verbs.
+ * The audience write every visibility verb ends in is `api/set-audience`, the one door to
+ * a ping is `api/ping`, and the scene's script — the board's row facts and Reveal next —
+ * is `api/reveal-next`. This file re-exports every name that moved, so its callers, its
+ * tests and the public API read them here as they always did; nothing under `api/`
+ * imports this file, so the re-exports make no import cycle.
  */
 
 import { MODULE_ID, PLACEHOLDER_TEXTURE } from "./const";
-import { cfg, cv, g, internal, isGM, notify, ns, playerIds } from "./fvtt";
+import { cv, g, internal, isGM, notify, ns, playerIds } from "./fvtt";
 import { logger } from "./log";
 import * as audience from "./data/audience";
 import * as store from "./data/PinStore";
 import { readPin } from "./data/PinData";
+import { canUserOpen, canUserSee, readsInPlace } from "./data/access";
 import {
   DEFAULT_MARGIN_EM,
   defaultPin,
@@ -33,11 +43,9 @@ import { findPreset } from "./effects/preset-library";
 import { resolveCard } from "./render/ContentResolver";
 import * as settings from "./settings";
 import { centreOf, docPositionFor } from "./canvas/transform";
-import { nextToReveal, type PinboardQuery, type RowFacts } from "./apps/pinboard-model";
-import { describeSource } from "./sources/describe";
 import { adapterFor, adapterForDoc, canOpenShown, isRefusal } from "./sources/index";
 import { packFacts, packLockedHere, packOf, packReadableBy } from "./sources/packs";
-import { isPackUuid, parseSourceUuid } from "./sources/uuid";
+import { parseSourceUuid } from "./sources/uuid";
 import {
   adapterOf,
   labelFor,
@@ -46,6 +54,9 @@ import {
   sourceFromDropData,
   warnIfPlayersCannotRead,
 } from "./sources/view";
+import { onViewedScene, pingAt } from "./api/ping";
+import { revealNext } from "./api/reveal-next";
+import { changeAudience, revealsUnopenable, setAudience } from "./api/set-audience";
 import type { DpAudience, DpMode, DpPinFlags, DpSource } from "./types/dp";
 
 declare const Hooks: any;
@@ -89,6 +100,19 @@ export {
   type FieldChoices,
   type GrantScope,
 } from "./sources/view";
+
+// ---------------------------------------------------------------------------
+// Access — `data/access.ts`, re-exported: who may see a pin and open what it shows.
+// ---------------------------------------------------------------------------
+
+export { canUserOpen, canUserSee, isRevealed } from "./data/access";
+
+// ---------------------------------------------------------------------------
+// The scene's script — `api/reveal-next.ts`, re-exported: the board's row facts and
+// Reveal next, which plays the board's order with the board open or closed.
+// ---------------------------------------------------------------------------
+
+export { revealNext, rowFacts } from "./api/reveal-next";
 
 // ---------------------------------------------------------------------------
 // Placing
@@ -217,69 +241,8 @@ function anchorTexture(source: DpSource): string {
 // Visibility
 // ---------------------------------------------------------------------------
 
-/**
- * A change of audience decided from the audience the pin holds when its write's turn
- * comes; `null` leaves the pin as it is.
- */
-export type AudienceChange = (current: DpAudience) => DpAudience | null;
-
-/**
- * Apply an audience change to an anchor.
- *
- * `next` is the audience to write, or — the form every verb that derives one from the
- * current audience passes — a function of the audience the pin holds when the write's
- * turn in the queue comes. Built before the queue, a derived audience was decided from a
- * payload a write still in flight was about to replace: two chip clicks in one tick each
- * read the same audience, and the second undid the first (DESIGN A29).
- *
- * The payload is written first and the ownership sync follows, so a client that has
- * just seen the pin appear can already open the document behind it. The reverse order
- * would produce a window — small, but exactly the window a player clicks in.
- */
-export async function setAudience(
-  anchorDoc: any,
-  next: DpAudience | AudienceChange
-): Promise<void> {
-  await changeAudience(anchorDoc, next);
-}
-
-/**
- * `setAudience`, resolving whether anything was written. The notice is decided from the
- * payload the write was decided from, read inside the queue like the change itself.
- */
-async function changeAudience(anchorDoc: any, next: DpAudience | AudienceChange): Promise<boolean> {
-  if (!isGM()) return false;
-  const { before, patch } = await store.updateWith(anchorDoc, (pin) => {
-    const audience = typeof next === "function" ? next(pin.audience) : next;
-    return audience ? { audience } : null;
-  });
-  if (!patch) return false;
-  await syncAnchor(anchorDoc);
-  if (revealsUnopenable(before, patch.audience)) {
-    notify({ key: "DP.notice.revealedNoAccess" }, "info");
-  }
-  return true;
-}
-
-/**
- * Whether this audience change shows the players a pin whose sheet will refuse them: an
- * icon pin that opens its document's sheet, revealed with access off.
- *
- * A prop reads in place whatever the ownership says, and so does an icon pin set to *Read
- * in place*; a *Not interactive* pin opens nothing. Only a pin that opens the sheet — which
- * refuses without access — ships "I can see it but it won't open" to the table, so only
- * its reveal is the moment to say so.
- */
-function revealsUnopenable(before: DpPinFlags | null, next: DpAudience): boolean {
-  return (
-    before?.mode === "pin" &&
-    !readsInPlace(before) &&
-    before.interaction.open !== "never" &&
-    before.audience.kind === "hidden" &&
-    next.kind !== "hidden" &&
-    !next.ownershipSync.enabled
-  );
-}
+// The write every verb below ends in, and what it says — `api/set-audience.ts`.
+export { setAudience, type AudienceChange } from "./api/set-audience";
 
 /**
  * Reveal or hide many pins of one scene: the Pinboard's bulk bar, "Reveal all" and "Hide
@@ -455,16 +418,6 @@ export function setOwnershipSync(anchorDoc: any, enabled: boolean): Promise<void
 }
 
 /**
- * Whether this pin is revealed to anyone — the one answer the eye, the Pinboard's
- * "Visible" filter and its totals all give. See `audience.reachesAnyone` for why this is
- * not `kind !== "hidden"`.
- */
-export function isRevealed(anchorDoc: any, pin: DpPinFlags | null = readPin(anchorDoc)): boolean {
-  if (!pin || anchorDoc?.hidden === true) return false;
-  return audience.reachesAnyone(pin.audience, playerIds());
-}
-
-/**
  * "Some players", from any surface that offers it.
  *
  * Resolves to false, writing nothing, when there is nobody to choose yet: an empty
@@ -474,66 +427,6 @@ export function isRevealed(anchorDoc: any, pin: DpPinFlags | null = readPin(anch
  */
 export function chooseSome(anchorDoc: any): Promise<boolean> {
   return changeAudience(anchorDoc, audience.someAudience);
-}
-
-/** Whether a user can see this pin right now, by the same rule the canvas uses. */
-export function canUserSee(anchorDoc: any, userId: string): boolean {
-  const pin = readPin(anchorDoc);
-  if (!pin) return false;
-  const user = g()?.users?.get(userId);
-  return audience.canSee(pin.audience, {
-    isGM: user?.isGM === true,
-    userId,
-    hidden: anchorDoc?.hidden === true,
-  });
-}
-
-/**
- * Whether a user could actually OPEN the document behind the pin.
- *
- * Compared against `canUserSee`, this is what raises the key badge in the HUD and the
- * Pinboard. The mismatch it detects — visible but unopenable — is the bug a GM ships to
- * their table and only hears about when a player says "I can see it but nothing
- * happens".
- *
- * A pin that reads in place opens in the module's own reader for anyone who can see it,
- * whatever the ownership says — `openReader` is not gated on it, deliberately. Asking
- * only for OBSERVER put a key on every chip of a prop revealed with access sync off, and
- * listed it under "Won't open", for players reading it perfectly well; the GM's natural
- * fix, switching sync on, then granted a journal nobody needed. The inverse — a player
- * who holds the journal while the pin is hidden from them — still shows, because that
- * one is true.
- */
-export function canUserOpen(anchorDoc: any, userId: string): boolean {
-  const pin = readPin(anchorDoc);
-  if (!pin) return false;
-  if (pin.source.kind === "image") return canUserSee(anchorDoc, userId);
-  if (pin.interaction.open === "never") return false;
-
-  const user = g()?.users?.get(userId);
-  if (!user) return false;
-  // A compendium document opens for a player whose ROLE reads the pack, as a pin or as a
-  // prop. One whose role does not is never sent it: their card is a placeholder even
-  // where a world journal would read in place, so the key is true there, and must show.
-  if (isPackUuid(pin.source.uuid)) return packReadableBy(packOf(pin.source.uuid), user);
-
-  const source = describeSource(pin.source).shown;
-  if (!source) return false;
-  // The level the document's own sheet asks for: for a journal, OBSERVER is the level at
-  // which a text page actually opens, and LIMITED is the tease.
-  if (canOpenShown(source, user)) return true;
-  return readsInPlace(pin) && canUserSee(anchorDoc, userId);
-}
-
-/**
- * Whether opening this pin shows the module's reader rather than the document's sheet.
- *
- * A prop always does — that is what makes it a prop rather than a pin with a picture —
- * and so does a pin set to read in place. One definition, because the opening itself and
- * the badge that predicts it must never disagree.
- */
-function readsInPlace(pin: DpPinFlags): boolean {
-  return pin.mode === "prop" || pin.interaction.open === "readInPlace";
 }
 
 // ---------------------------------------------------------------------------
@@ -982,185 +875,6 @@ export async function locate(anchorDoc: any): Promise<void> {
     }
   }
   flash(anchorDoc);
-}
-
-// ---------------------------------------------------------------------------
-// The scene's script
-// ---------------------------------------------------------------------------
-
-/** What each player can do with a pin: the two facts the Pinboard's filters read. */
-function factsUsers(anchorDoc: any): RowFacts["users"] {
-  return playerIds().map((id) => ({
-    canSee: canUserSee(anchorDoc, id),
-    canOpen: canUserOpen(anchorDoc, id),
-  }));
-}
-
-/**
- * A pin as the Pinboard's list logic reads it, or null for a tile that is not one.
- *
- * The one derivation of these facts. The Pinboard builds its rows on top of it, passing
- * the chips it has already built as `users`; `revealNext` builds them with the board
- * closed. Two copies would be two answers to "which pin is next".
- */
-export function rowFacts(
-  anchorDoc: any,
-  users: RowFacts["users"] = factsUsers(anchorDoc)
-): RowFacts | null {
-  const pin = readPin(anchorDoc);
-  if (!pin) return null;
-  return {
-    id: anchorDoc.id,
-    name: labelFor(pin),
-    breadcrumb: describeSource(pin.source).breadcrumb,
-    mode: pin.mode,
-    // Whether anyone is reached, not whether the kind says "hidden": a selection that
-    // names nobody was counted as visible while every chip on its row was hollow.
-    visible: isRevealed(anchorDoc, pin),
-    hidden: anchorDoc.hidden === true || pin.audience.kind === "hidden",
-    elevation: anchorDoc.elevation ?? 0,
-    users,
-  };
-}
-
-const EVERY_ROW: PinboardQuery = { filter: "all", search: "", level: null };
-
-/** The Reveal next in flight, and the scene it is revealing on. */
-let revealing: { scene: any; promise: Promise<{ doc: any; left: number }> } | null = null;
-
-/**
- * Reveal the next pin of the scene's script: the first hidden row in the Pinboard's
- * order, under the view the GM is looking at, to the audience it remembers.
- *
- * The Pinboard's order has always been called the reveal order, and nothing consumed it.
- * This is the play button. It reveals through `audience.revealed`, never the eye's
- * toggle: a toggle on a row that is not hidden would hide it, and pressing N twice would
- * take back the clue it had just given.
- *
- * Then it points at the pin, after the reveal has landed, so the table finds it there:
- * the GM's own card pulses, and the ping reaches every client only when the pin is for
- * everyone. A pin for one player is pointed at on the GM's screen alone — a pulse on the
- * others' maps would show them where the rogue's clue lies. It never pulls a view; that
- * is spotlight's decision to make, not a side effect of stepping through a script.
- *
- * Nothing to reveal is said, and said apart from "nothing in this view": the second one
- * means the filter is hiding the rest of the script, which is the GM's to know.
- *
- * One at a time per scene. Two presses faster than a write read the same payloads and
- * chose the same row: the second revealed nothing new, and pinged and said so again. A
- * press while one is in flight now shares its answer.
- */
-export function revealNext(
-  scene: any,
-  query: PinboardQuery = EVERY_ROW
-): Promise<{ doc: any; left: number }> {
-  if (revealing && revealing.scene === scene) return revealing.promise;
-  const promise = revealNextNow(scene, query).finally(() => {
-    if (revealing?.promise === promise) revealing = null;
-  });
-  revealing = { scene, promise };
-  return promise;
-}
-
-async function revealNextNow(
-  scene: any,
-  query: PinboardQuery
-): Promise<{ doc: any; left: number }> {
-  const nothing = { doc: null, left: 0 };
-  if (!isGM() || !scene) return nothing;
-
-  const docs = store.all(scene);
-  const facts = docs.map((doc) => rowFacts(doc)).filter((row): row is RowFacts => row !== null);
-  const { next, left } = nextToReveal(facts, query);
-  const doc = next ? docs.find((candidate) => candidate.id === next.id) : null;
-  const pin = readPin(doc);
-  if (!doc || !pin) {
-    const outOfView = facts.some((row) => row.hidden);
-    notify(
-      { key: outOfView ? "DP.notice.revealNextNoneInView" : "DP.notice.revealNextNone" },
-      "info"
-    );
-    return nothing;
-  }
-
-  // The row was chosen from the payloads read here; what it reveals to is decided from the
-  // audience the pin holds when the write lands, as every reveal is (A29).
-  await setAudience(doc, audience.revealed);
-  // A write core refused still resolves; the pin must be out of hiding before anything
-  // points at it.
-  const after = readPin(doc);
-  if (!after || doc.hidden === true || after.audience.kind === "hidden") {
-    notify({ key: "DP.notice.revealNextFailed" }, "error");
-    return nothing;
-  }
-
-  Hooks.callAll(`${MODULE_ID}.flash`, doc);
-  pingAt(doc, { broadcast: audience.pingsEveryone(after.audience), pull: false });
-  return { doc, left };
-}
-
-// ---------------------------------------------------------------------------
-// Pings
-// ---------------------------------------------------------------------------
-
-/** What a ping did: sent to every client, drawn here only, or not at all and why. */
-type PingOutcome = "broadcast" | "local" | "elsewhere" | "outside" | "unavailable";
-
-/** Whether a pin lies on the scene this client is viewing: the only map a ping reaches. */
-function onViewedScene(anchorDoc: any): boolean {
-  const viewed = cv()?.scene?.id;
-  const own = anchorDoc?.parent?.id;
-  return !!viewed && (!own || own === viewed);
-}
-
-/**
- * Point at a pin. The one door every ping in the module goes through.
- *
- * `canvas.ping` draws here AND on every connected client, and whatever it is not told it
- * reads off the keyboard: core builds `{scene, pull: <Shift held>, style, zoom}` and merges
- * the options over it, so a GM holding Shift pulls every view to the spot. The Pinboard's
- * Shift+Space is exactly a Shift held while pinging. So a broadcast here always states
- * `pull` and `style`, and the keyboard decides nothing the table sees.
- *
- * `handlePing` draws on this client alone — and draws nothing unless it is handed the
- * viewed scene's id, which core compares against the one it is showing.
- *
- * A pin on another scene is not pinged at all: its coordinates on the map being viewed
- * point at nothing, and a ping there would send the table looking for it.
- */
-function pingAt(
-  anchorDoc: any,
-  { broadcast, pull }: { broadcast: boolean; pull: boolean }
-): PingOutcome {
-  const canvas = cv();
-  if (!canvas?.scene?.id || !anchorDoc) return "unavailable";
-  if (!onViewedScene(anchorDoc)) return "elsewhere";
-
-  const origin = centreOf(anchorDoc);
-  // Core refuses a broadcast outside the scene's rect; the local path is held to the same.
-  const rect = canvas.dimensions?.rect;
-  if (typeof rect?.contains === "function" && !rect.contains(origin.x, origin.y)) {
-    return "outside";
-  }
-
-  const types = cfg()?.Canvas?.pings?.types;
-  const style = pull ? (types?.PULL ?? "chevron") : (types?.PULSE ?? "pulse");
-  const drawn = (ping: unknown) =>
-    void Promise.resolve(ping).catch((error) => log.warn("a ping could not be drawn", error));
-
-  try {
-    if (broadcast) {
-      if (typeof canvas.ping !== "function") return "unavailable";
-      drawn(canvas.ping(origin, { pull, style }));
-      return "broadcast";
-    }
-    if (typeof canvas.controls?.handlePing !== "function") return "unavailable";
-    drawn(canvas.controls.handlePing(g()?.user, origin, { scene: canvas.scene.id, style }));
-    return "local";
-  } catch (error) {
-    log.warn("a ping could not be drawn", error);
-    return "unavailable";
-  }
 }
 
 /** Delete a pin, releasing its ownership claim first so no grant is orphaned. */
