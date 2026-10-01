@@ -32,6 +32,7 @@ import {
 } from "./canvas/PinnedTile";
 import { registerPropHitLayer, syncHitLayer } from "./canvas/PropHitLayer";
 import { tileChangeHandler } from "./canvas/tile-hooks";
+import { userConnectedHandler, userUpdateHandler } from "./canvas/user-hooks";
 import { propManager, teardownProps } from "./canvas/PropManager";
 import { probeRasterisation } from "./render/Rasterizer";
 import { clearPdfCache } from "./render/PdfPage";
@@ -274,12 +275,17 @@ for (const type of hookedDocumentNames()) {
   Hooks.on(`delete${type}`, onSourceCameOrWent);
 }
 
-// A user connecting or disconnecting changes who is in an audience, and therefore what
-// every chip shows and which props this client should be drawing at all.
-for (const hook of ["userConnected", "updateUser"]) {
-  Hooks.on(hook, () => {
+// A user's change reaches only what reads it (`user-hooks`): this user's hit areas and
+// cards, the pins and the HUD when a role moves `playerIds()`, the Pinboard's chips always.
+// Rebuilding the hit areas for anyone's flag write cleared a hovering player's tooltip.
+const userEffects = {
+  rebuildHits: syncHitLayer,
+  forgetCards: clearResolved,
+  redrawPins: () => {
     refreshAllPins();
-    syncHitLayer();
-    refreshPinboard();
-  });
-}
+    refreshPinHUD(null);
+  },
+  refreshBoard: refreshPinboard,
+};
+Hooks.on("updateUser", userUpdateHandler(userEffects));
+Hooks.on("userConnected", userConnectedHandler(userEffects));
