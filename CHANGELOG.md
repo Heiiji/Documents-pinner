@@ -9,6 +9,107 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Nothing yet.
 
+## [0.4.1] — 2026-10-01
+
+A performance and code-quality audit of 0.4.0, and everything it found. Some of it was in
+plain sight at the table — Space on a Pinboard row paused the game for everyone, a preset
+you made was called "DP.Blood Moon", a secret you revealed never reached the players'
+cards — and some of it was cost nobody could see: every card on the map was rebuilt from
+its document each time the zoom crossed a detail level. Nothing here changes what a pin
+is or how a GM works with one.
+
+### Fixed
+
+- **Space on a Pinboard row paused the game.** A key the board handled went on to
+  Foundry's own shortcuts as well: Space revealed the pin *and* toggled the pause for the
+  whole table, an Escape that cleared the search also closed every window, and the arrows
+  that moved through the rows panned the map underneath. A key the board handles now stops
+  there; one it does not, and an Escape with nothing left to clear, still reaches Foundry.
+  Space or Enter on a focused button in the Pinboard, the picker or the Preset Studio
+  presses the button and nothing else.
+- **A preset you made was called "DP.Blood Moon".** Every preset name went through the
+  module's translation table, which has no entry for the names a GM writes. They are shown
+  as written now, and a duplicate is called "Aged Parchment (copy)" in your language
+  instead of a translation key. Presets 0.4.0 already duplicated read correctly too.
+- **A secret the GM revealed stayed hidden on the players' cards.** A journal's secret
+  section that you reveal shows in core's sheet; the module removed every secret section,
+  revealed or not, from the card and the reader. Only unrevealed ones are removed now.
+- **The book showed through a text prop.** A text prop is drawn over the map, on a tile
+  holding Foundry's book icon, which the module keeps invisible. Foundry made it visible
+  again whenever it redrew the tile's state — on hover, selection, `Alt` highlighting, a
+  reveal — so the stretched book showed through a faded card, a torn edge or a peek, and
+  came back for good when the reader closed. It stays invisible.
+- **Two quick clicks on a pin's player chips kept only the second.** Hiding a pin from Ali
+  and then from Ben before the first change had landed gave Ali the pin back. Each change
+  is now worked out from what the previous one left, for every way of changing who sees a
+  pin — chips, the eye, "Some players", Reveal next, Reveal & spotlight and the bulk
+  actions — and the access that follows lands in the same order.
+- **A reload during "Hide all" could leave players with access to hidden documents.** The
+  pins were hidden first and the access taken back after; if the second half never ran,
+  nothing ever took it back. The check made when a GM loads the world now takes back any
+  access a pin no longer asks for, and says so. Access you granted by hand, and the
+  document's own default, are kept.
+- **Changing a prop's speed or motion did nothing on the map** until something else
+  redrew it. It applies at once.
+- **A narrowed prop kept the height it had at its old width**, so its "more below" fade
+  could be wrong; and a card was measured before its pictures had loaded, so an illustrated
+  handout could be marked as fitting when it did not.
+- **Cards trailed the map by a frame** during a smooth pan (keyboard, edge of the screen,
+  pan-to-token) and behind Foundry's resize handles. They move with it now.
+- **A detached Pinboard, picker or Pin Studio lost the keyboard focus** after every change,
+  and the `?` sheet opened in the main window.
+- **An accent typed with a dead key, or a word typed through an input method**, could not
+  reach the Pinboard's or the picker's search: the field was rebuilt in the middle of it.
+- **Escape did not close the picker** once the search was empty.
+- **Tile Config's Documents Pinner section showed the state from when it first opened**
+  after a pin was unpinned or adopted.
+- **Moving a pin's anchor in Tile Config split it in two:** Foundry's frame and handles
+  turned about one point, and the card, the click area and the reader about another. A
+  pin's anchor stays at its centre.
+- **Zoomed out, a few effects never stood still.** The glow, the HUD sweep and the rolling
+  scanlines were meant to stop at the coarse detail level, and did not. They do.
+- **The Preset Studio's preview showed no HUD overlay** on Projected Readout, Tagged Object
+  and Signal Loss. It shows the card as a pin draws it.
+- **Two props of the same PDF page could share one texture**, and one leaving the view
+  could blank the other; a PDF prop could also keep the half-strength effect of the coarse
+  level after you zoomed in. A prop revealed on the canvas could have its fade cut short.
+- **Starting or ending "Hide while I edit", or the world loading, could undo a chip click**
+  still landing on the same pin; deleting a pin in the middle of one could leave its access
+  behind until the next load.
+
+### Changed
+
+- **Zooming no longer rebuilds every card.** A card's text is prepared once and kept, so
+  crossing a detail level, opening and closing the reader or panning a prop out of view and
+  back costs a fraction of what it did; at most two cards are prepared at a time, so a
+  zoom over a busy map does not stall the frames right after it. What is kept is forgotten
+  when its document changes.
+- **The rolling scanlines no longer repaint the whole card every frame.** They move on a
+  layer of their own; the look is the same.
+- **The Pinboard redraws once per change**, where a button and the update it caused each
+  redrew it.
+- **No work at load for drawing text into the canvas** before the browser has said whether
+  it can, and no font encoding for a path that does not run.
+- **"Reveal all" and "Hide all" give access to every pin at once** instead of one after
+  another; a bulk delete waits for any change still landing on those pins.
+- **The picker's arrow keys move the highlight without redrawing the list**, the world is
+  searched once per search, and its rows stop at 100 with a count of the rest, as
+  compendium rows already did.
+- **Another player storing a preference no longer clears your prop's tooltip.** Only a
+  change to you, or to someone's role, redraws what depends on it.
+- **The pin HUD and Pin Studio no longer submit Foundry's form on every change**, which
+  sent an empty update through every module's hooks for each slider step.
+- **For scripts:** `api.patch` keeps the rules the module's own buttons keep — a patch that
+  points the pin at another document moves it as `api.retarget` does (its page, PDF page and
+  text field are not carried over), and one that changes the audience brings access in line.
+  `api.retarget` accepts part of a source and completes it. The pin's icon is written like
+  every other change.
+
+### Removed
+
+- The unused `PinData` data model, and a `documents-pinner.tileDestroyed` hook nothing
+  listened to and nothing documented.
+
 ## [0.4.0] — 2026-10-01
 
 What can be pinned, and how it reaches the table. A handout an adventure ships in a
@@ -1001,7 +1102,8 @@ occluded. The module detects this at startup rather than failing visibly.
 
 The full list is in the README and in `docs/DESIGN.md` §10.
 
-[Unreleased]: https://github.com/Heiiji/Documents-pinner/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/Heiiji/Documents-pinner/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/Heiiji/Documents-pinner/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/Heiiji/Documents-pinner/compare/v0.3.3...v0.4.0
 [0.3.3]: https://github.com/Heiiji/Documents-pinner/compare/v0.3.2...v0.3.3
 [0.3.2]: https://github.com/Heiiji/Documents-pinner/compare/v0.3.1...v0.3.2
