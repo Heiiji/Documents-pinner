@@ -190,6 +190,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Pin Studio went on offering every control over a pin deleted elsewhere**, from the
   Pinboard, the Tiles layer, Ctrl+Z or another GM, and each change then failed. It says the
   pin no longer exists.
+- **A pin on a whole journal showed its players the GM's notes.** It drew the first page
+  ever written, not the first in the journal's order, and never asked that page's own
+  permission. It now shows the first page in the journal's order that is not hidden from
+  the players — the same page on your screen as on theirs — and an empty sheet when every
+  page is; Pin Studio lists the pages in that order too.
 
 ## [0.3.3] — 2026-09-30
 

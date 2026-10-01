@@ -95,7 +95,7 @@ function rawContentOf(source: any): { text: string; kind: string } {
       return { text: `<p>${escapeHtml(t("DP.card.pdf"))}</p>`, kind: "pdf" };
     case "entry": {
       // A whole journal shows its first page, which is what a GM means by pinning one.
-      const first = source.pages?.contents?.[0];
+      const first = firstShownPage(source);
       return first ? rawContentOf(first) : { text: "", kind: "empty" };
     }
     default:
@@ -103,9 +103,40 @@ function rawContentOf(source: any): { text: string; kind: string } {
   }
 }
 
+/** A journal's pages in the order its own sheet lists them: by `sort`, not by creation. */
+function sortedPages(entry: any): any[] {
+  return [...(entry?.pages?.contents ?? [])].sort(
+    (a: any, b: any) => (Number(a?.sort) || 0) - (Number(b?.sort) || 0)
+  );
+}
+
+/**
+ * A page whose OWN ownership keeps it from the players: a default set — not inherited from
+ * the journal — below OBSERVER, at which a text page is not even listed (DESIGN §4).
+ */
+function hiddenFromPlayers(page: any): boolean {
+  const level = page?.ownership?.default;
+  return typeof level === "number" && level !== OWNERSHIP.INHERIT && level < OWNERSHIP.OBSERVER;
+}
+
+/**
+ * The page a pin on a whole journal shows: the first by `sort` that its own ownership does
+ * not hide from the players — or none, and the card is empty.
+ *
+ * It was `pages.contents[0]`, the first page CREATED: a location journal whose "GM notes"
+ * came before its reordered "Handout" put the notes on the map for every player, secret
+ * sections aside, and a card that differed from the page the journal opens on. The SAME page
+ * on every client, the GM's included, so the GM sees what the table sees — never one chosen
+ * by the viewer's own permission: a revealed pin reads without any (DESIGN §3.1), and a page
+ * inheriting NONE from its journal would blank every prop with ownership sync off.
+ */
+function firstShownPage(entry: any): any | null {
+  return sortedPages(entry).find((page) => !hiddenFromPlayers(page)) ?? null;
+}
+
 /** The pages of a journal, or none when there is no choice to make. */
 function journalPages(named: any): PageChoice[] {
-  const pages = named?.pages?.contents ?? [];
+  const pages = sortedPages(named);
   if (pages.length < 2) return [];
   return pages.map((page: any) => ({
     id: page.id,
