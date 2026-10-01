@@ -202,6 +202,7 @@
   "DP.keys.toggleMode": "Basculer les épingles sélectionnées entre icône et accessoire",
   "DP.keys.toggleModeHint": "Le même ancrage dans les deux cas : rien de ce qui référence l'épingle ne casse.",
   "DP.migration.done": "{count} épingle(s) mises à jour au format actuel.",
+  "DP.migration.failed": "Les épingles de {count} scène(s) n'ont pas pu être mises à jour : {scenes}. Elles fonctionnent toujours ; la mise à jour vous sera de nouveau proposée à la prochaine session.",
   "DP.migration.prompt": "{pinCount} épingle(s) réparties sur {sceneCount} scène(s) que vous n'avez pas ouvertes proviennent d'une version antérieure. Les mettre à jour maintenant ? Elles fonctionnent déjà dans les deux cas ; il s'agit seulement de les réécrire au format actuel.",
   "DP.migration.reanchored": "{count} accessoire(s) ré-ancré(s) : le cadre de sélection et la poignée de redimensionnement sont désormais sur le papier. Rien n'a bougé sur la carte.",
   "DP.migration.title": "Documents Pinner — mise à jour des épingles",

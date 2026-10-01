@@ -200,6 +200,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   player's screen went on showing it, and a player could go on reading it, while a click
   said it was missing. The pin now turns to its placeholder at once, an open reader closes
   and says why, and a page added to a journal pinned whole shows up.
+- **Updating older pins across the world stopped at the first scene Foundry refused, and
+  said nothing.** The scenes after it were never updated and the offer never came back
+  for them. Every scene that can be updated now is, the ones that could not are named,
+  and you are offered them again next session.
 
 ## [0.3.3] — 2026-09-30
 

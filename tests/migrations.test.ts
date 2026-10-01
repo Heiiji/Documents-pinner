@@ -1,8 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { FLAGS, MODULE_ID, SCHEMA_VERSION } from "../src/const";
-import { migrateScene, planMigration } from "../src/data/migrations";
+import { migrateScene, migrateWorld, planMigration } from "../src/data/migrations";
 import { cardMetrics, defaultPin, freezeMetrics, validatePin } from "../src/data/pin-schema";
-import { fakeTile } from "./helpers/fake-foundry";
+import { update } from "../src/data/PinStore";
+import { fakeTile, installWorld, uninstallWorld } from "./helpers/fake-foundry";
 
 const FLAG_PATH = `flags.${MODULE_ID}.${FLAGS.PIN}`;
 
@@ -234,5 +235,81 @@ describe("re-anchoring a prop that was drawn as a card", () => {
   it("does not move without a client to ask", () => {
     const [update] = planMigration([tile("a", v2Prop(), at(100, 240))]);
     expect("x" in update).toBe(false);
+  });
+});
+
+/**
+ * On the primary GM, `canvasReady` migrates just before `ready` resumes the edit holds, and
+ * the two wrote whole payloads from the same copy: the later write won, and a type size the
+ * migration had frozen went back to null under a current version, never to be frozen again.
+ */
+describe("a migration landing beside another write", () => {
+  it("waits for it, and keeps both", async () => {
+    const stored = fakeTile({ id: "a", width: 400, height: 560 });
+    stored.flags = { [MODULE_ID]: { [FLAGS.PIN]: v1Pin() } };
+    const write = stored.update;
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    stored.update = async (change: any, options: any) => {
+      stored.update = write;
+      await gate;
+      return write(change, options);
+    };
+    const scene = {
+      name: "Tavern",
+      tiles: { contents: [stored] },
+      async updateEmbeddedDocuments(_type: string, updates: any[]) {
+        for (const { _id, ...change } of updates)
+          if (_id === stored.id) await stored.update(change);
+        return updates;
+      },
+    };
+
+    // The other write has read the payload and is on its way to the server.
+    const edit = update(stored, { display: { label: "Resumed" } });
+    await vi.waitFor(() => expect(stored.update).toBe(write));
+    const migration = migrateScene(scene);
+    release();
+    await Promise.all([edit, migration]);
+
+    const pin = stored.flags[MODULE_ID][FLAGS.PIN];
+    expect(pin.display.label).toBe("Resumed");
+    expect(pin.display.typeSize).toBeCloseTo(400 / 26, 6);
+  });
+});
+
+/**
+ * The sweep the GM says yes to. One scene core refused aborted it in silence: the scenes
+ * after it were never updated, the GM heard nothing, and the version was never written.
+ */
+describe("the world sweep", () => {
+  afterEach(() => uninstallWorld());
+
+  it("updates every scene it can, names the one it could not, and offers it again", async () => {
+    const world = installWorld({ isGM: true });
+    const sceneWith = (name: string, refuses: boolean) => {
+      const stored = fakeTile({ id: `${name}-pin` });
+      stored.flags = { [MODULE_ID]: { [FLAGS.PIN]: v1Pin() } };
+      return {
+        name,
+        stored,
+        tiles: { contents: [stored] },
+        async updateEmbeddedDocuments(_type: string, updates: any[]) {
+          if (refuses) throw new Error("refused");
+          for (const { _id, ...change } of updates)
+            if (_id === stored.id) await stored.update(change);
+          return updates;
+        },
+      };
+    };
+    const [crypt, tavern] = [sceneWith("Crypt", true), sceneWith("Tavern", false)];
+    world.game.scenes.contents = [crypt, tavern];
+
+    expect(await migrateWorld()).toBe(1);
+
+    expect(planMigration([tavern.stored])).toEqual([]);
+    const errors = world.notifications.filter((notice) => notice.type === "error");
+    expect(errors.map((notice) => notice.message)).toEqual(["DP.migration.failed"]);
+    expect(world.game.settings.get("documents-pinner", "schemaVersion")).toBeUndefined();
   });
 });

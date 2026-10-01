@@ -128,7 +128,7 @@ Hooks.on("canvasReady", () => {
   // The one assumption every placement rests on, checked against core's own bounds.
   checkTileGeometry();
   syncHitLayer();
-  void migrateOnCanvasReady(cv()?.scene);
+  void migrateOnCanvasReady(cv()?.scene).catch((error) => log.warn("migration failed", error));
   // An open Pinboard is about the scene being viewed; it used to keep listing the last
   // one's pins until a tile happened to change.
   refreshPinboard();
