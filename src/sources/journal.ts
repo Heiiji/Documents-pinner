@@ -15,7 +15,7 @@ import { OWNERSHIP } from "../const";
 import { escapeHtml } from "../html";
 import { t } from "../i18n";
 import { pdfSourceOf } from "../render/PdfPage";
-import type { DpSource } from "../types/dp";
+import { documentSource } from "../data/pin-schema";
 import type { GrantTarget, PageChoice, ShownFacts, SourceAdapter, SourceFacts } from "./index";
 
 /** "Journal › Page" for a page, the shown document's own name otherwise. */
@@ -208,15 +208,6 @@ function openJournal(source: any): void {
   // not there; the entry opens where it opens.
   source.sheet.render({ force: true });
 }
-
-const documentSource = (uuid: string, pageId: string | null = null): DpSource => ({
-  kind: "document",
-  uuid,
-  src: null,
-  pageId,
-  pdfPage: null,
-  followName: true,
-});
 
 export const journalAdapter: SourceAdapter = {
   names: ["JournalEntry", "JournalEntryPage"],

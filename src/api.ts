@@ -23,6 +23,7 @@ import {
   DEFAULT_MARGIN_EM,
   defaultPin,
   defaultTypeSize,
+  documentSource,
   freezeMetrics,
   naturalSize,
   type PinPatch,
@@ -1124,26 +1125,10 @@ export async function adoptNote(noteDoc: any, source?: DpSource | null): Promise
 /** The journal a Note points at, preferring the specific page over its parent entry. */
 export function sourceFromNote(noteDoc: any): DpSource | null {
   const pageUuid = noteDoc?.page?.uuid;
-  if (pageUuid) {
-    return {
-      kind: "document",
-      uuid: pageUuid,
-      src: null,
-      pageId: null,
-      pdfPage: null,
-      followName: true,
-    };
-  }
+  if (pageUuid) return documentSource(pageUuid);
   const entryUuid = noteDoc?.entry?.uuid;
   if (entryUuid) {
-    return {
-      kind: "document",
-      uuid: entryUuid,
-      src: null,
-      pageId: typeof noteDoc.pageId === "string" ? noteDoc.pageId : null,
-      pdfPage: null,
-      followName: true,
-    };
+    return documentSource(entryUuid, typeof noteDoc.pageId === "string" ? noteDoc.pageId : null);
   }
   return null;
 }

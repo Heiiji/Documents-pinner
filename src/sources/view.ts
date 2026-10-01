@@ -27,6 +27,7 @@ import {
 } from "./index";
 import { packFacts, packLockedHere, packOf, playersCanRead } from "./packs";
 import { isPackUuid } from "./uuid";
+import { imageSource } from "../data/pin-schema";
 import type { DpPinFlags, DpSource } from "../types/dp";
 
 /**
@@ -53,7 +54,7 @@ export function dropOutcome(data: any): DpSource | Refusal | null {
     (data.type === "Tile" ? data.texture?.src : null) ??
     (typeof data === "string" ? data : null);
   if (typeof path === "string" && path) {
-    return { kind: "image", uuid: null, src: path, pageId: null, pdfPage: null, followName: false };
+    return imageSource(path);
   }
   return null;
 }

@@ -21,6 +21,7 @@
 import { MODULE_ID } from "../const";
 import { cfg, cv, ns } from "../fvtt";
 import { rawPinFlag } from "../data/PinData";
+import { documentSource } from "../data/pin-schema";
 import type { DpSource } from "../types/dp";
 import { readField, shownField } from "./fields";
 import type { GrantTarget, Refusal, ShownFacts, SourceAdapter, SourceFacts } from "./index";
@@ -41,15 +42,7 @@ export interface PortraitKind {
 
 const REFUSED: Refusal = { refused: "DP.notice.embeddedRefused" };
 
-const sourceOf = (uuid: string): DpSource => ({
-  kind: "document",
-  uuid,
-  src: null,
-  pageId: null,
-  pdfPage: null,
-  followName: true,
-  field: null,
-});
+const sourceOf = (uuid: string): DpSource => documentSource(uuid);
 
 /**
  * Whether a uuid names a top-level document of this type — not an item an actor owns, not

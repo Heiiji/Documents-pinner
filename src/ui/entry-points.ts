@@ -25,6 +25,7 @@ import * as settings from "../settings";
 import { armAt } from "../apps/PlacementGhost";
 import { openPicker } from "../apps/DocumentPicker";
 import { readPin } from "../data/PinData";
+import { documentSource } from "../data/pin-schema";
 import { isRefusal } from "../sources/index";
 import { firstWorldMatch, packEntries, PINNABLE } from "../sources/search";
 
@@ -141,10 +142,7 @@ export function addContextOption(options: any[], app?: any): void {
     onClick: (_event: Event, target: any) => {
       const uuid = uuidFromContextTarget(target, app);
       if (!uuid) return;
-      armAt(
-        { kind: "document", uuid, src: null, pageId: null, pdfPage: null, followName: true },
-        viewportCentre()
-      );
+      armAt(documentSource(uuid), viewportCentre());
     },
   });
 }
@@ -224,10 +222,7 @@ export function onChatMessage(_log: any, message: string): boolean | void {
     notify(t("DP.chat.noMatch", { query }), "warn");
     return false;
   }
-  armAt(
-    { kind: "document", uuid, src: null, pageId: null, pdfPage: null, followName: true },
-    viewportCentre()
-  );
+  armAt(documentSource(uuid), viewportCentre());
   return false;
 }
 

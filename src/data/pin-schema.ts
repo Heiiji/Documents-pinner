@@ -138,6 +138,20 @@ export function defaultSource(): DpSource {
   };
 }
 
+/**
+ * A source naming a document — a journal, one of its pages, an actor, an item — and, for
+ * a journal, the page chosen in it. The one way a source is built, so every one has every
+ * key: `retarget` once had to patch `field` back onto sources built without it.
+ */
+export function documentSource(uuid: string, pageId: string | null = null): DpSource {
+  return { ...defaultSource(), uuid, pageId };
+}
+
+/** A source that is a bare image file. It has no name to follow. */
+export function imageSource(src: string): DpSource {
+  return { ...defaultSource(), kind: "image", src, followName: false };
+}
+
 export function defaultDisplay(): DpDisplay {
   return {
     label: "",

@@ -19,6 +19,7 @@ import { escapeAttr, escapeHtml } from "../html";
 import { arm } from "./PlacementGhost";
 import * as api from "../api";
 import { importForPin } from "../sources/import";
+import { documentSource, imageSource } from "../data/pin-schema";
 import {
   filterEntries,
   packEntries,
@@ -297,14 +298,7 @@ export function definePicker(): any {
       if (!uuid) return;
       if (item.dataset.dpImport !== "true") {
         this.close();
-        this.take({
-          kind: "document",
-          uuid,
-          src: null,
-          pageId: null,
-          pdfPage: null,
-          followName: true,
-        });
+        this.take(documentSource(uuid));
         return;
       }
       if (this.importing) return;
@@ -366,14 +360,7 @@ async function onBrowse(this: any) {
     type: "imagevideo",
     callback: (path: string) => {
       this.close();
-      this.take({
-        kind: "image",
-        uuid: null,
-        src: path,
-        pageId: null,
-        pdfPage: null,
-        followName: false,
-      });
+      this.take(imageSource(path));
     },
   });
   picker.render(true);

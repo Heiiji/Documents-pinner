@@ -23,7 +23,13 @@ import { escapeAttr, escapeHtml } from "../html";
 import * as api from "../api";
 import * as settings from "../settings";
 import { readPin } from "../data/PinData";
-import { DEFAULT_MARGIN_EM, defaultPin, defaultTypeSize, validatePin } from "../data/pin-schema";
+import {
+  DEFAULT_MARGIN_EM,
+  defaultPin,
+  defaultTypeSize,
+  documentSource,
+  validatePin,
+} from "../data/pin-schema";
 import { scaleOf, screenToScene, stageMatrix } from "../canvas/transform";
 import { allPresets } from "../effects/preset-library";
 import { swatchStyle } from "../effects/preset-css";
@@ -678,5 +684,5 @@ function announce(anchor: any, current: GhostState): void {
 export function armLastUsed(): boolean {
   const uuid = settings.get("lastSourceUuid");
   if (!uuid) return false;
-  return arm({ kind: "document", uuid, src: null, pageId: null, pdfPage: null, followName: true });
+  return arm(documentSource(uuid));
 }

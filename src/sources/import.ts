@@ -21,6 +21,7 @@ import { MODULE_ID } from "../const";
 import { cfg, g, isGM, notify, worldCollection } from "../fvtt";
 import { t } from "../i18n";
 import { logger } from "../log";
+import { documentSource } from "../data/pin-schema";
 import type { DpSource } from "../types/dp";
 import { packFacts, packOf } from "./packs";
 import { parseSourceUuid } from "./uuid";
@@ -70,14 +71,7 @@ export async function importForPin(uuid: string): Promise<DpSource | null> {
 }
 
 function sourceOf(doc: any): DpSource {
-  return {
-    kind: "document",
-    uuid: doc.uuid,
-    src: null,
-    pageId: null,
-    pdfPage: null,
-    followName: true,
-  };
+  return documentSource(doc.uuid);
 }
 
 /** A world document already imported from this pack uuid, if there is one. */
