@@ -258,10 +258,3 @@ export function warmFontCache(): void {
   if (!g()) return;
   onIdle(() => void inlineFonts(), 3000);
 }
-
-export function clearInliner(): void {
-  cache.clear();
-  inFlight.clear();
-  totalBytes = 0;
-  fontFaceCss = null;
-}
