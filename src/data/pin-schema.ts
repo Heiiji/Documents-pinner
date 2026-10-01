@@ -108,9 +108,10 @@ function withoutRetired(
 const EFFECT_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
 
 /**
- * A per-pin parameter override key: a `DpPresetParams` field, optionally inside its
- * group — `blur`, or `tint.amount`. An override is STORED nested, `{ tint: { amount } }`,
- * and `mergePin` merges it deeply, so a patch of one field keeps its sibling colour.
+ * A key of the reserved `effect.params` (`DpEffectRef.params`, read by nothing): a
+ * `DpPresetParams` field, optionally inside its group — `blur`, or `tint.amount`. STORED
+ * nested, `{ tint: { amount } }`, and `mergePin` merges it deeply, so a patch of one field
+ * keeps its sibling.
  */
 const PARAM_KEY = /^[a-z][a-zA-Z0-9]*(?:\.[a-z][a-zA-Z0-9]*)?$/;
 const MAX_PARAM_OVERRIDES = 64;
@@ -389,7 +390,8 @@ function normaliseGeometry(raw: unknown, warnings: DpNotice[]): DpGeometry {
 }
 
 /**
- * Per-pin overrides on top of the preset's parameters, nested by group.
+ * The reserved `effect.params`, nested by group: stored, and drawn by nothing
+ * (`DpEffectRef.params`).
  *
  * Nested because v14 stores them so whatever is written: a dotted key inside a flag is
  * expanded at every depth (foundry.mjs 14.368, `ObjectField#_cleanType`, 10554-10580). An
@@ -397,8 +399,8 @@ function normaliseGeometry(raw: unknown, warnings: DpNotice[]): DpGeometry {
  * here as not a scalar, and the migration — comparing it with the stored nesting — rewrote
  * the pin on every load. Both shapes are read; a later key wins over an earlier one.
  *
- * Bounded and shape-checked here, then re-validated by `validatePreset` once merged,
- * so a hand-edited flag cannot smuggle a value past the preset's own clamps.
+ * Bounded and shape-checked, so a hand-edited flag stays small. Were they ever drawn, the
+ * merged preset would go through `validatePreset` first: nothing here is a clamp.
  */
 function normaliseParams(raw: unknown, warnings: DpNotice[]): Record<string, unknown> {
   const flat: [string, unknown][] = [];
