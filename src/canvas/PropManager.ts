@@ -66,7 +66,7 @@ import { svgDocument } from "../render/CardTemplate";
 import { inlineFonts, inlineImages } from "../render/AssetInliner";
 import { TextureCache, cacheKey } from "../render/TextureCache";
 import { currentLevel, frameCap, sampleFrame, sampledFps } from "../effects/level";
-import { findPreset } from "../effects/preset-library";
+import { findPreset, isCorePreset } from "../effects/preset-library";
 import {
   clearDomTier,
   invalidateDomProps,
@@ -129,6 +129,10 @@ interface PropRecord {
 }
 
 class Manager {
+  constructor() {
+    settings.onRedrawSetting((key) => this.onSettingChanged(key));
+  }
+
   #records = new Map<string, PropRecord>();
   #cache = new TextureCache();
   #matrix: Mat | null = null;
@@ -267,7 +271,12 @@ class Manager {
     const affected = [...this.#records.values()].filter((record) =>
       this.#referencesSource(record, uuid)
     );
+    this.#forget(affected, uuid);
+    this.#scheduleLod(DEFAULTS.editDebounce);
+  }
 
+  /** Drop what these props were drawn from, on both tiers, so the next pass redraws them. */
+  #forget(affected: PropRecord[], uuid?: string): void {
     for (const record of affected) {
       this.#restore(record);
       // Forget the content signal so the next pass builds a key this cache cannot serve.
@@ -278,7 +287,7 @@ class Manager {
 
     // Both directions: a pin on a whole JournalEntry must be invalidated by an edit to
     // one of its PAGES, whose uuid is longer than the entry's.
-    const sources = new Set<string>([uuid]);
+    const sources = new Set<string>(uuid ? [uuid] : []);
     for (const record of affected) {
       const source = this.#sourceUuidOf(record);
       if (source) sources.add(source);
@@ -291,7 +300,25 @@ class Manager {
         if (key.startsWith(`${source}|`)) this.#failedKeys.delete(key);
       }
     }
-    this.#scheduleLod(DEFAULTS.editDebounce);
+  }
+
+  /**
+   * A setting the props are drawn from changed: redraw now, not at the next pan.
+   *
+   * The rendering path, the effects level and the VRAM budget are all read by the next
+   * pass. A user preset is not — a card's key names its preset, not what the preset says —
+   * so every prop wearing one is dropped first; a core preset cannot change.
+   */
+  onSettingChanged(key: settings.SettingKey): void {
+    if (key === "userPresets") {
+      this.#forget(
+        [...this.#records.values()].filter((record) => {
+          const pin = readPin(cv()?.tiles?.get(record.id)?.document);
+          return pin !== null && !isCorePreset(pin.effect.id);
+        })
+      );
+    }
+    this.refresh();
   }
 
   /** The source uuid a prop draws from, which is the first field of its cache key. */

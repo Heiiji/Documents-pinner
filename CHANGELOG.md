@@ -146,6 +146,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   to another application let go of Alt there, where the page never heard it, so the props
   stayed see-through on their return until Alt was pressed again. The peek now ends when
   the window loses focus.
+- **Editing a preset in the Preset Studio now changes the props that wear it.** A saved
+  edit reached no prop on the map, on any client, until something else made it redraw — a
+  zoom across a detail level, an edit to the prop, a reload. Every client redraws them as
+  you save. Changing *Prop rendering* or *Effect level*, or lowering the *Texture memory
+  budget*, likewise takes effect at once instead of at the next pan.
 - **"Reveal all" showed a private note to the whole table.** A pin narrowed to one player
   and hidden for a beat went back to that player when revealed with `Space` or the eye —
   and to everyone when revealed from the Pinboard's bulk bar or "Reveal all". Every reveal
