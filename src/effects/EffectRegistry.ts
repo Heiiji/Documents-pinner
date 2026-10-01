@@ -66,18 +66,21 @@ export interface EffectDressing {
 }
 
 /**
- * The effect's strength for a tier.
+ * The share of a pin's intensity a rung draws its effect at.
  *
  * Half at the coarse rung rather than none: an effect that switched off at a distance
  * would make props visibly change identity as a GM zoomed out, which reads as a bug.
+ *
+ * Exported for the texture cache key, which has to tell a texture baked at half strength
+ * from one baked at full (`PropManager.#keyFor`).
  */
-function tierIntensity(tier: LodTier, intensity: number): number {
+export function tierFactor(tier: LodTier): number {
   switch (tier) {
     case "L2a":
-      return intensity * 0.5;
+      return 0.5;
     case "L2b":
     case "L3":
-      return intensity;
+      return 1;
     default:
       return 0;
   }
@@ -178,7 +181,7 @@ export function dressing(context: EffectContext): EffectDressing {
   }
 
   let vars: CssVars = {
-    ...presetToCssVars(context.preset, tierIntensity(context.tier, context.intensity)),
+    ...presetToCssVars(context.preset, context.intensity * tierFactor(context.tier)),
     ...proceduralLayers(context),
   };
 

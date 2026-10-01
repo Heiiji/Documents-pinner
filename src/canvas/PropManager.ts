@@ -60,7 +60,7 @@ import { resolveCard } from "../render/ContentResolver";
 import { renderPdfPage } from "../render/PdfPage";
 import { isPdfPin, pdfPageOf, pdfSourceForPin } from "../sources/describe";
 import { bakeEffects, clearBakeCache, copyCanvas } from "../render/BakeEffects";
-import { dressing } from "../effects/EffectRegistry";
+import { dressing, tierFactor } from "../effects/EffectRegistry";
 import { svgDocument } from "../render/CardTemplate";
 import { inlineFonts, inlineImages } from "../render/AssetInliner";
 import { TextureCache, cacheKey } from "../render/TextureCache";
@@ -692,7 +692,7 @@ class Manager {
         Math.max(tile.document.width, tile.document.height) * scaleOf(matrix),
         resolution
       );
-      const key = this.#keyFor(tile, pin, longEdge, record.contentHash);
+      const key = this.#keyFor(tile, pin, tier, longEdge, record.contentHash);
 
       record.lastKeyFailed = this.#failedKeys.has(key);
 
@@ -805,7 +805,13 @@ class Manager {
    * document. `#generate` writes the real hash back after resolving, so the first draw
    * costs one provisional key and every later pass agrees with the cache.
    */
-  #keyFor(tile: any, pin: DpPinFlags, longEdge: number, contentHash: string): string {
+  #keyFor(
+    tile: any,
+    pin: DpPinFlags,
+    tier: LodTier,
+    longEdge: number,
+    contentHash: string
+  ): string {
     const doc = tile.document;
     // The type size and the pad are drawn INTO the pixels, so they are in the key for the
     // same reason the preset is. A prop whose metrics are stored no longer changes its
@@ -819,9 +825,16 @@ class Manager {
       resTier: longEdge,
       // The pin's own typeface is drawn into the pixels like the paper; a preset's own is
       // covered by its id.
+      //
+      // So is the rung's share of the intensity. The coarse rung always asks for 512 px,
+      // and a full one 320-512 px across at resolution 1 snaps to 512 too — so the two
+      // shared a texture baked at half strength or at full, whichever drew first. The
+      // factor, not the rung: L3 bakes exactly what L2b does, and focusing a prop must not
+      // redraw it. The factor singles out the coarse rung, which is also the only one the
+      // stylesheet draws differently, so it separates everything the rung changes.
       presetBake:
-        `${pin.effect.id}:${pin.effect.intensity}:${pin.effect.seed}:${pin.display.paper}` +
-        `:${pin.display.font ?? ""}:${this.#level}`,
+        `${pin.effect.id}:${pin.effect.intensity}x${tierFactor(tier)}:${pin.effect.seed}` +
+        `:${pin.display.paper}:${pin.display.font ?? ""}:${this.#level}`,
       // The chosen page goes in the docHash and NEVER in `uuid`: `TextureCache.keysFor`
       // prefix-matches `${uuid}|`, so folding it into the uuid would break `invalidate`
       // for every prop on the scene. It has to be here, though — the provisional key
@@ -901,15 +914,18 @@ class Manager {
       record.tier !== "L0" &&
       record.tier !== "L1";
 
+    // The rung this draw is for, held: the LOD pass may move the record while it awaits,
+    // and the key has to name the strength the pixels were actually baked at.
+    const tier = record.tier;
     const size = { width: tile.document.width, height: tile.document.height };
     const longEdge = textureLongEdge(
-      record.tier,
+      tier,
       Math.max(size.width, size.height) * scaleOf(stageMatrix()),
       rendererResolution()
     );
     if (!longEdge) return;
 
-    const provisional = this.#keyFor(tile, pin, longEdge, record.contentHash);
+    const provisional = this.#keyFor(tile, pin, tier, longEdge, record.contentHash);
     if (this.#cache.has(provisional)) {
       this.#bind(record, tile, this.#cache.get(provisional), provisional);
       this.applyAlpha();
@@ -925,7 +941,7 @@ class Manager {
       const rendered = await renderPdfPage(pdfSrc, pdfPageOf(pin), longEdge);
       if (!alive()) return;
 
-      const key = this.#keyFor(tile, pin, longEdge, `pdf:${pdfPageOf(pin)}`);
+      const key = this.#keyFor(tile, pin, tier, longEdge, `pdf:${pdfPageOf(pin)}`);
       const cachedPdf = this.#cache.get(key);
       if (cachedPdf) {
         this.#bind(record, tile, cachedPdf, key);
@@ -934,23 +950,30 @@ class Manager {
         return;
       }
 
-      // The effects, painted on. A PDF has no card for CSS to reach, so the static half
-      // of the preset is composited onto a COPY of the page — the page cache must never
-      // be painted over, or the next preset would inherit this one's stains.
-      let surface = rendered?.canvas ?? null;
+      // Always a COPY of the page, never the page cache's own canvas. The effects are
+      // painted onto it, and the page cache must never be painted over, or the next preset
+      // would inherit this one's stains. And with no effects to paint — a preset since
+      // deleted, a browser where baking taints — the texture is still made from a copy:
+      // `PIXI.Texture.from` caches by canvas (DESIGN §6.2), so two props of one page at one
+      // size were handed one texture under two cache keys, and evicting either destroyed
+      // the texture the other was still drawing.
+      const surface = rendered ? copyCanvas(rendered.canvas) : null;
       const preset = findPreset(pin.effect.id);
+      let baked = false;
       if (surface && preset && !bakedTaints) {
+        baked = true;
+        // A PDF has no card for CSS to reach, so the static half of the preset is
+        // composited onto the page with Canvas2D (DESIGN A16).
         const dressed = dressing({
           preset,
           intensity: pin.effect.intensity,
           seed: pin.effect.seed,
-          tier: record.tier,
+          tier,
           level: this.#level,
           // A texture cannot animate, so this is the static rendition by construction —
           // which is exactly the set of layers Canvas2D can paint.
           baked: true,
         });
-        surface = copyCanvas(surface);
         await bakeEffects(surface, dressed.vars, dressed.attrs);
         if (!alive()) return;
       }
@@ -961,7 +984,7 @@ class Manager {
       // Chromium does not — and a tainted canvas cannot be uploaded. Fall back to the page
       // exactly as pdf.js drew it, which is known to upload, rather than losing the prop
       // for the sake of some stains. Latched: the answer is a property of the browser.
-      if (!result && rendered && surface !== rendered.canvas) {
+      if (!result && rendered && baked) {
         if (!bakedTaints) {
           bakedTaints = true;
           log.warn("effects cannot be baked on this browser; drawing PDF pages unadorned");
@@ -986,13 +1009,13 @@ class Manager {
       return;
     }
 
-    const card = await resolveCard(pin, size, { tier: record.tier, baked: true });
+    const card = await resolveCard(pin, size, { tier, baked: true });
     if (!alive()) return;
 
     // The real content signal, now that the card exists. Written back so the next LOD
     // pass builds the same key synchronously and hits the cache.
     record.contentHash = card.contentHash;
-    const key = this.#keyFor(tile, pin, longEdge, card.contentHash);
+    const key = this.#keyFor(tile, pin, tier, longEdge, card.contentHash);
 
     const cached = this.#cache.get(key);
     if (cached) {
@@ -1030,7 +1053,7 @@ class Manager {
 
     log.debug(
       `drew ${tile.id} at ${result.width}x${result.height} (${Math.round(result.bytes / 1024)} kB, ` +
-        `tier ${record.tier}); cache now ${this.#cache.size} textures, ` +
+        `tier ${tier}); cache now ${this.#cache.size} textures, ` +
         `${Math.round(this.#cache.bytes / 1024 / 1024)} MB`
     );
     this.#cache.set(key, result.texture, result.bytes);

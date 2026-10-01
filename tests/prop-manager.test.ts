@@ -554,3 +554,36 @@ describe("the canvas tier's alpha, while it is moving", () => {
     expect(started.slice(before)).toEqual([expect.objectContaining({ name: NAME, to: 0.15 })]);
   });
 });
+
+/**
+ * The coarse rung bakes its effect at half strength and always asks for 512 px; a full rung
+ * between 320 and 512 px across at resolution 1 snaps to 512 as well. With nothing in the
+ * key to tell the two apart, the full rung was served the half-strength texture.
+ */
+describe("the texture cache key and the rung's strength", () => {
+  it("does not serve the coarse rung's texture to a full rung of the same size", async () => {
+    const { resolveCard } = await import("../src/render/ContentResolver");
+    const stage = (globalThis as any).canvas.stage.worldTransform;
+
+    // 280 px across: the coarse rung.
+    stage.a = stage.d = 0.7;
+    manager.refresh();
+    await settle();
+    expect(vi.mocked(resolveCard).mock.lastCall?.[2]).toMatchObject({ tier: "L2a" });
+
+    // 340 px across: the full rung, whose 476 px long edge also snaps to 512.
+    stage.a = stage.d = 0.85;
+    manager.refresh();
+    await settle();
+    expect(vi.mocked(resolveCard).mock.lastCall?.[2]).toMatchObject({ tier: "L2b" });
+  });
+
+  it("keeps one texture between the full rung and the reader's, which bake the same", async () => {
+    const { resolveCard } = await import("../src/render/ContentResolver");
+    const before = vi.mocked(resolveCard).mock.calls.length;
+    manager.setFocused("t1");
+    await settle();
+    // Focusing a prop must not redraw it.
+    expect(vi.mocked(resolveCard).mock.calls.length).toBe(before);
+  });
+});
