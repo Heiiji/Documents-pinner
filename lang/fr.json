@@ -222,7 +222,7 @@
   "DP.notice.ownershipOverridden": "Les permissions de « {ownershipKey} » ont été modifiées à la main ; Documents Pinner n'y a pas touché.",
   "DP.notice.ownershipWriteFailed": "Impossible de mettre à jour les permissions du document. L'épingle est visible, mais les joueur(s) ne pourront peut-être pas l'ouvrir.",
   "DP.notice.packLocked": "Le document de cette épingle se trouve dans un compendium que votre MJ ne vous a pas ouvert : il ne peut pas s'afficher ici.",
-  "DP.notice.packUnreadable": "Certains de vos joueurs ne peuvent pas ouvrir le compendium « {pack} » : ils voient un substitut à la place de ce document. Pour le leur partager, choisissez-le dans le sélecteur — Importer et épingler en crée une copie dans le monde, que vous pourrez leur ouvrir.",
+  "DP.notice.packUnreadable": "Certains de vos joueurs ne peuvent pas ouvrir le compendium « {pack} » : ils voient un substitut à la place de ce document. Pour le leur partager, choisissez-le dans Épingler un document — Importer et épingler en crée une copie dans le monde, que vous pourrez leur ouvrir.",
   "DP.notice.peekTip": "Astuce : maintenez {key} pour estomper les documents posés sur la carte et lire ce qu'il y a dessous.",
   "DP.notice.placeFailed": "L'épingle n'a pas pu être posée. Le placement reste actif ; cliquez à nouveau pour réessayer.",
   "DP.notice.revealNext": "Révélée : {name} — {count} restante(s).",

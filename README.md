@@ -181,8 +181,13 @@ map for any visible pin, as its label says.
    reachable again; nothing has been changed on that until the whole pipeline is measured
    in a real world, not just the probe.
 6. Deleting a pinned document leaves the pin showing a placeholder — never auto-deleted.
-7. Compendium ownership is pack-wide, so there is no per-user grant for a compendium
-   source. The pin still reveals its content.
+7. A compendium document can be pinned, and shows to the players whose role can open
+   that compendium — Observer for their role. Anyone else sees a placeholder that says
+   why, and you are told so when you place it: *Pin a document* greys such a row and
+   offers *Import & pin*, which makes a copy in a "Documents Pinner" folder that you share
+   like any journal. Compendium permissions are per role and pack-wide, so a reveal never
+   changes them and adds nothing to anyone's sidebar. A PDF page from a compendium is
+   drawn as a card.
 8. Pins are real Tiles and appear in `scene.tiles` to other modules, by design.
 9. *Fit to content* cannot measure a bare image pin — an image has no text to measure —
    so it leaves that one's height alone and says so.
@@ -406,8 +411,14 @@ joueur pour toute épingle visible, comme son libellé l'indique.
    pas seulement le test.
 6. Supprimer un document épinglé laisse l'épingle sur un substitut — jamais supprimée
    automatiquement.
-7. Les permissions d'un compendium valent pour tout le pack : pas d'octroi par joueur. Le
-   contenu est quand même révélé.
+7. Un document de compendium peut être épinglé, et s'affiche pour les joueurs dont le
+   rôle peut ouvrir ce compendium — Observateur pour leur rôle. Les autres voient un
+   substitut qui dit pourquoi, et vous en êtes prévenu en le posant : *Épingler un
+   document* grise une telle ligne et propose *Importer et épingler*, qui en crée une copie
+   dans un dossier « Documents Pinner » que vous partagez comme n'importe quel journal.
+   Les permissions d'un compendium valent par rôle et pour tout le pack : une révélation ne
+   les change jamais et n'ajoute rien à la barre latérale de quiconque. Une page PDF d'un
+   compendium est dessinée comme une carte.
 8. Les épingles sont de vraies tuiles et apparaissent dans `scene.tiles` aux autres modules,
    par conception.
 9. *Ajuster au contenu* ne peut pas mesurer une épingle d'image nue — une image n'a pas

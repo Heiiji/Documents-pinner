@@ -54,6 +54,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   last two — and that surface's keys are listed in your keyboard's own names, ⌘ on a Mac,
   with every Configure Controls binding shown as you set it and *Reveal next* as unbound
   until you give it a key. Escape or a click anywhere else puts it away.
+- **Pin the handouts your adventure ships in a compendium.** *Pin a document* and `/pin`
+  now search the journals of every compendium once you have typed two letters, after your
+  world's own, each row labelled with its pack. A compendium your players' role can open
+  is pinned as it is. One that some player cannot open is greyed, and offers *Import &
+  pin*: the journal is copied into a "Documents Pinner" folder and the copy is pinned, to
+  be shared like any journal — choosing it again pins the same copy. A page of a
+  compendium journal is chosen afterwards in Pin Studio, which now lists them.
 
 ### Changed
 
@@ -82,6 +89,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   spotlight; on the right: effect, shape, open for me, flash, Pin Studio and `?` for the
   keys. Lock and *Fit to content* have left it for Pin Studio's strip, where both already
   were; Fit is still `Alt+Shift+F`.
+- **A player who cannot open a compendium sees a placeholder that says why — and you are
+  told first.** A pin on a compendium document shows to the players whose role can open
+  that compendium. Pointing one where some player cannot — by an Alt-drop, a menu or Pin
+  Studio — now warns you, naming the pack. Their card and reader say the document is in a
+  compendium they cannot open, where it used to say it no longer existed, and their
+  client no longer asks the server for it. *Show to players* reaches only the players who
+  can open it, and says when that leaves someone out. A PDF page from a compendium is
+  always drawn as a card.
 
 ### Fixed
 
@@ -111,6 +126,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **The README said a new pin stays hidden until you reveal it.** It is visible by default
   — that is the *Default visibility* setting — and the README now says so, and how to
   change it.
+- **A compendium pin said one thing before its card was drawn and another after.** A pin
+  on a compendium page was labelled "Pin" and its Pinboard icon read as missing; the key
+  glyph sat on the wrong chips; a PDF page was a card, then a texture. Foundry answers for
+  a compendium document differently once it has loaded it, for five minutes. A compendium
+  pin is now read from its pack throughout, and names its page once the page has loaded.
+- **"Pin to scene" in a compendium window did nothing.** The row was looked up among the
+  world's journals, where a compendium's are not. It pins the compendium's journal now.
+- **Pin Studio said "No source" for a page from a compendium**, and listed no pages to
+  choose from for a compendium journal. It names the page and lists them.
+- **The Audience tab said revealing a compendium document "shares the whole journal".** A
+  compendium's permissions are per role and pack-wide, so a reveal grants nothing and adds
+  nothing to anyone's sidebar, and the tab now says so.
 
 ## [0.3.3] — 2026-09-30
 

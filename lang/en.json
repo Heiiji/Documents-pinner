@@ -222,7 +222,7 @@
   "DP.notice.ownershipOverridden": "Permissions for \"{ownershipKey}\" were changed by hand; Documents Pinner left them alone.",
   "DP.notice.ownershipWriteFailed": "Could not update document permissions. The pin is visible, but players may not be able to open it.",
   "DP.notice.packLocked": "This pin's document is in a compendium your GM has not opened to you, so it cannot be shown here.",
-  "DP.notice.packUnreadable": "Some of your players cannot open the compendium “{pack}”: they see a placeholder instead of this document. To share it with them, choose it in the picker — Import & pin makes a world copy they can be given.",
+  "DP.notice.packUnreadable": "Some of your players cannot open the compendium “{pack}”: they see a placeholder instead of this document. To share it with them, choose it in Pin a document — Import & pin makes a world copy they can be given.",
   "DP.notice.peekTip": "Tip: hold {key} to fade the documents lying on the map and read what is underneath.",
   "DP.notice.placeFailed": "The pin could not be placed. Placement is still active; click again to retry.",
   "DP.notice.revealNext": "Revealed {name} — {count} left.",
