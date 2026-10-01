@@ -648,8 +648,3 @@ export function freezeMetrics(
     pin.display.margin ?? num(Number((padPx / typeSize).toFixed(4)), 0, 0, MARGIN_MAX_EM);
   return { ...pin, display: { ...pin.display, typeSize, margin } };
 }
-
-/** Whether a payload describes a pin that can actually resolve its source. */
-export function hasResolvableSource(pin: DpPinFlags): boolean {
-  return pin.source.kind === "document" ? !!pin.source.uuid : !!pin.source.src;
-}

@@ -7,7 +7,6 @@
  */
 import { afterEach, describe, expect, it } from "vitest";
 import {
-  enrichAsUser,
   enrichFor,
   isDangerousAttr,
   isDangerousTag,
@@ -250,15 +249,6 @@ describe("when enrichment throws", () => {
     });
     const { html } = await enrichFor({ isOwner: true }, text);
     expect(html).toContain("I did it.");
-  });
-
-  it("falls back the same way for the GM's view-as-player", async () => {
-    withEnricher(async () => {
-      throw new Error("a module's enricher broke");
-    });
-    const { html } = await enrichAsUser({ testUserPermission: () => false }, text, {});
-    expect(html).toContain("The Duke is dead.");
-    expect(html).not.toContain("I did it.");
   });
 
   it("uses the enriched output when enrichment works", async () => {

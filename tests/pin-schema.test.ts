@@ -10,7 +10,6 @@ import {
   defaultPin,
   defaultTypeSize,
   freezeMetrics,
-  hasResolvableSource,
   mergePin,
   naturalSize,
   validatePin,
@@ -47,7 +46,6 @@ describe("validatePin", () => {
     const { pin, errors } = validatePin({ source: { kind: "document", uuid: null } });
     expect(keys(errors)).toContain("DP.pin.error.missingSource");
     expect(pin.display.paper).toBe("parchment");
-    expect(hasResolvableSource(pin)).toBe(false);
   });
 
   it("accepts a well-formed payload without warnings or errors", () => {
@@ -55,7 +53,6 @@ describe("validatePin", () => {
     expect(errors).toEqual([]);
     expect(warnings).toEqual([]);
     expect(pin.source.uuid).toBe("JournalEntry.abc123");
-    expect(hasResolvableSource(pin)).toBe(true);
   });
 
   it("defaults to hidden, so an unparseable flag cannot leak a document", () => {

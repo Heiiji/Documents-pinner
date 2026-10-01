@@ -8,8 +8,8 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { defaultPin } from "../src/data/pin-schema";
-import { getCorePreset } from "../src/effects/presets/core-presets";
 import { fakeTile, installWorld, uninstallWorld } from "./helpers/fake-foundry";
+import { getCorePreset } from "./helpers/presets";
 
 vi.mock("../src/render/ContentResolver", () => ({
   resolveCard: vi.fn(async () => ({

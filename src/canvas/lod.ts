@@ -88,10 +88,6 @@ export function demote(tier: LodTier): LodTier {
   return TIER_ORDER[Math.max(0, index - 1)];
 }
 
-export function isHeavier(a: LodTier, b: LodTier): boolean {
-  return TIER_ORDER.indexOf(a) > TIER_ORDER.indexOf(b);
-}
-
 // ---------------------------------------------------------------------------
 // The performance guard
 // ---------------------------------------------------------------------------

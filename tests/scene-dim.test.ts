@@ -12,8 +12,8 @@ import { makeAudience } from "../src/data/audience";
 import { cardHtml } from "../src/render/CardTemplate";
 import { defaultPin } from "../src/data/pin-schema";
 import { dressing } from "../src/effects/EffectRegistry";
-import { getCorePreset } from "../src/effects/presets/core-presets";
 import { installWorld, uninstallWorld } from "./helpers/fake-foundry";
+import { getCorePreset } from "./helpers/presets";
 import { cssRules } from "./helpers/styles";
 
 vi.mock("../src/render/ContentResolver", () => ({

@@ -10,7 +10,7 @@
  * core, so both of ours are `button: true` with an `onChange`.
  */
 
-import { cv, isGM } from "../fvtt";
+import { isGM } from "../fvtt";
 import { openPicker } from "../apps/DocumentPicker";
 import { openPinboard } from "../apps/Pinboard";
 
@@ -48,19 +48,4 @@ export function onGetSceneControlButtons(controls: any): void {
     visible: true,
     onChange: () => openPinboard(),
   };
-}
-
-/**
- * Switch to the Tiles layer, which is where a pin can be moved, resized and rotated.
- *
- * Used by `locate`: "here it is" that leaves the GM unable to touch what was just found
- * is half an answer. The "Move and resize pins" toolbar button that used to sit beside
- * the two tools above is gone: a press on a prop from the Notes layer now does this
- * itself, through the hit layer, so the detour no longer needs a sign.
- */
-export function activateTilesLayer(): boolean {
-  const tiles = cv()?.tiles;
-  if (!tiles?.activate) return false;
-  tiles.activate();
-  return true;
 }

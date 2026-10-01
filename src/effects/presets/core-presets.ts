@@ -305,10 +305,4 @@ export const CORE_PRESETS: readonly DpPreset[] = Object.freeze(
     .map((p) => Object.freeze({ ...p, params: Object.freeze(p.params) }) as DpPreset)
 );
 
-export const CORE_PRESET_IDS: readonly string[] = Object.freeze(CORE_PRESETS.map((p) => p.id));
-
 export const DEFAULT_PRESET_ID = "aged-parchment";
-
-export function getCorePreset(id: string): DpPreset | undefined {
-  return CORE_PRESETS.find((p) => p.id === id);
-}

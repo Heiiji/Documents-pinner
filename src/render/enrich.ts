@@ -318,26 +318,3 @@ export function sanitise(html: string, isOwner: boolean): string {
   log.warn(`sanitiser did not converge; content dropped`);
   return "";
 }
-
-/**
- * Re-enrich as if the viewer were a given user — the GM's "show me what they see".
- *
- * This is an AUDIT tool, not a security boundary: it re-runs the same pipeline with
- * `isOwner` forced to what that user would have, so a GM can check before revealing
- * rather than after a player tells them. It never affects what anyone else receives.
- */
-export async function enrichAsUser(source: any, text: string, user: any): Promise<EnrichedContent> {
-  const isOwner = source?.testUserPermission?.(user, "OWNER") === true;
-  const TextEditor = ns("applications.ux.TextEditor.implementation");
-
-  const html = await enrichOrRaw(TextEditor, text ?? "", {
-    secrets: isOwner,
-    documents: true,
-    links: true,
-    rolls: false,
-    embeds: true,
-    relativeTo: source,
-    rollData: {},
-  });
-  return { html: sanitise(html, isOwner), isOwner };
-}

@@ -221,22 +221,6 @@ export function containsPoint(rect: Rect & { rotation?: number }, p: Point): boo
   return Math.abs(lx) <= rect.width / 2 && Math.abs(ly) <= rect.height / 2;
 }
 
-/** Where a top-left rect lands on screen. For a document, pass `tileRect(doc)`. */
-export function screenPlacement(
-  m: Mat,
-  rect: Rect & { rotation?: number }
-): { cx: number; cy: number; width: number; height: number; angle: number } {
-  const centre = applyMat(m, { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 });
-  const k = scaleOf(m);
-  return {
-    cx: centre.x,
-    cy: centre.y,
-    width: rect.width * k,
-    height: rect.height * k,
-    angle: (rect.rotation ?? 0) + rotationOf(m),
-  };
-}
-
 /** Apparent on-screen width of a prop in CSS pixels — the input to the LOD ladder. */
 export function apparentWidth(m: Mat, width: number): number {
   return width * scaleOf(m);

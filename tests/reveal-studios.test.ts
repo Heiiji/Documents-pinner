@@ -15,7 +15,7 @@ import { defaultPin, validatePin } from "../src/data/pin-schema";
 import { presetStudioMarkup } from "../src/apps/PresetStudio";
 import { studioMarkup } from "../src/apps/PinStudio";
 import { validatePreset } from "../src/effects/preset-schema";
-import { CORE_PRESETS, getCorePreset } from "../src/effects/presets/core-presets";
+import { CORE_PRESETS } from "../src/effects/presets/core-presets";
 import {
   contentOf,
   fakeTile,
@@ -24,6 +24,7 @@ import {
   playedSounds,
   uninstallWorld,
 } from "./helpers/fake-foundry";
+import { getCorePreset } from "./helpers/presets";
 
 vi.mock("../src/data/ownership-sync", () => ({
   syncAnchor: vi.fn(async () => {}),

@@ -181,11 +181,6 @@ export function reduceCssVars(vars: CssVars): CssVars {
   return out;
 }
 
-/** The `off` rendition: no effect layer at all, just the card. */
-export function disabledCssVars(): CssVars {
-  return { "--dp-i": "0" };
-}
-
 /**
  * The style attribute for a gallery swatch.
  *
