@@ -172,6 +172,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the same pins were updated on every load, and one that used to click through snapped
   back from any *Opening* you picked. A write now removes what it no longer stores; the
   next load updates those pins one last time.
+- **A pin hidden with Foundry's own controls came back at the next edit — to everyone.**
+  Hiding a pin from the Tiles layer's HUD, the tile's configuration or the Placeables
+  sidebar told Foundry and not the pin: the eye still offered to reveal it, every chip
+  looked empty, and the next slider, label or chip click — even one player's — put it back
+  on the whole table's screen. Those controls now hide a pin as the eye does, remembering
+  who it was for, and show it again to the same players, access and all; a pin pasted
+  hidden is hidden from its players too.
 
 ## [0.3.3] — 2026-09-30
 

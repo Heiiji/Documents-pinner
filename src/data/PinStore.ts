@@ -14,7 +14,9 @@
  *    without holding a lock across an await in the caller.
  *
  * 3. **`hidden` is derived, never set by hand.** The core field and our audience must
- *    agree, so the single place they are written is here, together, in one update.
+ *    agree, so the module writes them here, together, in one update — and only when the
+ *    audience changes. Core's own hide and show are folded into the audience as they are
+ *    made (`core-hidden.ts`).
  *
  * Bulk edits go through `batchUpdate`: one `Scene#updateEmbeddedDocuments` for N pins
  * rather than N awaited calls, because the Pinboard's "reveal all" is one gesture over
@@ -167,6 +169,19 @@ export function payloadWrite(stored: unknown, pin: DpPinFlags): Record<string, u
   return write;
 }
 
+/**
+ * The core `hidden` a patch implies: derived from the audience when the patch changes the
+ * audience, and left alone when it does not.
+ *
+ * Deriving it on EVERY write put a pin the GM had hidden with core's own controls back on
+ * every player's screen at the next intensity tweak or label edit. `core-hidden.ts` now
+ * folds such a hide into the audience as it is made; this is the guard for a pin hidden
+ * while the module was not listening.
+ */
+function hiddenFor(patch: PinPatch, pin: DpPinFlags): { hidden?: boolean } {
+  return patch.audience === undefined ? {} : { hidden: anchorHidden(pin.audience) };
+}
+
 export interface PlaceOptions {
   x: number;
   y: number;
@@ -247,11 +262,7 @@ export function update(
 
     const { pin } = mergePin(current, patch);
     return doc.update(
-      {
-        ...fields,
-        hidden: anchorHidden(pin.audience),
-        ...payloadWrite(rawPinFlag(doc), pin),
-      },
+      { ...fields, ...hiddenFor(patch, pin), ...payloadWrite(rawPinFlag(doc), pin) },
       internal()
     );
   });
@@ -353,11 +364,7 @@ export function batchUpdate(scene: any, entries: { doc: any; patch: PinPatch }[]
           const current = readPin(doc);
           if (!current) return null;
           const { pin } = mergePin(current, patch);
-          return {
-            _id: doc.id,
-            hidden: anchorHidden(pin.audience),
-            ...payloadWrite(rawPinFlag(doc), pin),
-          };
+          return { _id: doc.id, ...hiddenFor(patch, pin), ...payloadWrite(rawPinFlag(doc), pin) };
         })
         .filter(Boolean);
 

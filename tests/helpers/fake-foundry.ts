@@ -250,6 +250,14 @@ export function fakeDoc(options: FakeDocOptions = {}): any {
     applyUpdate(doc, changes);
     return doc;
   };
+  // `DataModel#updateSource` (TYPES common/abstract/data.d.mts; LIVE foundry.mjs 14.368,
+  // 14164-14196): the same diff-and-merge as an update, on this client's copy only, with no
+  // hook and no server. What a `preCreate` hook calls on the pending document. Returns the
+  // diff in core; the change here.
+  doc.updateSource = (changes: Record<string, unknown>) => {
+    applyUpdate(doc, changes);
+    return changes;
+  };
   doc.delete = async () => {
     doc.deleted = true;
     return doc;
