@@ -274,6 +274,7 @@
   "DP.picker.list": "Documents que vous pouvez épingler",
   "DP.picker.lockedHint": "Certains de vos joueurs ne peuvent pas ouvrir ce compendium. Le choisir en importe une copie dans le monde, que vous pourrez leur partager.",
   "DP.picker.more": "{count} de plus dans les compendiums — précisez la recherche pour les réduire.",
+  "DP.picker.moreWorld": "{count} de plus dans ce monde — précisez la recherche pour les réduire.",
   "DP.picker.none": "Aucun résultat pour cette recherche.",
   "DP.picker.search": "Rechercher journaux, acteurs, objets et compendiums",
   "DP.picker.title": "Épingler un document",

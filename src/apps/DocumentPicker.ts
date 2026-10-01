@@ -18,16 +18,15 @@ import { t, tOr } from "../i18n";
 import { escapeAttr, escapeHtml } from "../html";
 import { arm } from "./PlacementGhost";
 import { docOf } from "./focus-restore";
-import { guardActivationKeys } from "./keys";
+import { consume, guardActivationKeys } from "./keys";
 import * as api from "../api";
 import { importForPin } from "../sources/import";
 import { adapterOrJournal } from "../sources/index";
 import { documentSource, imageSource } from "../data/pin-schema";
 import {
-  filterEntries,
   packEntries,
   PINNABLE,
-  worldEntries,
+  worldMatches,
   type PickerEntry,
   type Pinnable,
 } from "../sources/search";
@@ -98,21 +97,25 @@ export function pickerMarkup(
   activeIndex = 0,
   more = 0,
   importing: string | null = null,
-  kind: PickerKind = "all"
+  kind: PickerKind = "all",
+  worldMore = 0
 ): string {
   const active = Math.max(0, Math.min(entries.length - 1, activeIndex));
+  const moreLine = (key: string, count: number) =>
+    count
+      ? `<li class="dp-picker__more" role="presentation">${escapeHtml(t(key, { count }))}</li>`
+      : "";
+  // The world's count sits where its rows stop, before the compendiums' rows begin.
+  const worldEnd = entries.findIndex((entry) => entry.origin !== "world");
+  const rows = entries.map((entry, index) =>
+    entryMarkup(entry, index, index === active, entry.uuid === importing)
+  );
+  rows.splice(worldEnd < 0 ? rows.length : worldEnd, 0, moreLine("DP.picker.moreWorld", worldMore));
   const list =
     (entries.length
-      ? entries
-          .map((entry, index) =>
-            entryMarkup(entry, index, index === active, entry.uuid === importing)
-          )
-          .join("")
+      ? rows.join("")
       : `<li class="dp-picker__empty">${escapeHtml(t("DP.picker.none"))}</li>`) +
-    (more
-      ? `<li class="dp-picker__more" role="presentation">` +
-        `${escapeHtml(t("DP.picker.more", { count: more }))}</li>`
-      : "");
+    moreLine("DP.picker.more", more);
 
   return [
     `<div class="dp-picker">`,
@@ -173,27 +176,45 @@ export function definePicker(): any {
      */
     adopt: any = null;
     onChoose: ((source: DpSource) => void) | null = null;
+    /**
+     * The world's rows for the search and the chip they were found for.
+     *
+     * Found again only when either changes, or when the picker opens (`openPicker` clears
+     * it): every render walked every journal, page, actor and item of the world, and a
+     * render that changed neither — a row busy importing, a compendium's index arriving —
+     * found the same rows again.
+     */
+    world: { search: string; kind: PickerKind; entries: PickerEntry[]; more: number } | null = null;
+
+    worldRows(): { entries: PickerEntry[]; more: number } {
+      const held = this.world;
+      if (held && held.search === this.search && held.kind === this.kind) return held;
+      const found = worldMatches(this.search, kindsOf(this.kind));
+      this.world = { search: this.search, kind: this.kind, ...found };
+      return found;
+    }
 
     async _renderHTML() {
       // World rows first, then the compendiums': a GM's own world is what they reach for
       // most, and a rulebook's hundred matches must not bury it. A pack whose index arrives
       // later searches again, if this picker is still open to show it.
-      const kinds = kindsOf(this.kind);
       const { entries, more } = packEntries(
         this.search,
         () => {
           if (this.rendered) void this.render();
         },
-        kinds
+        kindsOf(this.kind)
       );
+      const world = this.worldRows();
       const wrapper = (docOf(this.element) ?? document).createElement("div");
       wrapper.innerHTML = pickerMarkup(
-        [...filterEntries(worldEntries(kinds), this.search), ...entries],
+        [...world.entries, ...entries],
         this.search,
         this.activeIndex,
         more,
         this.importing,
-        this.kind
+        this.kind,
+        world.more
       );
       return wrapper.firstElementChild ?? wrapper;
     }
@@ -252,16 +273,28 @@ export function definePicker(): any {
       // row (clamped — a list with a top and a bottom should feel like one), Home and
       // End jump, PageUp and PageDown step by ten, Enter takes the active row (the
       // first by default, so "type four letters, press Enter" still holds), and Escape
-      // clears the search before it closes. A resting pointer never moves the active
-      // row: `:hover` is a wash, the marker is the keyboard's.
+      // clears the search, then closes the picker. A resting pointer never moves the
+      // active row: `:hover` is a wash, the marker is the keyboard's.
       root.addEventListener("keydown", (event) => {
-        const items = root.querySelectorAll<HTMLElement>(".dp-picker__item");
+        const items = [...root.querySelectorAll<HTMLElement>(".dp-picker__item")];
         const count = items.length;
+        // Moved in place: the old row and the new one change `aria-selected`, the search
+        // box its `aria-activedescendant`. Each press used to render the whole window —
+        // every row rebuilt, the world searched again — to move one marker.
         const move = (delta: number) => {
           if (!count) return;
-          this.activeIndex = Math.max(0, Math.min(count - 1, this.activeIndex + delta));
-          event.preventDefault();
-          this.render();
+          consume(event);
+          const marked = items.findIndex((item) => item.getAttribute("aria-selected") === "true");
+          const from = marked >= 0 ? marked : Math.max(0, Math.min(count - 1, this.activeIndex));
+          const to = Math.max(0, Math.min(count - 1, from + delta));
+          this.activeIndex = to;
+          if (to === from) return;
+          items[from].setAttribute("aria-selected", "false");
+          items[to].setAttribute("aria-selected", "true");
+          root
+            .querySelector(".dp-picker__search")
+            ?.setAttribute("aria-activedescendant", items[to].id);
+          items[to].scrollIntoView?.({ block: "nearest" });
         };
         switch (event.key) {
           case "ArrowDown":
@@ -276,18 +309,23 @@ export function definePicker(): any {
             return move(-count);
           case "End":
             return move(count);
+          // The focus is in the search box, where core's keyboard does nothing (its
+          // `hasFocus`, foundry.mjs 133681), so an empty search's Escape closed nothing:
+          // the picker closes itself.
           case "Escape":
-            if (this.search) {
-              event.preventDefault();
-              this.search = "";
-              this.activeIndex = 0;
-              this.render();
+            consume(event);
+            if (!this.search) {
+              void this.close();
+              return;
             }
+            this.search = "";
+            this.activeIndex = 0;
+            this.render();
             return;
           case "Enter": {
             const active = items[Math.max(0, Math.min(count - 1, this.activeIndex))];
             if (active?.dataset.dpUuid) {
-              event.preventDefault();
+              consume(event);
               void this.#choose(active);
             }
             return;
@@ -403,6 +441,8 @@ export function openPicker(options: PickerOptions = {}): any {
   instance ??= new Picker();
   instance.adopt = options.adopt ?? null;
   instance.onChoose = options.onChoose ?? null;
+  // An opening finds the world's rows again: a journal made since the last one is listed.
+  instance.world = null;
   if (options.search !== undefined) {
     instance.search = options.search;
     instance.activeIndex = 0;

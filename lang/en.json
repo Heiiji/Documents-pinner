@@ -274,6 +274,7 @@
   "DP.picker.list": "Documents you can pin",
   "DP.picker.lockedHint": "Some of your players cannot open this compendium. Choosing it imports a copy into the world, which you can share with them.",
   "DP.picker.more": "{count} more in compendiums — keep typing to narrow them down.",
+  "DP.picker.moreWorld": "{count} more in this world — keep typing to narrow them down.",
   "DP.picker.none": "Nothing matches that search.",
   "DP.picker.search": "Search journals, actors, items and compendiums",
   "DP.picker.title": "Pin a document",

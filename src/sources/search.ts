@@ -110,6 +110,29 @@ export function filterEntries(entries: readonly PickerEntry[], search: string): 
   return entries.filter((e) => fold(e.name).includes(needle) || fold(e.context).includes(needle));
 }
 
+/** At most this many world rows; the rest are counted, as a compendium's are. */
+export const WORLD_ROWS_MAX = 100;
+
+/**
+ * The world documents of these kinds that match the search, in the picker's order, at
+ * most `WORLD_ROWS_MAX`, the rest counted in `more`.
+ *
+ * Capped as the compendiums' rows are: an empty search listed every journal, page, actor
+ * and item of the world, and a world of a few thousand built, and rebuilt on every
+ * keystroke, a list no GM scrolls. A hundred rows is more than the window shows; past it
+ * the GM is told how many more there are, and types.
+ */
+export function worldMatches(
+  search: string,
+  kinds: readonly Pinnable[] = PINNABLE
+): { entries: PickerEntry[]; more: number } {
+  const found = filterEntries(worldEntries(kinds), search);
+  return {
+    entries: found.slice(0, WORLD_ROWS_MAX),
+    more: Math.max(0, found.length - WORLD_ROWS_MAX),
+  };
+}
+
 /**
  * The first world document whose name contains the query, in the picker's order:
  * journals and their pages, then actors, then items. `/pin`'s own rule, which matches
