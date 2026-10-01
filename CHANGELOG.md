@@ -93,8 +93,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   told first.** A pin on a compendium document shows to the players whose role can open
   that compendium. Pointing one where some player cannot — by an Alt-drop, a menu or Pin
   Studio — now warns you, naming the pack. Their card and reader say the document is in a
-  compendium they cannot open, where it used to say it no longer existed, and their
-  client no longer asks the server for it. *Show to players* reaches only the players who
+  compendium they cannot open, where they used to say it no longer existed, and their
+  client no longer asks the server for it. "Show to players" reaches only the players who
   can open it, and says when that leaves someone out. A PDF page from a compendium is
   always drawn as a card.
 
