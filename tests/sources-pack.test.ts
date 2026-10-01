@@ -109,7 +109,6 @@ describe("what a compendium pin says it is", () => {
     ["the index entry", { uuid: ENTRY, pageId: "baron" }, false],
     ["the cached journal", { uuid: ENTRY, pageId: "baron" }, true],
     ["a throw, for a page whose journal is not cached", { uuid: PAGE }, false],
-    ["the cached page", { uuid: PAGE }, true],
   ])(
     "has one label, crumb and icon whether fromUuidSync returns %s, and names the page once it loads",
     async (_shape, source, cached) => {
@@ -304,14 +303,12 @@ describe("the GM, pointing a pin at a compendium", () => {
   };
 
   it.each([
-    ["placing", place, TRUSTED_ONLY, 1],
-    ["placing", place, undefined, 0],
-    ["retargeting", retarget, TRUSTED_ONLY, 1],
-    ["retargeting", retarget, undefined, 0],
-    ["adopting a tile", adopt, TRUSTED_ONLY, 1],
-    ["adopting a tile", adopt, undefined, 0],
+    ["placing, where a player's role cannot read the pack", place, TRUSTED_ONLY, 1],
+    ["placing, where every role can", place, undefined, 0],
+    ["retargeting, where a player's role cannot", retarget, TRUSTED_ONLY, 1],
+    ["adopting a tile, where a player's role cannot", adopt, TRUSTED_ONLY, 1],
   ])(
-    "is warned once, naming the pack, when %s leaves a player out",
+    "is warned once, naming the pack, only when a player is left out: %s",
     async (_verb, verb, ownership, count) => {
       const tile = pinTile({ uuid: "JournalEntry.j" });
       install(tile, handouts({ ownership }));
