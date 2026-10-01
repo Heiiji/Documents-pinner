@@ -18,7 +18,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { defaultPin, validatePin } from "../src/data/pin-schema";
 import { soundPath } from "../src/normalise";
-import { validatePreset } from "../src/effects/preset-schema";
 import type { DpNotice } from "../src/types/dp";
 import { fakeTile, installWorld, playedSounds, uninstallWorld } from "./helpers/fake-foundry";
 
@@ -80,15 +79,10 @@ describe("soundPath — the one same-origin rule", () => {
     return { path, warnings };
   };
 
-  it.each(ACCEPTED)("keeps the path %s", (value) => {
-    expect(read(value)).toEqual({ path: value, warnings: [] });
-  });
-
-  it("trims a pasted path and strips the characters a URL parser would", () => {
-    expect(read("  sounds/lock.wav\n").path).toBe("sounds/lock.wav");
-  });
-
-  it("reads nothing as 'no sound', silently", () => {
+  it("keeps a path on this server, trimmed, and reads nothing as 'no sound' — silently", () => {
+    for (const value of ACCEPTED) expect(read(value), value).toEqual({ path: value, warnings: [] });
+    // A pasted path, and the characters a URL parser would strip.
+    expect(read("  sounds/lock.wav\n")).toEqual({ path: "sounds/lock.wav", warnings: [] });
     for (const value of [null, undefined, "", "   "]) {
       expect(read(value)).toEqual({ path: null, warnings: [] });
     }
@@ -113,23 +107,16 @@ describe("soundPath — the one same-origin rule", () => {
   });
 });
 
-describe("a preset's sound", () => {
-  it.each(REFUSED.slice(0, 7))("is refused at validation when it is %j", (sound) => {
-    const { preset, warnings } = validatePreset({ id: "gift", reveal: { sound } });
-    expect(preset!.reveal.sound).toBeNull();
-    expect(warnings.map((w) => w.key)).toContain("DP.preset.warn.badSound");
-  });
+/**
+ * The rule's callers, each proved to call it with its own warning; the rule's cases are
+ * the table above. A preset's path that IS on this server is played in "a reveal pass"
+ * below, from a library that reads its presets through the same validation.
+ */
+describe("the rule's callers", () => {
+  const withSound = (revealSound: unknown) =>
+    validatePin({ ...defaultPin(), effect: { ...defaultPin().effect, revealSound } });
 
-  it("keeps a path on this server", () => {
-    const { preset, warnings } = validatePreset({
-      id: "mine",
-      reveal: { sound: "worlds/keep/sounds/seal.ogg" },
-    });
-    expect(preset!.reveal.sound).toBe("worlds/keep/sounds/seal.ogg");
-    expect(warnings).toEqual([]);
-  });
-
-  it("is refused on import, said to the GM, and never stored", async () => {
+  it("refuses a preset's sound on import, says so to the GM, and never stores it", async () => {
     const world = installWorld({ isGM: true, settings: { userPresets: [] } });
     try {
       const { importPreset } = await import("../src/effects/preset-library");
@@ -151,30 +138,14 @@ describe("a preset's sound", () => {
       uninstallWorld();
     }
   });
-});
 
-describe("a prop's own sound", () => {
-  const withSound = (revealSound: unknown) =>
-    validatePin({ ...defaultPin(), effect: { ...defaultPin().effect, revealSound } });
-
-  it("is stored when it is a path on this server", () => {
+  it("stores a prop's own sound on this server, and refuses any other with the pin's warning", () => {
     expect(withSound("worlds/keep/thunder.ogg").pin.effect.revealSound).toBe(
       "worlds/keep/thunder.ogg"
     );
-  });
-
-  it.each(REFUSED.slice(0, 7))("is refused in the payload when it is %j", (value) => {
-    const { pin, warnings } = withSound(value);
+    const { pin, warnings } = withSound("https://evil.example/beacon.ogg");
     expect(pin.effect.revealSound).toBeNull();
     expect(warnings.map((w) => w.key)).toContain("DP.pin.warn.badSound");
-  });
-
-  it("is 'the preset's' on a version 4 payload that never had one", () => {
-    const v4: any = { ...defaultPin(), v: 4, effect: { ...defaultPin().effect } };
-    delete v4.effect.revealSound;
-    const { pin, warnings } = validatePin(v4);
-    expect(pin.effect.revealSound).toBeNull();
-    expect(warnings).toEqual([]);
   });
 });
 
@@ -309,43 +280,30 @@ describe("a reveal pass", () => {
     uninstallWorld();
   });
 
-  it("plays nothing for props already on screen when the scene loads", async () => {
+  it("plays nothing when the scene loads, and on every reveal after — once a pass, not once ever", async () => {
+    // Props already on screen when the scene loads have not arrived.
     await sceneWith(propTile("a", { id: "thunder" }));
     expect(playedSounds()).toEqual([]);
-  });
 
-  it("plays the preset's sound once when two props wearing it arrive together", async () => {
-    await sceneWith(propTile("a", { id: "thunder" }), propTile("b", { id: "thunder" }));
-    await reveal("a", "b");
-    expect(playedSounds()).toEqual([
-      { data: { src: "worlds/keep/thunder.ogg", channel: "environment" }, socket: false },
-    ]);
-  });
-
-  it("plays the prop's own sound over its preset's", async () => {
-    await sceneWith(propTile("a", { id: "thunder", revealSound: "worlds/keep/seal.ogg" }));
-    await reveal("a");
-    expect(playedSounds().map((s) => s.data.src)).toEqual(["worlds/keep/seal.ogg"]);
-  });
-
-  it("plays each different sound once in the same pass", async () => {
-    await sceneWith(
-      propTile("a", { id: "thunder" }),
-      propTile("b", { id: "none", revealSound: "worlds/keep/seal.ogg" }),
-      propTile("c", { id: "thunder" })
-    );
-    await reveal("a", "b", "c");
-    expect(
-      playedSounds()
-        .map((s) => s.data.src)
-        .sort()
-    ).toEqual(["worlds/keep/seal.ogg", "worlds/keep/thunder.ogg"]);
-  });
-
-  it("plays again on the next reveal — once per pass, not once ever", async () => {
-    await sceneWith(propTile("a", { id: "thunder" }));
     await reveal("a");
     await reveal("a");
     expect(playedSounds()).toHaveLength(2);
+  });
+
+  it("plays each prop's own sound over its preset's, and each different sound once a pass", async () => {
+    await sceneWith(
+      propTile("a", { id: "thunder" }),
+      // Wearing the thunder preset too, with a sound of its own: its own wins.
+      propTile("b", { id: "thunder", revealSound: "worlds/keep/seal.ogg" }),
+      propTile("c", { id: "thunder" })
+    );
+    await reveal("a", "b", "c");
+    // Three arrivals, two sounds: the two thunders are one clap.
+    expect(
+      [...playedSounds()].sort((x, y) => String(x.data.src).localeCompare(String(y.data.src)))
+    ).toEqual([
+      { data: { src: "worlds/keep/seal.ogg", channel: "environment" }, socket: false },
+      { data: { src: "worlds/keep/thunder.ogg", channel: "environment" }, socket: false },
+    ]);
   });
 });

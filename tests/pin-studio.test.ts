@@ -386,8 +386,8 @@ describe("the audience tab and the fog", () => {
     }
   });
 
-  it("says nothing for a PDF, which is drawn into the scene and fogged like the map", () => {
-    const markup = withPdf(() =>
+  it("says nothing for a PDF or an icon, which the scene draws and fogs like the map", () => {
+    const pdf = withPdf(() =>
       studioMarkup(
         doc,
         pin({
@@ -397,10 +397,7 @@ describe("the audience tab and the fog", () => {
         "audience"
       )
     );
-    expect(markup).not.toContain("DP.studio.fogNote");
-  });
-
-  it("says nothing for an icon, which core draws and fogs", () => {
+    expect(pdf).not.toContain("DP.studio.fogNote");
     expect(studioMarkup(doc, pin({ mode: "pin" }), "audience")).not.toContain("DP.studio.fogNote");
   });
 });

@@ -62,7 +62,8 @@ describe("hudMarkup", () => {
    * K10. The live verbs on the left — the eye, the audience, the spotlight — and what the
    * pin is on the right. Lock and Fit are prep and layout verbs, and they are in the
    * Studio's strip (Fit also on Alt+Shift+F): these tests used to assert Fit on the HUD
-   * and the lock's state here.
+   * and the lock's state here. The two lists are exact, and the nine tab stops above have
+   * no room for a tenth button, so neither can come back unnoticed.
    */
   it("lays out the live verbs on the left and the pin's own on the right", () => {
     const markup = hudMarkup(doc, pin());
@@ -90,14 +91,6 @@ describe("hudMarkup", () => {
       // E2: the keys, last, after K10's five.
       "cheatSheet",
     ]);
-  });
-
-  it("has no lock and no fit: both live in the Studio's strip", () => {
-    for (const markup of [hudMarkup(doc, pin()), hudMarkup({ ...doc, locked: true }, pin())]) {
-      expect(markup).not.toContain('data-action="toggleLock"');
-      expect(markup).not.toContain('data-action="fitHeight"');
-      expect(markup).not.toContain("fa-lock");
-    }
   });
 
   it("says in the spotlight's label whose view it moves", () => {

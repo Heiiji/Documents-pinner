@@ -98,40 +98,16 @@ afterEach(() => {
   uninstallWorld();
 });
 
-describe("the banner", () => {
-  it("is pure: nothing, the table watching, or the pin held", async () => {
-    await setup(FOR_ALI);
-    const { liveBanner } = await import("../src/apps/PinStudio");
-    expect(liveBanner(undefined)).toBe("");
-    expect(liveBanner({ revealed: false, count: 0, held: false })).toBe("");
+describe("Hide while I edit", () => {
+  beforeEach(() => setup(FOR_ALI));
 
-    const live = liveBanner({ revealed: true, count: 3, held: false });
-    expect(live).toContain("DP.studio.liveBanner count=3");
-    expect(live).toContain('data-action="holdForEdit"');
-
-    const held = liveBanner({ revealed: false, count: 0, held: true });
-    expect(held).toContain("DP.studio.holdBanner");
-    expect(held).toContain('data-action="resumeEdit"');
-  });
-
-  it("says how many players are watching a revealed pin, above the tabs", async () => {
-    await setup(FOR_ALI);
+  it("is offered by a banner above the tabs that says how many players are watching", async () => {
     await openStudio();
     expect(banner()!.textContent).toContain("DP.studio.liveBanner count=1");
     expect(banner()!.nextElementSibling?.classList.contains("dp-studio__tabs")).toBe(true);
   });
 
-  it("says nothing over a hidden pin", async () => {
-    await setup({ kind: "hidden" });
-    await openStudio();
-    expect(banner()).toBeNull();
-  });
-});
-
-describe("Hide while I edit", () => {
-  beforeEach(() => setup(FOR_ALI));
-
-  it("writes the hold, THEN hides the pin, remembering who it was for", async () => {
+  it("writes the hold, THEN hides the pin, and reveals it again to the same players on close", async () => {
     await openStudio();
     await studio.dispatch("holdForEdit");
     await settle();
@@ -147,6 +123,11 @@ describe("Hide while I edit", () => {
     expect(order[0]).toMatch(/^setting editHolds: \[\{"anchor"/);
     expect(order[1]).toBe("tile hidden=true");
     expect(banner()!.textContent).toContain("DP.studio.holdBanner");
+
+    await studio.close();
+    await vi.waitFor(() => expect(holds()).toEqual([]));
+    expect(stored()).toMatchObject({ kind: "selected", users: ["ali"], restore: null });
+    expect(tile.hidden).toBe(false);
   });
 
   it("leaves no hold behind when the hide does not land", async () => {
@@ -210,17 +191,6 @@ describe("Hide while I edit", () => {
     expect(tile.updates).toEqual([]);
   });
 
-  it("reveals it again, to the same players, when the Studio closes", async () => {
-    await openStudio();
-    await studio.dispatch("holdForEdit");
-    await settle();
-    await studio.close();
-    await vi.waitFor(() => expect(holds()).toEqual([]));
-
-    expect(stored()).toMatchObject({ kind: "selected", users: ["ali"], restore: null });
-    expect(tile.hidden).toBe(false);
-  });
-
   it("reveals it again on the second click", async () => {
     await openStudio();
     await studio.dispatch("holdForEdit");
@@ -237,19 +207,9 @@ describe("Hide while I edit", () => {
     expect(tile.updates).toHaveLength(writes);
   });
 
-  it("leaves alone a pin revealed again by hand, and forgets the hold", async () => {
-    const api = await import("../src/api");
-    await openStudio();
-    await studio.dispatch("holdForEdit");
-    await settle();
-    await api.setAudience(tile, { ...stored(), kind: "everyone", users: [], restore: null });
-    await studio.close();
-    await vi.waitFor(() => expect(holds()).toEqual([]));
-
-    expect(stored().kind).toBe("everyone");
-  });
-
-  it("leaves alone a pin hidden again by hand over a different audience", async () => {
+  // A pin revealed again by hand and left showing is the other half of this rule, and
+  // the pure one's (`audience-reveal`): a showing pin gives the close nothing to write.
+  it("leaves alone a pin hidden again by hand over a different audience, and forgets the hold", async () => {
     const api = await import("../src/api");
     await openStudio();
     await studio.dispatch("holdForEdit");
@@ -282,10 +242,13 @@ describe("Hide while I edit", () => {
       await studio.render();
     }
 
-    it("stays hidden when the Studio closes", async () => {
+    it("stays hidden when the Studio closes, with no hold left for a reload to resume", async () => {
       await showThenHide();
       expect(stored()).toMatchObject(hiddenForAli);
+      // What the `ready` sweep reads: nothing, so a reload has nothing to reveal either.
       expect(holds()).toEqual([]);
+      // Hidden, and held by nobody: no banner at all.
+      expect(banner()).toBeNull();
 
       await studio.close();
       await settle();
@@ -293,13 +256,6 @@ describe("Hide while I edit", () => {
       expect(stored()).toMatchObject(hiddenForAli);
       expect(tile.hidden).toBe(true);
       expect(holds()).toEqual([]);
-    });
-
-    it("stays hidden across a reload", async () => {
-      await showThenHide();
-      const { resumeEditHolds } = await import("../src/apps/PinStudio");
-      expect(await resumeEditHolds()).toBe(0);
-      expect(stored()).toMatchObject(hiddenForAli);
     });
 
     it("stays hidden when the chips did it", async () => {

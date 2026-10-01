@@ -334,16 +334,14 @@ describe("the scene dim", () => {
     ]);
   });
 
-  it("ends the card's own filter chain", () => {
+  it("ends the card's own filter chain, and never the reader's", () => {
     const chains = filterOf(".dp-card");
     expect(chains).toHaveLength(1);
     expect(chains[0]).toMatch(/brightness\(var\(--dp-card-dim, 1\)\)$/);
-  });
 
-  it("never reaches the reader", () => {
-    const chains = filterOf(".dp-reader .dp-card");
-    expect(chains.length).toBeGreaterThan(0);
-    for (const chain of chains) expect(chain).not.toContain("--dp-card-dim");
+    const reader = filterOf(".dp-reader .dp-card");
+    expect(reader.length).toBeGreaterThan(0);
+    for (const chain of reader) expect(chain).not.toContain("--dp-card-dim");
   });
 
   it("is not in the stylesheet the rasteriser inlines", () => {
