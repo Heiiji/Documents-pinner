@@ -832,6 +832,6 @@ export function openPresetStudio(id?: string, doc?: any): any {
   instance ??= new Studio();
   if (id && library.findPreset(id)) instance.selectedId = id;
   instance.forDoc = doc ?? null;
-  instance.render(true);
+  instance.render({ force: true });
   return instance;
 }

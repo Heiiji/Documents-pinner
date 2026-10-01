@@ -395,6 +395,6 @@ export function openPicker(options: PickerOptions = {}): any {
     instance.search = options.search;
     instance.activeIndex = 0;
   }
-  instance.render(true);
+  instance.render({ force: true });
   return instance;
 }

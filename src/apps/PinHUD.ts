@@ -477,7 +477,7 @@ export function showPinHUD(tile: any): void {
     shown = hudInstance.bind(tile);
   } else {
     hudInstance.object = tile;
-    shown = hudInstance.render(true);
+    shown = hudInstance.render({ force: true });
   }
 
   void Promise.resolve(shown)
