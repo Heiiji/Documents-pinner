@@ -37,6 +37,7 @@ import { readPin } from "../data/PinData";
 import * as api from "../api";
 import { isArmed } from "../apps/PlacementGhost";
 import { rotatedCorners, tileRect } from "./transform";
+import type { DpPinFlags } from "../types/dp";
 
 const LAYER_NAME = "documentsPinnerHits";
 
@@ -174,7 +175,7 @@ function buildLayerClass(CanvasLayer: any): any {
       return container;
     }
 
-    #buildHit(tile: any, pin: any): any {
+    #buildHit(tile: any, pin: DpPinFlags): any {
       const PIXI = (globalThis as any).PIXI;
       const doc = tile.document;
       const container = new PIXI.Container();

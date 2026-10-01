@@ -38,6 +38,7 @@ import type {
   DpEffectRef,
   DpGeometry,
   DpInteraction,
+  DpMode,
   DpNotice,
   DpPinFlags,
   DpSource,
@@ -55,11 +56,29 @@ export interface PinValidationResult {
   warnings: DpNotice[];
 }
 
-const MODES = ["pin", "prop"] as const;
-const SOURCE_KINDS = ["document", "image"] as const;
-const MOTIONS = ["loop", "onReveal", "none"] as const;
-const AUDIENCE_KINDS = ["hidden", "everyone", "selected", "discovered"] as const;
-const OPEN_MODES = ["single", "double", "readInPlace", "never"] as const;
+/**
+ * Every value of a union in `dp.d.ts`, read off a record that must name each one and
+ * nothing else. A value added to the union and not here fails to compile, where a plain
+ * list would have the normaliser refuse it at runtime, with a warning, on every read.
+ */
+const valuesOf = <K extends string>(record: Record<K, true>): readonly K[] =>
+  Object.keys(record) as K[];
+
+const MODES = valuesOf<DpMode>({ pin: true, prop: true });
+const SOURCE_KINDS = valuesOf<DpSource["kind"]>({ document: true, image: true });
+const MOTIONS = valuesOf<DpEffectRef["motion"]>({ loop: true, onReveal: true, none: true });
+const AUDIENCE_KINDS = valuesOf<DpAudienceKind>({
+  hidden: true,
+  everyone: true,
+  selected: true,
+  discovered: true,
+});
+const OPEN_MODES = valuesOf<DpInteraction["open"]>({
+  single: true,
+  double: true,
+  readInPlace: true,
+  never: true,
+});
 
 const BAD_ENUM = "DP.pin.warn.badEnum";
 const UNKNOWN_KEY = "DP.pin.warn.unknownKey";

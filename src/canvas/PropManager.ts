@@ -184,7 +184,7 @@ class Manager {
   /** What each user preset said when the props last drew from it. See `onSettingChanged`. */
   #presets = presetSnapshot();
 
-  #isPdf(pin: any): boolean {
+  #isPdf(pin: DpPinFlags): boolean {
     return isPdfPin(pin);
   }
 
@@ -434,7 +434,7 @@ class Manager {
   }
 
   /** The alpha a prop should be drawn at, whichever tier is drawing it. */
-  #alphaFor(tile: any, pin: any, tokens: any[]): number {
+  #alphaFor(tile: any, pin: DpPinFlags, tokens: any[]): number {
     let alpha = tile.document.alpha ?? 1;
     if (pin.display.fadeUnderTokens && tokens.some((token: any) => overlaps(tile, token))) {
       alpha = Math.min(alpha, pin.display.fadeUnderTokensAlpha);
@@ -772,7 +772,7 @@ class Manager {
    * document. `#generate` writes the real hash back after resolving, so the first draw
    * costs one provisional key and every later pass agrees with the cache.
    */
-  #keyFor(tile: any, pin: any, longEdge: number, contentHash: string): string {
+  #keyFor(tile: any, pin: DpPinFlags, longEdge: number, contentHash: string): string {
     const doc = tile.document;
     // The type size and the pad are drawn INTO the pixels, so they are in the key for the
     // same reason the preset is. A prop whose metrics are stored no longer changes its
@@ -1153,7 +1153,7 @@ function presetSnapshot(): Map<string, string> {
 }
 
 /** What the DOM tier needs to play a reveal: the preset's animation and duration. */
-function revealOf(pin: any): { animation: string; durationMs: number } {
+function revealOf(pin: DpPinFlags): { animation: string; durationMs: number } {
   const preset = findPreset(pin.effect.id);
   return {
     animation: preset?.reveal.animation ?? "fade",

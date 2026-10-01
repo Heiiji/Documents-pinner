@@ -48,11 +48,15 @@ export interface EffectContext {
   /** Per-pin animation rate, 0–4. Scales every duration the preset emits. */
   speed?: number;
   /** Per-pin motion choice. `none` is as still as a reduced-motion client. */
-  motion?: DpMotion;
+  motion?: PinMotion;
 }
 
-/** What a pin may ask of a preset's motion. Mirrors `MOTIONS` in the pin schema. */
-export type DpMotion = "loop" | "none";
+/**
+ * What a pin's motion asks of the dressing. The pin schema's `onReveal` reaches it as
+ * `loop`: nothing plays an animation once, so the Studio does not offer it. Not the
+ * preset's `DpMotion` (`preset-schema.ts`), which keeps `onReveal`.
+ */
+type PinMotion = "loop" | "none";
 
 export interface EffectDressing {
   vars: CssVars;
@@ -139,7 +143,7 @@ function proceduralLayers(context: EffectContext): CssVars {
  * a preset that pulses once a second at speed 1 pulses twice at speed 2, and a speed of
  * zero is simply another way to say "still".
  */
-function applyPinMotion(vars: CssVars, speed: number, motion: DpMotion): CssVars {
+function applyPinMotion(vars: CssVars, speed: number, motion: PinMotion): CssVars {
   if (motion === "none" || !(speed > 0)) return freeze(vars);
   if (speed === 1) return vars;
 

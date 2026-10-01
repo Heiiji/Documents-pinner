@@ -19,7 +19,7 @@
 import { g, isGM } from "../fvtt";
 import { t } from "../i18n";
 import { escapeHtml } from "../html";
-import { cardHtml } from "./CardTemplate";
+import { cardHtml, type CardOptions } from "./CardTemplate";
 import { dressing } from "../effects/EffectRegistry";
 import { currentLevel } from "../effects/level";
 import { findPreset } from "../effects/preset-library";
@@ -220,7 +220,10 @@ const PLACEHOLDER_TITLE: Record<Reason, string> = {
   unavailable: "DP.card.unavailable",
 };
 
-function placeholder(common: any, reason: Reason): ResolvedCard {
+function placeholder(
+  common: Omit<CardOptions, "title" | "bodyHtml">,
+  reason: Reason
+): ResolvedCard {
   const title = t(PLACEHOLDER_TITLE[reason]);
   return {
     html: cardHtml({ ...common, title, bodyHtml: "", missing: true, showTitle: false }),
