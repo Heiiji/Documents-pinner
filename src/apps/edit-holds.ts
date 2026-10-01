@@ -40,14 +40,23 @@ export function writeHolds(change: (holds: EditHold[]) => EditHold[]): Promise<v
  *
  * The anchor is resolved afresh from its uuid, never taken from a Studio: the pin may have
  * been deleted meanwhile, and a deleted pin is simply not there to reveal.
+ *
+ * "Still as the hold left it" is decided inside the pin's write queue, from the audience
+ * the writes before it left — `setAudience`'s function form (A29). Decided from the payload
+ * read here, a chip click still landing as the Studio closed, or as the `ready` sweep ran,
+ * was written over: the resume read the pin as hidden and put back the audience the hold
+ * remembered, over the player the GM had just shown it to.
  */
 export async function resumeOne(hold: EditHold): Promise<boolean> {
   const doc = resolveUuidSync(hold.anchor);
-  const pin = readPin(doc);
-  const next = pin ? resumeAfterEdit(pin.audience, hold.restore) : null;
-  if (!next) return false;
-  await api.setAudience(doc, next);
-  return true;
+  if (!readPin(doc)) return false;
+  let resumed = false;
+  await api.setAudience(doc, (current) => {
+    const next = resumeAfterEdit(current, hold.restore);
+    resumed = next !== null;
+    return next;
+  });
+  return resumed;
 }
 
 /**
