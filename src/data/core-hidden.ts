@@ -14,6 +14,9 @@
  * (`revealed`). Nothing here reveals more than core's own un-hide already did — that showed
  * the tile to everyone — and the restored audience is never wider than that. The grant then
  * follows, from the client that made the change, as it does for the eye.
+ *
+ * The same two pre-hooks hold one more of core's fields still: a pin's texture anchor, which
+ * TileConfig offers and every placement in the module assumes is the centre (`offCentre`).
  */
 
 import { FLAGS, MODULE_ID } from "../const";
@@ -37,7 +40,7 @@ function folded(audience: DpAudience, hidden: boolean): DpAudience | null {
 
 /**
  * `preUpdateTile`, on the client making the change: fold a `hidden` the module did not
- * write into the same update's audience.
+ * write into the same update's audience, and keep a pin's anchor at its centre.
  *
  * `changed` is the cleaned, expanded change core is about to validate and send, and a
  * pre-hook may add to it: core cleans it again after the hook (foundry.mjs 14.368,
@@ -46,7 +49,11 @@ function folded(audience: DpAudience, hidden: boolean): DpAudience | null {
  * made it.
  */
 export function onPreUpdateTile(doc: any, changed: any, options: any): void {
-  if (isOurs(options) || !changed || typeof changed.hidden !== "boolean") return;
+  if (isOurs(options) || !changed) return;
+  if (isRecord(changed.texture) && readPin(doc)) {
+    for (const axis of offCentre(changed.texture)) changed.texture[axis] = 0.5;
+  }
+  if (typeof changed.hidden !== "boolean") return;
   if (changed.hidden === (doc?.hidden === true)) return;
   const pin = readPin(doc);
   if (!pin) return;
@@ -67,16 +74,43 @@ export function onPreUpdateTile(doc: any, changed: any, options: any): void {
 
 /**
  * `preCreateTile`: a pin core creates hidden — a paste, an undo — is hidden in its audience
- * too. Only ever towards hidden: a creation never shows anything its payload did not. Core
- * sends the pending document, not the data the hook is handed (foundry.mjs 14.368, 81016 and
- * 81034), so the fold is written to the document.
+ * too. Only ever towards hidden: a creation never shows anything its payload did not. A pin
+ * pasted or duplicated from one whose anchor was moved is created centred. Core sends the
+ * pending document, not the data the hook is handed (foundry.mjs 14.368, 81016 and 81034),
+ * so both are written to the document.
  */
 export function onPreCreateTile(doc: any, _data: any, options: any): void {
-  if (isOurs(options) || doc?.hidden !== true) return;
+  if (isOurs(options)) return;
   const pin = readPin(doc);
-  const audience = pin ? folded(pin.audience, true) : null;
+  if (!pin) return;
+
+  const off = offCentre(doc.texture);
+  if (off.length) {
+    doc.updateSource?.(Object.fromEntries(off.map((axis) => [`texture.${axis}`, 0.5])));
+  }
+
+  const audience = doc.hidden === true ? folded(pin.audience, true) : null;
   if (!audience) return;
   doc.updateSource?.({ [`flags.${MODULE_ID}.${FLAGS.PIN}.audience`]: audience });
+}
+
+/**
+ * The axes of a pin's texture anchor that are off its centre, in a change or a source.
+ *
+ * Every placement in the module — the DOM card, the reader, the hit polygon, the culling
+ * bounds, the token fade — is drawn from `tileRect`, which takes the document's point as
+ * the tile's centre (DESIGN A20). Core does not: it draws a tile's bounds from
+ * `texture.anchorX` and `anchorY` (foundry.mjs 14.368, 71103 and 76527-76537), which
+ * default to 0.5 and which TileConfig lets a GM edit. A pin whose anchor moved would draw
+ * its frame, its grip and — on the canvas tier — its page about one point, and its card,
+ * its hit area and its reader about another. A pin has no use for an anchor, so the change
+ * is folded back where it is made, in the same write (DESIGN A29). An axis the change does
+ * not carry is left alone: core's own default is the centre.
+ */
+function offCentre(texture: Record<string, any> | undefined): ("anchorX" | "anchorY")[] {
+  return (["anchorX", "anchorY"] as const).filter(
+    (axis) => texture?.[axis] !== undefined && texture[axis] !== 0.5
+  );
 }
 
 /**
