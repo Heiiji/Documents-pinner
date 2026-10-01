@@ -400,10 +400,10 @@ export function definePinHUD(): any {
         const chip = (event.target as HTMLElement)?.closest?.<HTMLElement>(".dp-chip");
         if (!chip) return;
         event.preventDefault();
-        const userId = chip.dataset.dpUser ?? "";
-        const doc = this.anchorDoc;
-        if (event.shiftKey) void api.soloUser(doc, userId);
-        else void api.setUserVisible(doc, userId, chip.getAttribute("aria-checked") !== "true");
+        void api.chipClick(this.anchorDoc, chip.dataset.dpUser ?? "", {
+          solo: event.shiftKey,
+          wasOn: chip.getAttribute("aria-checked") === "true",
+        });
       });
 
       // The slider previews as it moves: one custom-property write the compositor

@@ -375,10 +375,10 @@ export function definePinStudio(): any {
         const chip = (event.target as HTMLElement).closest<HTMLElement>(".dp-chip");
         if (!chip) return;
         event.preventDefault();
-        const userId = chip.dataset.dpUser ?? "";
-        const change = (event as MouseEvent).shiftKey
-          ? api.soloUser(this.doc, userId)
-          : api.setUserVisible(this.doc, userId, chip.getAttribute("aria-checked") !== "true");
+        const change = api.chipClick(this.doc, chip.dataset.dpUser ?? "", {
+          solo: (event as MouseEvent).shiftKey,
+          wasOn: chip.getAttribute("aria-checked") === "true",
+        });
         api.fireAndReport(change, () => this.render());
       });
     }

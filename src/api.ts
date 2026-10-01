@@ -363,7 +363,20 @@ export function soloUser(anchorDoc: any, userId: string): Promise<void> | undefi
   return withAudience(anchorDoc, (a) => audience.soloUser(a, userId));
 }
 
-/** Alt-click on a chip: change who can open the document without changing who sees it. */
+/**
+ * A click on a player's chip, on any surface — the HUD, the Pinboard, the Studio: a plain
+ * click toggles that player, Shift shows the pin to them alone. `wasOn` is what the chip
+ * showed when it was clicked. Each surface keeps its own re-render.
+ */
+export function chipClick(
+  anchorDoc: any,
+  userId: string,
+  { solo, wasOn }: { solo: boolean; wasOn: boolean }
+): Promise<void> | undefined {
+  return solo ? soloUser(anchorDoc, userId) : setUserVisible(anchorDoc, userId, !wasOn);
+}
+
+/** The HUD's access box: change who can open the document without changing who sees it. */
 export function setOwnershipSync(anchorDoc: any, enabled: boolean): Promise<void> | undefined {
   const pin = readPin(anchorDoc);
   if (!pin) return undefined;

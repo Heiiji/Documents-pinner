@@ -347,11 +347,11 @@ export function definePinboard(): any {
         if (chip) {
           const row = chip.closest<HTMLElement>(".dp-row");
           const doc = this.docFor(row?.dataset.dpId ?? "");
-          const userId = chip.dataset.dpUser ?? "";
           event.preventDefault();
-          const change = (event as MouseEvent).shiftKey
-            ? api.soloUser(doc, userId)
-            : api.setUserVisible(doc, userId, chip.getAttribute("aria-checked") !== "true");
+          const change = api.chipClick(doc, chip.dataset.dpUser ?? "", {
+            solo: (event as MouseEvent).shiftKey,
+            wasOn: chip.getAttribute("aria-checked") === "true",
+          });
           void change?.then(() => this.render());
           return;
         }
