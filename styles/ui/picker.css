@@ -72,6 +72,37 @@
   opacity: 0.5;
 }
 
+/* A compendium some player's role cannot open: greyed, still focusable and still taken —
+   by importing a copy, which the trailing label says before the GM chooses it. */
+.dp-picker__item--locked {
+  color: color-mix(in oklab, currentColor 62%, transparent);
+}
+
+.dp-picker__import {
+  font-size: 0.72em;
+  white-space: nowrap;
+  padding: 0.05rem 0.4rem;
+  border: 1px solid color-mix(in oklab, var(--color-warm-1, #c9ad6a) 55%, transparent);
+  border-radius: 0.25rem;
+}
+
+/* An import in flight: said on the row, so a slow server is not a click that did nothing. */
+.dp-picker__item--importing {
+  cursor: progress;
+
+  & .dp-picker__import {
+    border-style: dashed;
+    opacity: 0.7;
+  }
+}
+
+.dp-picker__more {
+  padding: 0.35rem 0.55rem;
+  font-size: 0.78em;
+  font-style: italic;
+  opacity: 0.6;
+}
+
 .dp-picker__empty {
   padding: 1.5rem;
   text-align: center;

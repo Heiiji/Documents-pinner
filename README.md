@@ -69,7 +69,7 @@ sidebar — so if you prepare scenes while players are connected, change the def
 | `Alt+Shift+V` / `Alt+M` / `Alt+Shift+F` | cycle audience · switch shape · fit to content |
 | hold `Alt` | peek: props fade so the map can be read (players too) |
 | *Reveal the next hidden pin* | Reveal next from anywhere, in the Pinboard's view when it is open — no key until you give it one in Configure Controls |
-| `/pin <name>` | place by name from chat |
+| `/pin <name>` | place by name from chat — a world journal or page, else a compendium journal |
 
 | Pinboard | |
 |---|---|
@@ -181,8 +181,13 @@ map for any visible pin, as its label says.
    reachable again; nothing has been changed on that until the whole pipeline is measured
    in a real world, not just the probe.
 6. Deleting a pinned document leaves the pin showing a placeholder — never auto-deleted.
-7. Compendium ownership is pack-wide, so there is no per-user grant for a compendium
-   source. The pin still reveals its content.
+7. A compendium document can be pinned, and shows to the players whose role can open
+   that compendium — Observer for their role. Anyone else sees a placeholder that says
+   why, and you are told so when you place it: *Pin a document* greys such a row and
+   offers *Import & pin*, which makes a copy in a "Documents Pinner" folder that you share
+   like any journal. Compendium permissions are per role and pack-wide, so a reveal never
+   changes them and adds nothing to anyone's sidebar. A PDF page from a compendium is
+   drawn as a card.
 8. Pins are real Tiles and appear in `scene.tiles` to other modules, by design.
 9. *Fit to content* cannot measure a bare image pin — an image has no text to measure —
    so it leaves that one's height alone and says so.
@@ -281,7 +286,7 @@ réglage.
 | `Alt+Maj+V` / `Alt+M` / `Alt+Maj+F` | faire défiler le public · changer de forme · ajuster au contenu |
 | `Alt` maintenu | coup d'œil : les accessoires s'estompent (les joueurs aussi) |
 | *Révéler l'épingle masquée suivante* | révéler la suivante de n'importe où, dans la vue du tableau de bord s'il est ouvert — sans touche tant que vous ne lui en donnez pas une dans Configurer les contrôles |
-| `/pin <nom>` | poser par son nom depuis le chat |
+| `/pin <nom>` | poser par son nom depuis le chat — un journal ou une page du monde, sinon un journal de compendium |
 
 | Tableau de bord | |
 |---|---|
@@ -406,8 +411,14 @@ joueur pour toute épingle visible, comme son libellé l'indique.
    pas seulement le test.
 6. Supprimer un document épinglé laisse l'épingle sur un substitut — jamais supprimée
    automatiquement.
-7. Les permissions d'un compendium valent pour tout le pack : pas d'octroi par joueur. Le
-   contenu est quand même révélé.
+7. Un document de compendium peut être épinglé, et s'affiche pour les joueurs dont le
+   rôle peut ouvrir ce compendium — Observateur pour leur rôle. Les autres voient un
+   substitut qui dit pourquoi, et vous en êtes prévenu en le posant : *Épingler un
+   document* grise une telle ligne et propose *Importer et épingler*, qui en crée une copie
+   dans un dossier « Documents Pinner » que vous partagez comme n'importe quel journal.
+   Les permissions d'un compendium valent par rôle et pour tout le pack : une révélation ne
+   les change jamais et n'ajoute rien à la barre latérale de quiconque. Une page PDF d'un
+   compendium est dessinée comme une carte.
 8. Les épingles sont de vraies tuiles et apparaissent dans `scene.tiles` aux autres modules,
    par conception.
 9. *Ajuster au contenu* ne peut pas mesurer une épingle d'image nue — une image n'a pas

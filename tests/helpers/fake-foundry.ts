@@ -608,8 +608,11 @@ export function fakeBasePlaceableHUD(): any {
 export interface FakeWorld {
   isGM?: boolean;
   userId?: string;
-  /** Non-GM users, in the order `playerIds()` should report them. */
-  players?: { id: string; name?: string }[];
+  /**
+   * Non-GM users, in the order `playerIds()` should report them. `role` is core's
+   * `CONST.USER_ROLES` number, PLAYER (1) unless given.
+   */
+  players?: { id: string; name?: string; role?: number }[];
   tiles?: any[];
   settings?: Record<string, unknown>;
 }
@@ -639,16 +642,17 @@ export function installWorld(world: FakeWorld = {}): InstalledWorld {
   ];
   const userId = world.userId ?? (world.isGM ? "gm" : players[0]?.id) ?? "gm";
   const users = [
-    { id: "gm", name: "GM", isGM: true, active: true, color: "#ffffff", avatar: null },
+    { id: "gm", name: "GM", isGM: true, active: true, color: "#ffffff", avatar: null, role: 4 },
     ...players.map((p) => ({
       isGM: false,
       active: true,
       color: "#7a7971",
       avatar: null,
       name: p.id,
+      role: USER_ROLES.PLAYER,
       ...p,
     })),
-  ];
+  ].map(withHasRole);
 
   const tiles = world.tiles ?? [];
   const hooks: { name: string; args: unknown[] }[] = [];
@@ -872,11 +876,39 @@ export function installWorld(world: FakeWorld = {}): InstalledWorld {
         interface: "AUDIO.CHANNELS.INTERFACE.label",
       },
       KEYBINDING_PRECEDENCE: { PRIORITY: 0, NORMAL: 1, DEFERRED: 2 },
+      // TYPES, common/constants.d.mts (USER_ROLES :1258+, DOCUMENT_OWNERSHIP_LEVELS).
+      USER_ROLES,
+      DOCUMENT_OWNERSHIP_LEVELS: OWNERSHIP_LEVELS,
     },
   };
   (globalThis as any).CONST = (globalThis as any).foundry.CONST;
 
   return { game, canvas, hooks, notifications };
+}
+
+/** Core's user roles (TYPES, common/constants.d.mts:1258+). */
+export const USER_ROLES = { NONE: 0, PLAYER: 1, TRUSTED: 2, ASSISTANT: 3, GAMEMASTER: 4 } as const;
+/** Core's ownership levels (TYPES, common/constants.d.mts). */
+export const OWNERSHIP_LEVELS = {
+  INHERIT: -1,
+  NONE: 0,
+  LIMITED: 1,
+  OBSERVER: 2,
+  OWNER: 3,
+} as const;
+
+/**
+ * `User#hasRole(role)` (TYPES, user.d.mts:896): whether the user's role is at least the one
+ * named, by name or by number. A user has every role below their own.
+ */
+function withHasRole<T extends { role: number }>(user: T): T & { hasRole(role: unknown): boolean } {
+  return Object.assign(user, {
+    hasRole(this: { role: number }, role: unknown) {
+      const needed =
+        typeof role === "number" ? role : (USER_ROLES as Record<string, number>)[String(role)];
+      return needed !== undefined && this.role >= needed;
+    },
+  });
 }
 
 /** An application's persistent content element, typed so `querySelector<T>` works. */
@@ -987,4 +1019,361 @@ function fakeFilePicker(): any {
       return this;
     }
   };
+}
+
+// ---------------------------------------------------------------------------
+// Compendium packs, world journals, and core's uuid resolution
+// ---------------------------------------------------------------------------
+
+/** Core's `Collection`: a `Map` with `contents` (TYPES, common/utils/collection.d.mts). */
+export class FakeCollection<V> extends Map<string, V> {
+  get contents(): V[] {
+    return [...this.values()];
+  }
+}
+
+const levelOf = (level: unknown): number =>
+  typeof level === "number"
+    ? level
+    : ((OWNERSHIP_LEVELS as Record<string, number>)[String(level)] ?? Infinity);
+
+/**
+ * A world document whose permission is COMPUTED, unlike `fakeDoc`'s permissive default:
+ * `ownership[user.id] ?? ownership.default ?? NONE`, and OWNER for a GM. TYPES
+ * (common/abstract/document.d.mts:342-375); the GM shortcut RECALLED.
+ */
+export function ownedDoc(options: FakeDocOptions = {}): any {
+  const doc = fakeDoc({ ownership: {}, ...options });
+  doc.testUserPermission = (user: any, level: unknown) => {
+    if (user?.isGM) return true;
+    const own = doc.ownership?.[user?.id] ?? doc.ownership?.default ?? OWNERSHIP_LEVELS.NONE;
+    return own >= levelOf(level);
+  };
+  doc.sheet ??= {
+    rendered: [] as unknown[],
+    render: (...args: unknown[]) => doc.sheet.rendered.push(args),
+  };
+  return doc;
+}
+
+/** One page of a compendium journal, as a test describes it. */
+export interface FakePackPage {
+  _id: string;
+  name: string;
+  type?: string;
+  src?: string;
+}
+
+/** One document of a pack, as a test describes it. */
+export interface FakePackEntry {
+  _id: string;
+  name: string;
+  pages?: FakePackPage[];
+}
+
+export interface FakePackOptions {
+  /** `${package}.${pack}`, the pack's `collection` and its key in `game.packs`. */
+  id: string;
+  label: string;
+  documentName?: string;
+  /** Role name → level name, as a pack's ownership is stored. Core's default if absent. */
+  ownership?: Record<string, string>;
+  entries?: FakePackEntry[];
+  /** The index starts empty and only `getIndex()` fills it (probe A1/A3's other answer). */
+  unindexed?: boolean;
+  /**
+   * What loading a document from this pack does for a user whose role cannot read it —
+   * resolve null, or throw. Unmeasured (probe C1), so the module must not depend on which.
+   */
+  refuses?: "null" | "throw";
+}
+
+/**
+ * A `CompendiumCollection` (TYPES, client/documents/collections/compendium-collection.d.mts).
+ *
+ * - `index` is a Collection of FROZEN PLAIN OBJECTS carrying only a JournalEntry's default
+ *   index fields — `_id`, `uuid`, `name`, `sort`, `folder` (:517-520; journal-entry.d.mts:35).
+ *   No `id`, no `documentName`, no `pages`, no methods. TYPES.
+ * - `get(id)` answers from the document cache only — what a load put there, for the five
+ *   minutes core keeps it (:52-57, :151-155; the cache RECALLED). `holdInCache` puts a
+ *   document there as a load would, without a test having to load it.
+ * - `getUserLevel(user)` is the highest level among the roles the user `hasRole` (role
+ *   based, :212-218; the algorithm RECALLED); `testUserPermission` compares with it
+ *   (:220-232); `visible` is OBSERVER for the current user (threshold RECALLED, probe A1).
+ * - `getDocument(id)` loads for a user who can read the pack and caches it; for one who
+ *   cannot, it does what `refuses` says (RECALLED/unmeasured, probe C1).
+ * - Loaded documents answer permission by ROLE, through the pack (document.d.mts:342-358).
+ */
+export function fakePack(options: FakePackOptions): any {
+  const documentName = options.documentName ?? "JournalEntry";
+  const ownership = options.ownership ?? { PLAYER: "OBSERVER", ASSISTANT: "OWNER" };
+  const entries = options.entries ?? [];
+  const cache = new FakeCollection<any>();
+  const index = new FakeCollection<any>();
+  const uuidOf = (id: string) => `Compendium.${options.id}.${documentName}.${id}`;
+  const fillIndex = () => {
+    for (const entry of entries) {
+      index.set(
+        entry._id,
+        Object.freeze({
+          _id: entry._id,
+          uuid: uuidOf(entry._id),
+          name: entry.name,
+          sort: 0,
+          folder: null,
+        })
+      );
+    }
+  };
+  if (!options.unindexed) fillIndex();
+
+  const build = (entry: FakePackEntry) => {
+    const doc: any = {
+      _id: entry._id,
+      id: entry._id,
+      uuid: uuidOf(entry._id),
+      name: entry.name,
+      documentName,
+      pack: options.id,
+      testUserPermission: (user: any, level: unknown) => pack.testUserPermission(user, level),
+      sheet: {
+        rendered: [] as unknown[],
+        render: (...args: unknown[]) => doc.sheet.rendered.push(args),
+      },
+    };
+    doc.pages = new FakeCollection<any>();
+    for (const page of entry.pages ?? []) {
+      const pageDoc: any = {
+        _id: page._id,
+        id: page._id,
+        uuid: `${doc.uuid}.JournalEntryPage.${page._id}`,
+        name: page.name,
+        type: page.type ?? "text",
+        src: page.src ?? null,
+        text: { content: `<p>${page.name}</p>` },
+        documentName: "JournalEntryPage",
+        parent: doc,
+        pack: options.id,
+        testUserPermission: (user: any, level: unknown) => pack.testUserPermission(user, level),
+      };
+      doc.pages.set(page._id, pageDoc);
+    }
+    return doc;
+  };
+
+  const pack: any = {
+    collection: options.id,
+    documentName,
+    title: options.label,
+    metadata: { id: options.id, label: options.label, type: documentName },
+    ownership,
+    index,
+    indexed: false,
+    /** How many times `getIndex` was asked. */
+    getIndexCalls: 0,
+    async getIndex() {
+      pack.getIndexCalls++;
+      if (!index.size) fillIndex();
+      pack.indexed = true;
+      return index;
+    },
+    get(id: string) {
+      return cache.get(id);
+    },
+    has(id: string) {
+      return cache.has(id);
+    },
+    getUuid: uuidOf,
+    getUserLevel(user: any) {
+      let level: number = OWNERSHIP_LEVELS.NONE;
+      for (const [role, name] of Object.entries(ownership)) {
+        const granted = (OWNERSHIP_LEVELS as Record<string, number>)[name];
+        if (granted === undefined || granted < 0) continue;
+        if (user?.hasRole?.(role)) level = Math.max(level, granted);
+      }
+      return level;
+    },
+    testUserPermission(user: any, level: unknown) {
+      return pack.getUserLevel(user) >= levelOf(level);
+    },
+    get visible() {
+      return pack.testUserPermission((globalThis as any).game?.user, "OBSERVER");
+    },
+    async getDocument(id: string) {
+      if (!pack.testUserPermission((globalThis as any).game?.user, "OBSERVER")) {
+        if (options.refuses === "throw") throw new Error("You do not have permission to view this");
+        return null;
+      }
+      return pack.holdInCache(id);
+    },
+    /** Test hook: what a load leaves in core's cache. */
+    holdInCache(id: string) {
+      const entry = entries.find((e) => e._id === id);
+      if (!entry) return null;
+      if (!cache.has(id)) cache.set(id, build(entry));
+      return cache.get(id);
+    },
+  };
+  return pack;
+}
+
+/** What `installSources` hands back: the calls a test asserts on. */
+export interface InstalledSources {
+  packs: FakeCollection<any>;
+  journal: any;
+  /** Every uuid `fromUuid` was asked for, in order. */
+  fromUuidCalls: string[];
+  /** Every `Journal.show(doc, options)`. */
+  shown: { doc: any; options: any }[];
+  /** Every `importFromCompendium(pack, id, updateData)`. */
+  imports: { pack: string; id: string; updateData: any }[];
+  /** Every `Folder.create(data)`. */
+  folders: any[];
+}
+
+/**
+ * Install packs, world journals and the uuid resolution that reads them.
+ *
+ * `fromUuidSync(uuid, {strict = true})` (TYPES, client/utils/helpers.d.mts:51-69): a world
+ * uuid → its Document; a pack document → the CACHED Document if a load put it there, else
+ * its INDEX ENTRY (the cached branch RECALLED); a pack page → the page once its journal is
+ * cached, else a THROW when `strict` (the default) and null otherwise. `fromUuid` loads
+ * through `pack.getDocument`, which is where a role that cannot read the pack is refused.
+ * Both go on `foundry.utils`, which core also exposes them as; `uninstallWorld` takes them
+ * away with the rest.
+ *
+ * `game.journal.importFromCompendium(pack, id, updateData)` (TYPES,
+ * world-collection.d.mts:42-63): a world copy, with the update data applied as an update,
+ * ownership cleared to the importing user (:259) and `_stats.compendiumSource` set to the
+ * pack document's uuid (RECALLED, probe `importOne`). `CONFIG.Folder.documentClass.create`
+ * records and returns a folder (TYPES/RECALLED).
+ */
+export function installSources(
+  world: InstalledWorld,
+  options: { packs?: any[]; journals?: any[] } = {}
+): InstalledSources {
+  const game = world.game;
+  const packs = new FakeCollection<any>();
+  for (const pack of options.packs ?? []) packs.set(pack.collection, pack);
+  const journal: any = new FakeCollection<any>();
+  for (const entry of options.journals ?? []) journal.set(entry.id, entry);
+
+  const installed: InstalledSources = {
+    packs,
+    journal,
+    fromUuidCalls: [],
+    shown: [],
+    imports: [],
+    folders: [],
+  };
+
+  const folders = new FakeCollection<any>();
+  journal.importFromCompendium = async (pack: any, id: string, updateData: any = {}) => {
+    installed.imports.push({ pack: pack.collection, id, updateData });
+    const source = await pack.getDocument(id);
+    if (!source) return undefined;
+    const copy = ownedDoc({
+      id: `copy-${id}`,
+      uuid: `JournalEntry.copy-${id}`,
+      documentName: pack.documentName,
+      name: source.name,
+      folder: null,
+      ownership: { [game.user.id]: OWNERSHIP_LEVELS.OWNER },
+      _stats: { compendiumSource: source.uuid },
+    });
+    copy.pages = new FakeCollection<any>();
+    applyUpdate(copy, updateData);
+    journal.set(copy.id, copy);
+    return copy;
+  };
+
+  const worldDoc = (uuid: string) => {
+    for (const entry of journal.values()) {
+      if (entry.uuid === uuid) return entry;
+      for (const page of entry.pages?.values?.() ?? []) if (page.uuid === uuid) return page;
+    }
+    return null;
+  };
+  const split = (uuid: string) => {
+    const [, pkg, name, , rootId, , pageId] = uuid.split(".");
+    return { pack: packs.get(`${pkg}.${name}`), rootId, pageId };
+  };
+
+  const fromUuidSync = (uuid: string, opts: { strict?: boolean } = {}) => {
+    if (!uuid?.startsWith("Compendium.")) return worldDoc(uuid);
+    const { pack, rootId, pageId } = split(uuid);
+    if (!pack) return null;
+    if (!pageId) return pack.get(rootId) ?? pack.index.get(rootId) ?? null;
+    const parent = pack.get(rootId);
+    if (!parent) {
+      if (opts.strict ?? true) throw new Error(`${uuid}: its parent is not in the pack's cache`);
+      return null;
+    }
+    return parent.pages.get(pageId) ?? null;
+  };
+  const fromUuid = async (uuid: string) => {
+    installed.fromUuidCalls.push(uuid);
+    if (!uuid?.startsWith("Compendium.")) return worldDoc(uuid);
+    const { pack, rootId, pageId } = split(uuid);
+    const parent = pack ? await pack.getDocument(rootId) : null;
+    if (!parent || !pageId) return parent ?? null;
+    return parent.pages.get(pageId) ?? null;
+  };
+
+  game.packs = packs;
+  game.journal = journal;
+  game.folders = folders;
+  game.collections = new FakeCollection<any>([["JournalEntry", journal]]);
+  const foundry = (globalThis as any).foundry;
+  foundry.utils.fromUuidSync = fromUuidSync;
+  foundry.utils.fromUuid = fromUuid;
+  foundry.documents = {
+    collections: {
+      Journal: {
+        show: async (doc: any, showOptions: any) => {
+          installed.shown.push({ doc, options: showOptions });
+          return doc;
+        },
+      },
+    },
+  };
+  (globalThis as any).CONFIG.Folder = {
+    documentClass: {
+      create: async (data: any) => {
+        const folder = { id: `folder${folders.size + 1}`, ...data };
+        installed.folders.push(data);
+        folders.set(folder.id, folder);
+        return folder;
+      },
+    },
+  };
+  return installed;
+}
+
+/** A world journal whose permission is computed, with its pages. */
+export function fakeJournal(options: {
+  id: string;
+  name: string;
+  pages?: { id: string; name: string; type?: string }[];
+  ownership?: Record<string, number>;
+}): any {
+  const entry = ownedDoc({
+    id: options.id,
+    uuid: `JournalEntry.${options.id}`,
+    documentName: "JournalEntry",
+    name: options.name,
+    ownership: options.ownership ?? {},
+  });
+  entry.pages = new FakeCollection<any>();
+  for (const page of options.pages ?? []) {
+    entry.pages.set(page.id, {
+      id: page.id,
+      uuid: `${entry.uuid}.JournalEntryPage.${page.id}`,
+      name: page.name,
+      type: page.type ?? "text",
+      documentName: "JournalEntryPage",
+      parent: entry,
+    });
+  }
+  return entry;
 }

@@ -145,7 +145,15 @@ export async function resolveUuid(uuid: string | null | undefined): Promise<any>
   }
 }
 
-/** The synchronous form, for render paths that cannot await. Compendia return null. */
+/**
+ * The synchronous form, for render paths that cannot await.
+ *
+ * World uuids return the Document. A compendium document returns its INDEX ENTRY — a
+ * plain object (`_id`, `uuid`, `name`, …, no methods) — or, for five minutes after
+ * anything loaded it, the Document; an embedded compendium document (a page) throws unless
+ * its parent is cached, and the throw becomes null here. Never infer a source's shape
+ * from this: ask `describeSource` (`sources/describe.ts`), which never calls it for a pack.
+ */
 export function resolveUuidSync(uuid: string | null | undefined): any {
   if (!uuid) return null;
   const fn = (globalThis as any).fromUuidSync ?? ns("utils.fromUuidSync");
@@ -154,6 +162,31 @@ export function resolveUuidSync(uuid: string | null | undefined): any {
   } catch {
     return null;
   }
+}
+
+/**
+ * Every compendium pack this client holds, in `game.packs` order.
+ *
+ * Empty before `setup`, and only the packs core sends this client: a player's client may
+ * not hold a pack hidden from them at all (unverified, probe C2).
+ */
+export function packs(): any[] {
+  const all = g()?.packs;
+  if (!all) return [];
+  return all.contents ?? [...(all.values?.() ?? [])];
+}
+
+/** The world collection of a document type: `game.journal` for `JournalEntry`, and so on. */
+export function worldCollection(documentName: string): any {
+  const game = g();
+  const named = game?.collections?.get?.(documentName);
+  if (named) return named;
+  const known: Record<string, any> = {
+    JournalEntry: game?.journal,
+    Actor: game?.actors,
+    Item: game?.items,
+  };
+  return known[documentName] ?? null;
 }
 
 export function randomId(): string {

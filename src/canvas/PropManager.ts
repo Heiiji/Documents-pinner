@@ -58,7 +58,8 @@ import {
   textureFromCanvas,
 } from "../render/Rasterizer";
 import { resolveCard } from "../render/ContentResolver";
-import { pdfSourceOf, renderPdfPage } from "../render/PdfPage";
+import { renderPdfPage } from "../render/PdfPage";
+import { pdfSourceForPin } from "../sources/describe";
 import { bakeEffects, copyCanvas } from "../render/BakeEffects";
 import { dressing } from "../effects/EffectRegistry";
 import { svgDocument } from "../render/CardTemplate";
@@ -854,7 +855,7 @@ class Manager {
     // A PDF skips the HTML pipeline entirely: pdf.js paints the page onto a canvas that
     // is not tainted, so it uploads to WebGL and the prop becomes a real scene object —
     // lit, fogged, occluded, behind tokens. The one source type that can do that.
-    const pdfSrc = pdfSourceOf(api.resolveSourceSync(pin));
+    const pdfSrc = pdfSourceForPin(pin);
     if (pdfSrc) {
       const rendered = await renderPdfPage(pdfSrc, pdfPageOf(pin), longEdge);
       if (!alive()) return;
@@ -1236,5 +1237,5 @@ export function drawsAsDom(pin: DpPinFlags): boolean {
 }
 
 function isPdfPin(pin: DpPinFlags): boolean {
-  return pdfSourceOf(api.resolveSourceSync(pin)) !== null;
+  return pdfSourceForPin(pin) !== null;
 }

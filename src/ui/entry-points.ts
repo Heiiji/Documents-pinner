@@ -23,7 +23,7 @@ import { escapeHtml } from "../html";
 import * as api from "../api";
 import * as settings from "../settings";
 import { armAt } from "../apps/PlacementGhost";
-import { openPicker } from "../apps/DocumentPicker";
+import { openPicker, packEntries } from "../apps/DocumentPicker";
 import { readPin } from "../data/PinData";
 
 /** Whether the configured drag modifier is currently held. */
@@ -88,8 +88,12 @@ export function onGetHeaderControls(app: any, controls: any[]): void {
   });
 }
 
-/** Sidebar and page context menus. The hook name differs by collection, so both wire here. */
-export function addContextOption(options: any[]): void {
+/**
+ * Sidebar, page and compendium-window context menus. The hook name differs by collection,
+ * so all of them wire here, with the application that fired the hook: a compendium window
+ * fires the same hook as the sidebar, and only its `collection` says the row is in a pack.
+ */
+export function addContextOption(options: any[], app?: any): void {
   if (!isGM()) return;
 
   // v14's entry shape. `name`, `condition` and `callback` still work, each with a
@@ -99,7 +103,7 @@ export function addContextOption(options: any[]): void {
     icon: '<i class="fa-solid fa-thumbtack"></i>',
     visible: () => isGM(),
     onClick: (_event: Event, target: any) => {
-      const uuid = uuidFromContextTarget(target);
+      const uuid = uuidFromContextTarget(target, app);
       if (!uuid) return;
       armAt(
         { kind: "document", uuid, src: null, pageId: null, pdfPage: null, followName: true },
@@ -115,13 +119,33 @@ export function addContextOption(options: any[]): void {
  * Core has handed this callback a jQuery element, a plain element and (in v13+) the
  * document itself across versions, so all three shapes are accepted rather than
  * guessing which one this build uses.
+ *
+ * A row in a compendium window names a document of the PACK, which the world does not
+ * hold: its id is asked of the window's own collection, which builds the pack uuid — and
+ * a page in a compendium journal's sheet is asked of that sheet's journal. The world's
+ * journals were the only place either was looked for, so "Pin to scene" there found
+ * nothing and did nothing.
  */
-function uuidFromContextTarget(target: any): string | null {
+function uuidFromContextTarget(target: any, app?: any): string | null {
   if (typeof target?.uuid === "string") return target.uuid;
 
   const element: HTMLElement | null = target?.[0] ?? target;
+  if (typeof element?.dataset?.uuid === "string" && element.dataset.uuid) {
+    return element.dataset.uuid;
+  }
   const id = element?.dataset?.entryId ?? element?.dataset?.documentId ?? element?.dataset?.pageId;
   if (!id) return null;
+
+  const collection = app?.collection;
+  if (typeof collection?.getUuid === "function" && collection.index?.has?.(id)) {
+    return collection.getUuid(id);
+  }
+  const listed = collection?.get?.(id);
+  if (typeof listed?.uuid === "string") return listed.uuid;
+  // A page in a journal's own sheet: the sheet knows its journal, which may be a
+  // compendium's, where the world lookup below would never find it.
+  const page = app?.document?.pages?.get?.(id);
+  if (typeof page?.uuid === "string") return page.uuid;
 
   const doc =
     g()?.journal?.get(id) ??
@@ -155,19 +179,21 @@ export function onChatMessage(_log: any, message: string): boolean | void {
   ]);
   const found = candidates.find((doc: any) => doc.name?.toLowerCase().includes(needle));
 
-  if (!found) {
+  // The world first, as ever; then the compendiums, from the index core already holds. A
+  // match only in packs some player cannot open is not armed as a reference they will
+  // see as a placeholder: the picker opens on the search, where its row offers to import.
+  const inPacks = found ? [] : packEntries(query).entries;
+  const uuid = found?.uuid ?? inPacks.find((entry) => !entry.pack?.locked)?.uuid;
+  if (!uuid && inPacks.length) {
+    openPicker({ search: query });
+    return false;
+  }
+  if (!uuid) {
     notify(t("DP.chat.noMatch", { query }), "warn");
     return false;
   }
   armAt(
-    {
-      kind: "document",
-      uuid: found.uuid,
-      src: null,
-      pageId: null,
-      pdfPage: null,
-      followName: true,
-    },
+    { kind: "document", uuid, src: null, pageId: null, pdfPage: null, followName: true },
     viewportCentre()
   );
   return false;

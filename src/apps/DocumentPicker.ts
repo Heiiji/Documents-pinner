@@ -1,8 +1,9 @@
 /**
  * Choosing what to pin.
  *
- * IMPURE. A flat, searchable list of every journal and page in the world, plus a route
- * into the file browser for a map scrap that has no journal behind it.
+ * IMPURE. A flat, searchable list of every journal and page in the world, then the
+ * journals of every compendium once the search has two letters, plus a route into the
+ * file browser for a map scrap that has no journal behind it.
  *
  * Deliberately not a tree. A GM reaching for this knows the name of the thing they
  * want and does not want to remember which journal they filed it in — so pages are
@@ -11,12 +12,14 @@
  * out of the way, because the questions that remain are all about the map.
  */
 
-import { g, ns } from "../fvtt";
+import { g, ns, packs } from "../fvtt";
 import { t, tOr } from "../i18n";
 import { escapeAttr, escapeHtml } from "../html";
 import { fold } from "./pinboard-model";
 import { arm } from "./PlacementGhost";
 import * as api from "../api";
+import { importForPin } from "../sources/import";
+import { packFacts, playersCanRead } from "../sources/packs";
 import type { DpSource } from "../types/dp";
 
 let PickerClass: any = null;
@@ -29,6 +32,10 @@ export interface PickerEntry {
   kind: "entry" | "page";
   /** Page type — `text`, `image`, `pdf`, `video` — shown so a GM can tell them apart. */
   pageType: string | null;
+  /** A world document, or one in a compendium pack. */
+  origin: "world" | "pack";
+  /** The pack a compendium row is from, and whether some player's role cannot read it. */
+  pack?: { id: string; title: string; locked: boolean };
 }
 
 /**
@@ -48,6 +55,7 @@ export function pickerEntries(): PickerEntry[] {
       context: "",
       kind: "entry",
       pageType: null,
+      origin: "world",
     });
 
     if (pages.length === 1 && pages[0].name === entry.name) continue;
@@ -58,6 +66,7 @@ export function pickerEntries(): PickerEntry[] {
         context: entry.name ?? "",
         kind: "page",
         pageType: page.type ?? null,
+        origin: "world",
       });
     }
   }
@@ -71,17 +80,124 @@ export function filterEntries(entries: readonly PickerEntry[], search: string): 
   return entries.filter((e) => fold(e.name).includes(needle) || fold(e.context).includes(needle));
 }
 
-function entryMarkup(entry: PickerEntry, index: number, active: boolean): string {
-  const icon = entry.kind === "entry" ? "fa-book" : "fa-file-lines";
+/** A compendium is searched only from this many folded characters. */
+const PACK_QUERY_MIN = 2;
+/** At most this many compendium rows; the rest are counted, and the GM keeps typing. */
+const PACK_ROWS_MAX = 50;
+
+/**
+ * An index entry's folded name, and the name it was folded from, for as long as core
+ * keeps that entry. The name is checked on every read: a document renamed in an unlocked
+ * compendium may be merged INTO its existing entry rather than replace it (RECALLED:
+ * `indexDocument` merges), and a cache keyed on the entry alone would go on matching the
+ * old name until a reload.
+ */
+const foldedNames = new WeakMap<object, { name: string; folded: string }>();
+/** Packs whose empty index this session has already asked core to load. */
+const indexAsked = new WeakSet<object>();
+
+function foldedName(entry: any): string {
+  const name = String(entry?.name ?? "");
+  const cached = foldedNames.get(entry);
+  if (cached?.name === name) return cached.folded;
+  const folded = fold(name);
+  if (entry && typeof entry === "object") foldedNames.set(entry, { name, folded });
+  return folded;
+}
+
+/**
+ * The journals of every JournalEntry compendium whose name, or whose pack's title,
+ * contains the search — read from the index core already holds, never per keystroke from
+ * the server.
+ *
+ * Only from two folded characters: one letter matches most of a rulebook. Packs in title
+ * order, entries in index order, at most `PACK_ROWS_MAX`, the rest counted in `more`.
+ * Entries only: a page of a compendium journal is chosen afterwards, in Pin Studio.
+ *
+ * A pack whose index is empty and not yet loaded is asked to load once per session, and
+ * `onIndexed` runs when it has — for the caller to search again if it still can.
+ */
+export function packEntries(
+  search: string,
+  onIndexed?: () => void
+): { entries: PickerEntry[]; more: number } {
+  const needle = fold(search.trim());
+  const entries: PickerEntry[] = [];
+  let more = 0;
+  if (needle.length < PACK_QUERY_MIN) return { entries, more };
+
+  const journals = packs()
+    .filter((pack: any) => packFacts(pack).documentName === "JournalEntry")
+    .map((pack: any) => ({ pack, facts: packFacts(pack) }))
+    .sort((a, b) => a.facts.title.localeCompare(b.facts.title));
+
+  for (const { pack, facts } of journals) {
+    const index = pack.index;
+    if (!index?.size) {
+      if (!pack.indexed && typeof pack.getIndex === "function" && !indexAsked.has(pack)) {
+        indexAsked.add(pack);
+        void Promise.resolve()
+          .then(() => pack.getIndex())
+          .then(
+            () => onIndexed?.(),
+            () => {}
+          );
+      }
+      continue;
+    }
+
+    const titleMatches = fold(facts.title).includes(needle);
+    let locked: boolean | null = null;
+    for (const entry of index.values?.() ?? index.contents ?? []) {
+      if (!titleMatches && !foldedName(entry).includes(needle)) continue;
+      const uuid = entry?.uuid ?? pack.getUuid?.(entry?._id);
+      if (typeof uuid !== "string" || !uuid) continue;
+      if (entries.length >= PACK_ROWS_MAX) {
+        more++;
+        continue;
+      }
+      locked ??= !playersCanRead(pack);
+      entries.push({
+        uuid,
+        name: String(entry.name ?? ""),
+        context: facts.title,
+        kind: "entry",
+        pageType: null,
+        origin: "pack",
+        pack: { id: facts.id, title: facts.title, locked },
+      });
+    }
+  }
+  return { entries, more };
+}
+
+function entryMarkup(entry: PickerEntry, index: number, active: boolean, busy: boolean): string {
+  const icon =
+    entry.origin === "pack"
+      ? "fa-book-atlas"
+      : entry.kind === "entry"
+        ? "fa-book"
+        : "fa-file-lines";
+  const locked = entry.pack?.locked === true;
   return (
-    `<li class="dp-picker__item" role="option" id="dp-picker-opt-${index}"` +
-    ` data-dp-uuid="${escapeAttr(entry.uuid)}" aria-selected="${active}">` +
+    `<li class="dp-picker__item${locked ? " dp-picker__item--locked" : ""}` +
+    `${busy ? " dp-picker__item--importing" : ""}" role="option"` +
+    ` id="dp-picker-opt-${index}" data-dp-uuid="${escapeAttr(entry.uuid)}"` +
+    (busy ? ` aria-busy="true"` : "") +
+    (locked
+      ? ` data-dp-import="true" aria-description="${escapeAttr(t("DP.picker.lockedHint"))}"` +
+        ` data-tooltip-text="${escapeAttr(t("DP.picker.lockedHint"))}"`
+      : "") +
+    ` aria-selected="${active}">` +
     `<i class="fa-solid ${icon}" aria-hidden="true"></i>` +
     `<span class="dp-picker__name">${escapeHtml(entry.name)}</span>` +
     (entry.context ? `<span class="dp-picker__context">${escapeHtml(entry.context)}</span>` : "") +
     (entry.pageType
       ? `<span class="dp-picker__type">` +
         `${escapeHtml(tOr(`DP.pageType.${entry.pageType}`, entry.pageType))}</span>`
+      : "") +
+    (locked
+      ? `<span class="dp-picker__import">${escapeHtml(t("DP.picker.importPin"))}</span>`
       : "") +
     `</li>`
   );
@@ -96,12 +212,23 @@ function entryMarkup(entry: PickerEntry, index: number, active: boolean): string
 export function pickerMarkup(
   entries: readonly PickerEntry[],
   search: string,
-  activeIndex = 0
+  activeIndex = 0,
+  more = 0,
+  importing: string | null = null
 ): string {
   const active = Math.max(0, Math.min(entries.length - 1, activeIndex));
-  const list = entries.length
-    ? entries.map((entry, index) => entryMarkup(entry, index, index === active)).join("")
-    : `<li class="dp-picker__empty">${escapeHtml(t("DP.picker.none"))}</li>`;
+  const list =
+    (entries.length
+      ? entries
+          .map((entry, index) =>
+            entryMarkup(entry, index, index === active, entry.uuid === importing)
+          )
+          .join("")
+      : `<li class="dp-picker__empty">${escapeHtml(t("DP.picker.none"))}</li>`) +
+    (more
+      ? `<li class="dp-picker__more" role="presentation">` +
+        `${escapeHtml(t("DP.picker.more", { count: more }))}</li>`
+      : "");
 
   return [
     `<div class="dp-picker">`,
@@ -154,11 +281,19 @@ export function definePicker(): any {
     onChoose: ((source: DpSource) => void) | null = null;
 
     async _renderHTML() {
+      // World rows first, then the compendiums': a GM's own world is what they reach for
+      // most, and a rulebook's hundred matches must not bury it. A pack whose index arrives
+      // later searches again, if this picker is still open to show it.
+      const { entries, more } = packEntries(this.search, () => {
+        if (this.rendered) void this.render();
+      });
       const wrapper = document.createElement("div");
       wrapper.innerHTML = pickerMarkup(
-        filterEntries(pickerEntries(), this.search),
+        [...filterEntries(pickerEntries(), this.search), ...entries],
         this.search,
-        this.activeIndex
+        this.activeIndex,
+        more,
+        this.importing
       );
       return wrapper.firstElementChild ?? wrapper;
     }
@@ -200,7 +335,7 @@ export function definePicker(): any {
 
       root.addEventListener("click", (event) => {
         const item = (event.target as HTMLElement).closest<HTMLElement>(".dp-picker__item");
-        if (item?.dataset.dpUuid) this.#choose(item.dataset.dpUuid);
+        if (item?.dataset.dpUuid) void this.#choose(item);
       });
 
       // The keyboard contract, all from the search box: the arrows move the active
@@ -243,7 +378,7 @@ export function definePicker(): any {
             const active = items[Math.max(0, Math.min(count - 1, this.activeIndex))];
             if (active?.dataset.dpUuid) {
               event.preventDefault();
-              this.#choose(active.dataset.dpUuid);
+              void this.#choose(active);
             }
             return;
           }
@@ -251,17 +386,47 @@ export function definePicker(): any {
       });
     }
 
-    #choose(uuid: string) {
-      const source: DpSource = {
-        kind: "document",
-        uuid,
-        src: null,
-        pageId: null,
-        pdfPage: null,
-        followName: true,
-      };
+    /**
+     * The compendium uuid being imported, or null. A second Enter while it runs would
+     * import twice; the row says it is busy, so a slow server is not a click that did
+     * nothing.
+     */
+    importing: string | null = null;
+
+    /**
+     * Take a row. A compendium some player's role cannot read is IMPORTED first, and the
+     * world copy is what is placed, adopted or retargeted to — a pin the whole table can
+     * be given. A failed import has said so and takes nothing; a picker closed while the
+     * copy was being made takes nothing either.
+     */
+    async #choose(item: HTMLElement) {
+      const uuid = item.dataset.dpUuid;
+      if (!uuid) return;
+      if (item.dataset.dpImport !== "true") {
+        this.close();
+        this.take({
+          kind: "document",
+          uuid,
+          src: null,
+          pageId: null,
+          pdfPage: null,
+          followName: true,
+        });
+        return;
+      }
+      if (this.importing) return;
+      this.importing = uuid;
+      void this.render();
+      const copy = await importForPin(uuid).finally(() => {
+        this.importing = null;
+      });
+      if (!this.rendered) return;
+      if (!copy) {
+        void this.render();
+        return;
+      }
       this.close();
-      this.take(source);
+      this.take(copy);
     }
 
     /**
@@ -321,6 +486,8 @@ async function adoptWith(target: any, source: DpSource): Promise<void> {
 export interface PickerOptions {
   /** Adopt this placeable instead of placing a new pin. */
   adopt?: any;
+  /** Open on this search, as `/pin` does when only a compendium the players cannot read matches. */
+  search?: string;
   /**
    * Take the chosen source instead of adopting or arming the ghost.
    *
@@ -338,6 +505,10 @@ export function openPicker(options: PickerOptions = {}): any {
   instance ??= new Picker();
   instance.adopt = options.adopt ?? null;
   instance.onChoose = options.onChoose ?? null;
+  if (options.search !== undefined) {
+    instance.search = options.search;
+    instance.activeIndex = 0;
+  }
   instance.render(true);
   return instance;
 }
