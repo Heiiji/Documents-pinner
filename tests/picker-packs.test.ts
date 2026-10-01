@@ -190,21 +190,28 @@ describe("Import & pin", () => {
     }
   });
 
+  const failed = [{ type: "warn", message: "DP.notice.importFailed" }];
   it.each([
-    ["throws", async () => Promise.reject(new Error("the server refused"))],
-    ["creates nothing", async () => undefined],
-  ])("says so and arms nothing when the import %s", async (_how, importFromCompendium) => {
-    install([handouts({ ownership: TRUSTED_ONLY })]);
-    world.game.journal.importFromCompendium = importFromCompendium;
-    const app = await picker("letters");
-    const search = contentOf(app).querySelector<HTMLInputElement>(".dp-picker__search")!;
+    ["throws", async () => Promise.reject(new Error("the server refused")), failed, null],
+    ["creates nothing", async () => undefined, failed, null],
+    ["is still running", () => new Promise(() => {}), [], "true"],
+  ])(
+    "arms nothing, and says where it stands, when the import %s",
+    async (_how, importFromCompendium, notices, busy) => {
+      install([handouts({ ownership: TRUSTED_ONLY })]);
+      world.game.journal.importFromCompendium = importFromCompendium;
+      const app = await picker("letters");
+      const search = contentOf(app).querySelector<HTMLInputElement>(".dp-picker__search")!;
 
-    search.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
-    await flush();
+      search.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+      await flush();
 
-    expect(arm).not.toHaveBeenCalled();
-    expect(world.notifications).toEqual([{ type: "warn", message: "DP.notice.importFailed" }]);
-  });
+      expect(arm).not.toHaveBeenCalled();
+      expect(world.notifications).toEqual(notices);
+      const row = contentOf(app).querySelector(".dp-picker__item--locked")!;
+      expect(row.getAttribute("aria-busy")).toBe(busy);
+    }
+  );
 });
 
 describe("/pin and the compendium window's menu", () => {

@@ -86,6 +86,16 @@
   border-radius: 0.25rem;
 }
 
+/* An import in flight: said on the row, so a slow server is not a click that did nothing. */
+.dp-picker__item--importing {
+  cursor: progress;
+
+  & .dp-picker__import {
+    border-style: dashed;
+    opacity: 0.7;
+  }
+}
+
 .dp-picker__more {
   padding: 0.35rem 0.55rem;
   font-size: 0.78em;

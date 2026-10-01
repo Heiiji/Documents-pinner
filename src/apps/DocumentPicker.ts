@@ -171,7 +171,7 @@ export function packEntries(
   return { entries, more };
 }
 
-function entryMarkup(entry: PickerEntry, index: number, active: boolean): string {
+function entryMarkup(entry: PickerEntry, index: number, active: boolean, busy: boolean): string {
   const icon =
     entry.origin === "pack"
       ? "fa-book-atlas"
@@ -180,8 +180,10 @@ function entryMarkup(entry: PickerEntry, index: number, active: boolean): string
         : "fa-file-lines";
   const locked = entry.pack?.locked === true;
   return (
-    `<li class="dp-picker__item${locked ? " dp-picker__item--locked" : ""}" role="option"` +
+    `<li class="dp-picker__item${locked ? " dp-picker__item--locked" : ""}` +
+    `${busy ? " dp-picker__item--importing" : ""}" role="option"` +
     ` id="dp-picker-opt-${index}" data-dp-uuid="${escapeAttr(entry.uuid)}"` +
+    (busy ? ` aria-busy="true"` : "") +
     (locked
       ? ` data-dp-import="true" aria-description="${escapeAttr(t("DP.picker.lockedHint"))}"` +
         ` data-tooltip-text="${escapeAttr(t("DP.picker.lockedHint"))}"`
@@ -211,12 +213,17 @@ export function pickerMarkup(
   entries: readonly PickerEntry[],
   search: string,
   activeIndex = 0,
-  more = 0
+  more = 0,
+  importing: string | null = null
 ): string {
   const active = Math.max(0, Math.min(entries.length - 1, activeIndex));
   const list =
     (entries.length
-      ? entries.map((entry, index) => entryMarkup(entry, index, index === active)).join("")
+      ? entries
+          .map((entry, index) =>
+            entryMarkup(entry, index, index === active, entry.uuid === importing)
+          )
+          .join("")
       : `<li class="dp-picker__empty">${escapeHtml(t("DP.picker.none"))}</li>`) +
     (more
       ? `<li class="dp-picker__more" role="presentation">` +
@@ -285,7 +292,8 @@ export function definePicker(): any {
         [...filterEntries(pickerEntries(), this.search), ...entries],
         this.search,
         this.activeIndex,
-        more
+        more,
+        this.importing
       );
       return wrapper.firstElementChild ?? wrapper;
     }
@@ -378,8 +386,12 @@ export function definePicker(): any {
       });
     }
 
-    /** An import in flight: a second Enter while it runs would import twice. */
-    importing = false;
+    /**
+     * The compendium uuid being imported, or null. A second Enter while it runs would
+     * import twice; the row says it is busy, so a slow server is not a click that did
+     * nothing.
+     */
+    importing: string | null = null;
 
     /**
      * Take a row. A compendium some player's role cannot read is IMPORTED first, and the
@@ -403,15 +415,21 @@ export function definePicker(): any {
         return;
       }
       if (this.importing) return;
-      this.importing = true;
+      this.importing = uuid;
+      void this.render();
+      let copy: DpSource | null = null;
       try {
-        const copy = await importForPin(uuid);
-        if (!copy || !this.rendered) return;
-        this.close();
-        this.take(copy);
+        copy = await importForPin(uuid);
       } finally {
-        this.importing = false;
+        this.importing = null;
       }
+      if (!this.rendered) return;
+      if (!copy) {
+        void this.render();
+        return;
+      }
+      this.close();
+      this.take(copy);
     }
 
     /**
