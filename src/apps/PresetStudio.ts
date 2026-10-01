@@ -36,7 +36,7 @@ import { fontChoices, fontLabel, fontOptionsMarkup, fontStack } from "../effects
 import { registeredFontFamilies } from "../render/AssetInliner";
 import { logger } from "../log";
 import { soundPath } from "../normalise";
-import { playRevealSound } from "../canvas/PropManager";
+import { playRevealSound } from "../effects/reveal-sound";
 import type { DpNotice } from "../types/dp";
 import { restoreFocus, snapshotFocus } from "./focus-restore";
 

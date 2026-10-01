@@ -30,7 +30,7 @@ import type { EditHold } from "../settings";
 import { readPin } from "../data/PinData";
 import { freezeMetrics } from "../data/pin-schema";
 import { registeredFontFamilies } from "../render/AssetInliner";
-import { playRevealSound, revealSoundOf } from "../canvas/PropManager";
+import { playRevealSound, revealSoundOf } from "../effects/reveal-sound";
 import { soundPath } from "../normalise";
 import { pdfPageCount } from "../render/PdfPage";
 import { openPicker } from "./DocumentPicker";

@@ -20,7 +20,7 @@ import { PAPERS } from "../render/CardTemplate";
 import { allPresets, findPreset } from "../effects/preset-library";
 import { swatchStyle } from "../effects/preset-css";
 import { fontChoices, fontLabel, fontOptionsMarkup } from "../effects/typeface";
-import { revealSoundOf } from "../canvas/PropManager";
+import { revealSoundOf } from "../effects/reveal-sound";
 import { describeSource, pdfSourceForPin } from "../sources/describe";
 import { adapterForDoc, adapterOrJournal } from "../sources/index";
 import { chipsMarkup, describeChips } from "./chips";
