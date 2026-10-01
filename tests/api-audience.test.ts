@@ -57,8 +57,8 @@ function journal(id = "j", name = "Chapter 3") {
 }
 
 /** A prop showing page p1 of the journal, to `audience`, access on unless said. */
-function pinnedTile(audience: Partial<DpAudience>, over: Partial<DpPinFlags> = {}) {
-  const anchor = fakeTile({ id: "t1", uuid: ANCHOR });
+function pinnedTile(audience: Partial<DpAudience>, over: Partial<DpPinFlags> = {}, id = "t1") {
+  const anchor = fakeTile({ id, uuid: `Scene.s1.Tile.${id}` });
   anchor.flags = {
     [MODULE_ID]: {
       [FLAGS.PIN]: {
@@ -81,18 +81,20 @@ function pinnedTile(audience: Partial<DpAudience>, over: Partial<DpPinFlags> = {
 const pinOf = (doc: any): DpPinFlags => doc.flags[MODULE_ID][FLAGS.PIN];
 const holdersOn = (doc: any) => readLedger(doc.flags?.[MODULE_ID]?.[FLAGS.GRANTS])?.holders ?? null;
 
-async function install(anchor: any, extra: any[] = []) {
+/** The world, with these anchors on its scene and these journals beside "Chapter 3". */
+async function install(anchors: any | any[], journals: any[] = []) {
   vi.resetModules();
-  tile = anchor;
+  const tiles = [anchors].flat();
+  tile = tiles[0];
   world = installWorld({
     isGM: true,
     players: [{ id: "ali" }, { id: "ben" }, { id: "cy" }],
-    tiles: [tile],
+    tiles,
   });
-  // The tile lives on the scene. Core's scene update lands each change on its document,
+  // The tiles live on the scene. Core's scene update lands each change on its document,
   // and core's delete takes the tile off the scene's collection.
   const scene = world.canvas.scene;
-  tile.parent = scene;
+  for (const anchor of tiles) anchor.parent = scene;
   scene.updateEmbeddedDocuments = async (_type: string, updates: any[]) => {
     for (const change of updates) {
       const data = { ...change };
@@ -104,15 +106,22 @@ async function install(anchor: any, extra: any[] = []) {
   scene.deleted = [] as string[][];
   scene.deleteEmbeddedDocuments = async (_type: string, ids: string[]) => {
     scene.deleted.push(ids);
-    scene.tiles.contents = scene.tiles.contents.filter((t: any) => !ids.includes(t.id));
+    // In place: the fake scene's `tiles.get` reads this same array.
+    const contents = scene.tiles.contents;
+    for (const id of ids)
+      contents.splice(
+        contents.findIndex((t: any) => t.id === id),
+        1
+      );
     return ids;
   };
+  const roots = [entry, ...journals];
   byUuid = Object.fromEntries(
-    [entry, ...entry.pages.contents, ...extra].map((doc: any) => [doc.uuid, doc])
+    roots.flatMap((root) => [root, ...root.pages.contents]).map((doc: any) => [doc.uuid, doc])
   );
   (globalThis as any).fromUuid = async (uuid: string) => byUuid[uuid] ?? null;
   (globalThis as any).fromUuidSync = (uuid: string) => byUuid[uuid] ?? null;
-  world.game.journal.contents = [entry];
+  world.game.journal.contents = roots;
 
   store = await import("../src/data/PinStore");
   sync = await import("../src/data/ownership-sync");
@@ -224,5 +233,118 @@ describe("the warning that a revealed pin will not open", () => {
     await install(iconPin());
     await api.toggleVisibility(tile);
     expect(warned()).toBe(1);
+  });
+});
+
+describe("deleting pins with a chip click still landing", () => {
+  /** Every write the tile and the scene receive, in the order they land; the tile's are slow. */
+  function recordOrder() {
+    const order: string[] = [];
+    const scene = world.canvas.scene;
+    const write = tile.update;
+    tile.update = async (data: any, options: any) => {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      order.push("tile write");
+      return write(data, options);
+    };
+    const remove = scene.deleteEmbeddedDocuments;
+    scene.deleteEmbeddedDocuments = async (type: string, ids: string[], options: any) => {
+      order.push("delete");
+      return remove(type, ids, options);
+    };
+    return order;
+  }
+
+  it("lets the click land, then releases everything, in one delete", async () => {
+    await install(pinnedTile({ kind: "selected", users: ["ali"] }));
+    await sync.syncAnchor(tile);
+    const order = recordOrder();
+
+    const chip = api.setUserVisible(tile, "ben", true);
+    await api.deletePins(world.canvas.scene, [tile]);
+    await chip;
+    await landed();
+
+    expect(order).toEqual(["tile write", "delete"]);
+    expect(world.canvas.scene.deleted).toEqual([["t1"]]);
+    expect(holdersOn(entry)).toBeNull();
+    expect(entry.ownership).toEqual({ default: 0 });
+    expect(pages.p1.ownership).toEqual({ default: -1 });
+  });
+
+  it("grants nothing for a click whose sync runs after the pin is gone", async () => {
+    await install(pinnedTile({ kind: "selected", users: ["ali"] }));
+    await sync.syncAnchor(tile);
+
+    const deleting = api.deletePins(world.canvas.scene, [tile]);
+    // Queued behind the delete: by the time its sync runs, the tile is off the scene.
+    const chip = api.setUserVisible(tile, "ben", true);
+    await Promise.all([deleting, chip]);
+    await landed();
+
+    expect(holdersOn(entry)).toBeNull();
+    expect(holdersOn(pages.p1)).toBeNull();
+    expect(entry.ownership).toEqual({ default: 0 });
+    expect(pages.p1.ownership).toEqual({ default: -1 });
+  });
+});
+
+describe("a bulk reveal's access", () => {
+  /** A second journal, and a hidden pin on each, both remembering Ali. */
+  async function twoPins() {
+    const other = journal("k", "Chapter 4");
+    const forAli = {
+      kind: "hidden" as const,
+      restore: { kind: "selected" as const, users: ["ali"] },
+    };
+    const second = pinnedTile(
+      forAli,
+      { source: { ...defaultPin().source, uuid: "JournalEntry.k", pageId: "p1" } },
+      "t2"
+    );
+    await install([pinnedTile(forAli), second], [other]);
+    return { other, second };
+  }
+
+  it("is granted for every pin at once, not one round trip after another", async () => {
+    const { other } = await twoPins();
+    // The first pin's journal is slow to resolve; the second's is not.
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const resolve = (globalThis as any).fromUuid;
+    (globalThis as any).fromUuid = async (uuid: string) => {
+      if (uuid === "JournalEntry.j") await gate;
+      return resolve(uuid);
+    };
+
+    const revealing = api.setVisibilityMany(
+      world.canvas.scene,
+      world.canvas.scene.tiles.contents,
+      true
+    );
+    for (let i = 0; i < 5; i++) await new Promise((r) => setTimeout(r, 0));
+
+    expect(other.ownership.ali).toBe(1);
+    expect(entry.ownership.ali).toBeUndefined();
+    release();
+    await expect(revealing).resolves.toBe(2);
+    expect(entry.ownership.ali).toBe(1);
+  });
+
+  it("still reaches every pin when one of them fails, and says so once", async () => {
+    const { other } = await twoPins();
+    other.pages.get = () => {
+      throw new Error("a page that cannot be read");
+    };
+
+    await expect(
+      api.setVisibilityMany(world.canvas.scene, world.canvas.scene.tiles.contents, true)
+    ).resolves.toBe(2);
+
+    expect(entry.ownership.ali).toBe(1);
+    expect(pages.p1.ownership.ali).toBe(2);
+    expect(
+      world.notifications.filter((n) => n.message === "DP.notice.ownershipWriteFailed")
+    ).toHaveLength(1);
   });
 });

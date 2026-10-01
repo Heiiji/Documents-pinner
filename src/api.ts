@@ -288,8 +288,8 @@ function revealsUnopenable(before: DpPinFlags | null, next: DpAudience): boolean
  * A reveal is the eye's own rule (`revealed`): each pin goes back to the audience it
  * remembers, never to everyone. A hide is `hidden`, which leaves a pin already hidden as
  * it is. Only the pins the gesture changes are written, in ONE scene write; ownership then
- * follows one source at a time, the queue in `ownership-sync` keeping two pins of the same
- * journal from racing.
+ * follows for every pin at once, the ledger's queue per document in `ownership-sync`
+ * keeping two pins of the same journal from racing.
  *
  * And it says what `setAudience` says, once for the batch (`revealsUnopenable`): revealing
  * an icon pin that opens its sheet, with access off, shows a pin whose sheet refuses to
@@ -319,7 +319,12 @@ export async function setVisibilityMany(scene: any, docs: any[], reveal: boolean
   );
   if (!changes.length) return 0;
 
-  for (const { doc } of changes) await syncAnchor(doc);
+  // All at once: each anchor's sync waits only for its own, and the ledger orders the
+  // writes to one document in its own queue, so two pins of one journal still keep both
+  // claims. One after another, "Reveal all" over a dozen pins was a dozen round trips
+  // before the last player could open what they were looking at.
+  const changed = changes.map(({ doc }) => doc);
+  reportAccessFailures(changed, await Promise.allSettled(changed.map((doc) => syncAnchor(doc))));
 
   if (changes.some(({ before, next }) => revealsUnopenable(before, next))) {
     notify({ key: "DP.notice.revealedNoAccess" }, "info");
@@ -328,18 +333,37 @@ export async function setVisibilityMany(scene: any, docs: any[], reveal: boolean
 }
 
 /**
+ * Say which of a bulk gesture's grants or releases threw, once for the gesture.
+ *
+ * Every one is attempted whatever the others do. A write core refused is already reported
+ * where it is made (`applyPlan`); this is anything else, logged with the pin it was for,
+ * and the GM told in the same words.
+ */
+function reportAccessFailures(docs: any[], outcomes: PromiseSettledResult<unknown>[]): void {
+  let failed = 0;
+  outcomes.forEach((outcome, i) => {
+    if (outcome.status === "fulfilled") return;
+    failed++;
+    log.warn(`could not bring the access of ${docs[i]?.uuid} in line`, outcome.reason);
+  });
+  if (failed) notify({ key: "DP.notice.ownershipWriteFailed" }, "error");
+}
+
+/**
  * Delete many pins of one scene: every grant released first, then ONE scene write.
  * `deletePin` per pin is a round trip each — for a dozen selected pins, a visible stagger
  * on every client and a dozen separate undo entries.
+ *
+ * In the pins' own write queue (`store.removeMany`), after every write already in it: a
+ * chip click still landing used to reach a tile being deleted, and the sync that followed it
+ * granted for a pin that was gone. The releases run all at once inside that turn — each
+ * waits in its anchor's sync queue, never in the write queue this turn holds (A22).
  */
 export async function deletePins(scene: any, docs: any[]): Promise<void> {
   if (!isGM() || !docs.length) return;
-  for (const doc of docs) await releaseAnchor(doc);
-  await scene?.deleteEmbeddedDocuments(
-    "Tile",
-    docs.map((doc: any) => doc.id),
-    internal()
-  );
+  await store.removeMany(scene, docs, async () => {
+    reportAccessFailures(docs, await Promise.allSettled(docs.map((doc) => releaseAnchor(doc))));
+  });
 }
 
 /** Persist a new reveal order — the pins' `sort` — in one scene write. */
