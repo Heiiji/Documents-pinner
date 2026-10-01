@@ -14,7 +14,7 @@
  */
 
 import { MODULE_ID, PLACEHOLDER_TEXTURE } from "./const";
-import { cfg, cv, g, isGM, notify, ns, playerIds } from "./fvtt";
+import { cfg, cv, g, internal, isGM, notify, ns, playerIds } from "./fvtt";
 import { logger } from "./log";
 import * as audience from "./data/audience";
 import * as store from "./data/PinStore";
@@ -241,6 +241,75 @@ export async function setAudience(anchorDoc: any, next: DpAudience): Promise<voi
   ) {
     notify({ key: "DP.notice.revealedNoAccess" }, "info");
   }
+}
+
+/**
+ * Reveal or hide many pins of one scene: the Pinboard's bulk bar, "Reveal all" and "Hide
+ * all". Resolves how many it changed.
+ *
+ * A reveal is the eye's own rule (`revealed`): each pin goes back to the audience it
+ * remembers, never to everyone. A hide is `hidden`, which leaves a pin already hidden as
+ * it is. Only the pins the gesture changes are written, in ONE scene write; ownership then
+ * follows one source at a time, the queue in `ownership-sync` keeping two pins of the same
+ * journal from racing.
+ *
+ * And it says what `setAudience` says, once for the batch: revealing an icon pin with
+ * access off shows a pin whose sheet refuses to open. A bulk reveal used to say nothing,
+ * though it is the same "I can see it but it won't open", for as many pins as it touched.
+ */
+export async function setVisibilityMany(scene: any, docs: any[], reveal: boolean): Promise<number> {
+  if (!isGM()) return 0;
+  const changes = docs.flatMap((doc) => {
+    const pin = readPin(doc);
+    if (!pin) return [];
+    const next = reveal ? audience.revealed(pin.audience) : audience.hidden(pin.audience);
+    const same =
+      audience.sameAudience(next, pin.audience) &&
+      (doc.hidden === true) === audience.anchorHidden(next);
+    return same ? [] : [{ doc, before: pin, patch: { audience: next } }];
+  });
+  if (!changes.length) return 0;
+
+  await store.batchUpdate(
+    scene,
+    changes.map(({ doc, patch }) => ({ doc, patch }))
+  );
+  for (const { doc } of changes) await syncAnchor(doc);
+
+  const unopenable = changes.some(
+    ({ before, patch }) =>
+      before.mode === "pin" &&
+      before.audience.kind === "hidden" &&
+      patch.audience.kind !== "hidden" &&
+      !patch.audience.ownershipSync.enabled
+  );
+  if (unopenable) notify({ key: "DP.notice.revealedNoAccess" }, "info");
+  return changes.length;
+}
+
+/**
+ * Delete many pins of one scene: every grant released first, then ONE scene write.
+ * `deletePin` per pin is a round trip each — for a dozen selected pins, a visible stagger
+ * on every client and a dozen separate undo entries.
+ */
+export async function deletePins(scene: any, docs: any[]): Promise<void> {
+  if (!isGM() || !docs.length) return;
+  for (const doc of docs) await releaseAnchor(doc);
+  await scene?.deleteEmbeddedDocuments(
+    "Tile",
+    docs.map((doc: any) => doc.id),
+    internal()
+  );
+}
+
+/** Persist a new reveal order — the pins' `sort` — in one scene write. */
+export async function reorder(scene: any, updates: { id: string; sort: number }[]): Promise<void> {
+  if (!isGM() || !updates.length) return;
+  await scene?.updateEmbeddedDocuments(
+    "Tile",
+    updates.map((u) => ({ _id: u.id, sort: u.sort })),
+    internal()
+  );
 }
 
 /**

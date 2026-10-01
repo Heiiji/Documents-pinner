@@ -236,6 +236,21 @@ function sameUsers(a: readonly string[], b: readonly string[]): boolean {
  */
 export function toggleVisibility(audience: DpAudience): DpAudience {
   if (audience.kind === "hidden") return revealed(audience);
+  return hidden(audience);
+}
+
+/**
+ * What a hide writes: the audience hidden, remembering who it was for, so the next reveal
+ * (`revealed`) shows it to the same players. The one hide rule — the eye, the Pinboard's
+ * bulk bar and "Hide all", and a Studio's "Hide while I edit".
+ *
+ * Idempotent: an audience already hidden comes back equal, its `restore` untouched.
+ * Writing it again stored `{ kind: "hidden" }`, which the normaliser reads as "everyone",
+ * so a note narrowed to one player, hidden by hand and then caught by "Hide all", later
+ * revealed itself to the whole table.
+ */
+export function hidden(audience: DpAudience): DpAudience {
+  if (audience.kind === "hidden") return { ...audience };
   return {
     ...audience,
     kind: "hidden",

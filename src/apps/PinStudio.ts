@@ -25,7 +25,7 @@ import { t } from "../i18n";
 import { escapeHtml } from "../html";
 import * as api from "../api";
 import { logger } from "../log";
-import { resumeAfterEdit, toggleVisibility } from "../data/audience";
+import { hidden, resumeAfterEdit } from "../data/audience";
 import type { EditHold } from "../settings";
 import { readPin } from "../data/PinData";
 import { freezeMetrics } from "../data/pin-schema";
@@ -165,8 +165,8 @@ export function definePinStudio(): any {
       const pin = readPin(doc);
       if (!pin || !doc?.uuid || !api.isRevealed(doc, pin)) return;
 
-      const hidden = toggleVisibility(pin.audience);
-      const hold: EditHold = { anchor: doc.uuid, world: worldId(), restore: hidden.restore };
+      const next = hidden(pin.audience);
+      const hold: EditHold = { anchor: doc.uuid, world: worldId(), restore: next.restore };
       const release = () => writeHolds((holds) => holds.filter((h) => h.anchor !== hold.anchor));
       await writeHolds((holds) => [...holds.filter((h) => h.anchor !== hold.anchor), hold]);
       // Closed while the hold was being written: nothing was hidden, so nothing is held.
@@ -175,7 +175,7 @@ export function definePinStudio(): any {
       // Held before the hide lands, so the render the hide itself triggers already shows
       // the way back, and a hide that throws still has its hold ended by the close.
       this.hold = hold;
-      this.hiding = api.setAudience(doc, hidden);
+      this.hiding = api.setAudience(doc, next);
       try {
         await this.hiding;
       } finally {

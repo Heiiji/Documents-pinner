@@ -160,6 +160,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and hidden for a beat went back to that player when revealed with `Space` or the eye —
   and to everyone when revealed from the Pinboard's bulk bar or "Reveal all". Every reveal
   now restores the audience the pin remembers.
+- **The Pinboard's bulk reveal now says when a pin will not open.** An icon pin opens its
+  document's sheet, which refuses a player without access, and revealing one with access
+  off from the HUD's eye says so. Revealing it from the bulk bar or with "Reveal all" said
+  nothing. They now say it too — once, however many such pins they reveal.
 - **Flashing a hidden pin did nothing.** It is drawn on your screen alone, so players are
   not shown where it is — and it was sent without the scene Foundry needs to draw it. It
   shows now. A flash also no longer pulls every player's view to the pin when Shift

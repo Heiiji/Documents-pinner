@@ -24,16 +24,14 @@
  */
 
 import { MODULE_ID } from "../const";
-import { cv, g, internal, notify, ns, playerIds } from "../fvtt";
+import { cv, g, notify, ns, playerIds } from "../fvtt";
 import { logger } from "../log";
 import { t } from "../i18n";
 import { escapeHtml } from "../html";
 import * as api from "../api";
 import * as store from "../data/PinStore";
-import { anchorHidden, revealed, sameAudience, wouldReveal } from "../data/audience";
-import type { DpAudience } from "../types/dp";
+import { wouldReveal } from "../data/audience";
 import { readPin } from "../data/PinData";
-import { releaseAnchor, syncAnchor } from "../data/ownership-sync";
 import { isTextEntry } from "../ui/cheatsheet";
 import { closeCheatSheet, toggleCheatSheet } from "./CheatSheet";
 import { focusSelectorIn } from "./focus-restore";
@@ -586,11 +584,7 @@ export function definePinboard(): any {
     /** Persist a new position for one row, in one scene write. */
     async #reorder(updates: { id: string; sort: number }[]) {
       if (!updates.length) return;
-      await this.scene?.updateEmbeddedDocuments(
-        "Tile",
-        updates.map((u) => ({ _id: u.id, sort: u.sort })),
-        internal()
-      );
+      await api.reorder(this.scene, updates);
       this.render();
     }
 
@@ -819,42 +813,13 @@ async function onRevealAll(this: any) {
   }
 }
 
-async function applyVisibility(app: any, docs: any[], reveal: boolean) {
-  // Only the pins the gesture changes. "Reveal all" over a scene where most pins already
-  // show wrote every one of them anyway, and re-synced every one's ownership after.
-  const changes = docs.flatMap((doc) => {
-    const pin = readPin(doc);
-    if (!pin) return [];
-    const next = audienceFor(pin.audience, reveal);
-    const same = sameAudience(next, pin.audience) && (doc.hidden === true) === anchorHidden(next);
-    return same ? [] : [{ doc, patch: { audience: next } }];
-  });
-  if (!changes.length) return;
-
-  await store.batchUpdate(app.scene, changes);
-  // Ownership follows the payload, one source at a time; the queue in ownership-sync
-  // keeps two pins of the same journal from racing.
-  for (const { doc } of changes) await syncAnchor(doc);
-  app.render();
-}
-
 /**
- * The audience a bulk reveal or hide should write.
- *
- * A reveal is the eye's own rule, `revealed`: each pin goes back to the audience it
- * remembers. This wrote `everyone` for every pin, so a note narrowed to one player and
- * hidden for a beat was shown to the whole table by the bulk bar or "Reveal all".
- *
- * Hiding an ALREADY-hidden pin must leave `restore` alone. Writing it unconditionally
- * stored `{ kind: "hidden" }`, which `normaliseAudience` rewrites to "everyone" — so a
- * pin narrowed to one player, hidden by hand and then caught by "Hide all", later
- * revealed itself to the whole table. That is the exact failure the remembered audience
- * exists to prevent.
+ * Only the pins the gesture changes, in one scene write, each to the audience it remembers
+ * (`api.setVisibilityMany`). "Reveal all" over a scene where most pins already show wrote
+ * every one of them anyway, and re-synced every one's ownership after.
  */
-function audienceFor(current: DpAudience, reveal: boolean): DpAudience {
-  if (reveal) return revealed(current);
-  if (current.kind === "hidden") return { ...current };
-  return { ...current, kind: "hidden", restore: { kind: current.kind, users: [...current.users] } };
+async function applyVisibility(app: any, docs: any[], reveal: boolean) {
+  if (await api.setVisibilityMany(app.scene, docs, reveal)) app.render();
 }
 
 /**
@@ -880,15 +845,8 @@ async function deleteRows(app: any, docs: any[]) {
     : false;
   if (!confirmed) return;
 
-  // Release every grant first, then delete in ONE scene write. `api.deletePin` per row is
-  // N round trips, which for a dozen selected pins is a visible stagger on every client
-  // and N separate undo entries.
-  for (const doc of docs) await releaseAnchor(doc);
-  await app.scene?.deleteEmbeddedDocuments(
-    "Tile",
-    docs.map((doc: any) => doc.id),
-    internal()
-  );
+  // Every grant released, then ONE scene write: not `api.deletePin` per row.
+  await api.deletePins(app.scene, docs);
 
   app.selected = app.selected.filter((id: string) => !docs.some((doc) => doc.id === id));
   app.render();

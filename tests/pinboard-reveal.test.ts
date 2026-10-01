@@ -120,6 +120,50 @@ describe("the bulk bar's Reveal", () => {
   });
 });
 
+/**
+ * A revealed icon pin opens its document's sheet, which refuses without access; a prop
+ * reads in place. The eye says so when it reveals one with access off. The bulk bar said
+ * nothing — the same "I can see it but it won't open", for every pin it touched. It now
+ * says it once for the batch, as the eye does for one.
+ */
+describe("the bulk bar's Reveal, of an icon pin with access off", () => {
+  /** A hidden pin of this mode, with access sync on or off. */
+  const shaped = (id: string, mode: "pin" | "prop", sync: boolean, sort: number) => {
+    const tile = pinnedTile(id, { kind: "hidden" }, sort);
+    const pin = tile.flags[MODULE_ID][FLAGS.PIN];
+    pin.mode = mode;
+    pin.audience.ownershipSync = { ...pin.audience.ownershipSync, enabled: sync };
+    return tile;
+  };
+  const notices = () =>
+    world.notifications.filter((n: any) => n.message === "DP.notice.revealedNoAccess");
+
+  it.each([
+    [
+      "says so once for two icon pins",
+      [
+        shaped("t1", "pin", false, 0),
+        shaped("t2", "pin", false, 10),
+        shaped("t3", "prop", false, 20),
+      ],
+      [{ type: "info", message: "DP.notice.revealedNoAccess" }],
+    ],
+    [
+      "says nothing when every icon pin grants access, and a prop reads in place",
+      [shaped("t1", "pin", true, 0), shaped("t2", "prop", false, 10)],
+      [],
+    ],
+  ])("%s", async (_what, list, expected) => {
+    await setup(list);
+    board.selected = list.map((tile: any) => tile.id);
+    await board.dispatch("bulkReveal");
+    await settled();
+
+    expect(list.every((tile: any) => tile.hidden === false)).toBe(true);
+    expect(notices()).toEqual(expected);
+  });
+});
+
 describe("Reveal all", () => {
   it("reveals one hidden pin to its own audience without asking", async () => {
     await setup([
