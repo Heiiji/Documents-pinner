@@ -259,11 +259,6 @@ export function warmFontCache(): void {
   onIdle(() => void inlineFonts(), 3000);
 }
 
-/** For tests and for the Pinboard's diagnostics. */
-export function inlinerStats(): { entries: number; bytes: number } {
-  return { entries: cache.size, bytes: totalBytes };
-}
-
 export function clearInliner(): void {
   cache.clear();
   inFlight.clear();

@@ -31,10 +31,6 @@ export function setLogLevel(next: LogLevel): void {
   level = ORDER[next] === undefined ? "warn" : next;
 }
 
-export function logLevel(): LogLevel {
-  return level;
-}
-
 function enabled(want: LogLevel): boolean {
   return ORDER[want] <= ORDER[level];
 }
@@ -68,11 +64,5 @@ export function logger(scope: string) {
     info: (message: string, ...detail: unknown[]) => emit("info", "info", scope, message, detail),
     debug: (message: string, ...detail: unknown[]) =>
       emit("debug", "debug", scope, message, detail),
-    /** Whether `debug` would print, for messages that cost something to build. */
-    get verbose(): boolean {
-      return enabled("debug");
-    },
   };
 }
-
-export type Logger = ReturnType<typeof logger>;

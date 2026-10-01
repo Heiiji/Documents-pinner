@@ -189,10 +189,6 @@ export function worldCollection(documentName: string): any {
   return known[documentName] ?? null;
 }
 
-export function randomId(): string {
-  return ns("utils.randomID")?.() ?? Math.random().toString(36).slice(2, 18);
-}
-
 /**
  * The renderer's pixel ratio.
  *

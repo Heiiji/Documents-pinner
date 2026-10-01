@@ -271,10 +271,6 @@ export function stageMatrix(): Mat {
   return { a: t.a, b: t.b, c: t.c, d: t.d, tx: t.tx, ty: t.ty };
 }
 
-export function sceneToScreen(p: Point): Point {
-  return applyMat(stageMatrix(), p);
-}
-
 export function screenToScene(p: Point): Point {
   return applyInverseMat(stageMatrix(), p);
 }

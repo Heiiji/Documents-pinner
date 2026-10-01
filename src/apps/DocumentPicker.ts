@@ -32,9 +32,6 @@ import type { DpSource } from "../types/dp";
 let PickerClass: any = null;
 let instance: any = null;
 
-/** What can be picked, searched and filtered: the search itself is `sources/search.ts`. */
-export { filterEntries, packEntries, pickerEntries, type PickerEntry } from "../sources/search";
-
 /** The chips above the list: every kind at once, or one. Images stay the Browse button. */
 type PickerKind = "all" | Pinnable;
 const KINDS: { kind: PickerKind; key: string }[] = [

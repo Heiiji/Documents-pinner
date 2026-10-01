@@ -113,11 +113,6 @@ export function setRasterisationAvailable(value: boolean | null): void {
   consecutiveFailures = 0;
 }
 
-/** For the Pinboard's diagnostics and for tests. */
-export function rasterisationFailures(): number {
-  return consecutiveFailures;
-}
-
 /**
  * The stylesheets inlined verbatim into every SVG, fetched once.
  *

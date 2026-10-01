@@ -172,10 +172,6 @@ export function readerScrollTop(
   return Math.min(max, Math.max(0, next));
 }
 
-export function focusedPinId(): string | null {
-  return openId;
-}
-
 export function isReaderOpen(): boolean {
   return openId !== null;
 }

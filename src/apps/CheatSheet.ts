@@ -58,11 +58,6 @@ export function currentBindings(action: string): string[] | null {
   }
 }
 
-/** The surface whose sheet is up, if any. */
-export function cheatSheetOpen(): CheatSurface | null {
-  return shown?.surface ?? null;
-}
-
 /**
  * Close the sheet — only `surface`'s, when one is named. Returns whether one closed, so an
  * Escape handler can stop there instead of also cancelling what the sheet was about.

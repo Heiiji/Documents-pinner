@@ -547,9 +547,6 @@ function onTogglePalette(this: any, _event: Event, target: HTMLElement) {
   }
 }
 
-// Re-exported: the helper moved to `focus-restore.ts` when the Studios needed it too.
-export { focusSelectorIn };
-
 /** Reveal & spotlight. Nothing to render on failure but the GM must hear of it. */
 function onSpotlight(this: any) {
   void api

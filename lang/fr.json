@@ -1,9 +1,6 @@
 {
-  "DP.audience.discovered": "Révélé à la découverte ({count} pour l'instant)",
   "DP.audience.everyone": "Visible par tous",
   "DP.audience.hidden": "Masquée aux joueurs",
-  "DP.audience.selected": "Visible par {count} joueur(s) sur {userCount}",
-  "DP.audience.unknown": "Visibilité inconnue",
   "DP.board.allLevels": "Tous les niveaux",
   "DP.board.bulk": "Actions sur les épingles sélectionnées",
   "DP.board.deleteBody": "Supprimer {count} épingle(s) ? Les documents correspondants ne sont pas modifiés.",
@@ -207,7 +204,6 @@
   "DP.migration.prompt": "{pinCount} épingle(s) réparties sur {sceneCount} scène(s) que vous n'avez pas ouvertes proviennent d'une version antérieure. Les mettre à jour maintenant ? Elles fonctionnent déjà dans les deux cas ; il s'agit seulement de les réécrire au format actuel.",
   "DP.migration.reanchored": "{count} accessoire(s) ré-ancré(s) : le cadre de sélection et la poignée de redimensionnement sont désormais sur le papier. Rien n'a bougé sur la carte.",
   "DP.migration.title": "Documents Pinner — mise à jour des épingles",
-  "DP.module.title": "Documents Pinner",
   "DP.notice.cannotOpenYet": "Vous voyez cette épingle, mais le MJ n'a pas encore accordé l'accès au document.",
   "DP.notice.degraded": "Les épingles coûtaient trop cher par image ; le niveau de détail de chacune a été abaissé d'un cran.",
   "DP.notice.editHoldFailed": "L'épingle n'a pas pu être masquée : elle reste visible pendant que vous la modifiez.",

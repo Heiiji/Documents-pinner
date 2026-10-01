@@ -10,7 +10,7 @@
  * wrong coupling for "reveal the letter the moment they find it".
  */
 
-import type { DpAudience, DpAudienceKind, DpNotice } from "../types/dp";
+import type { DpAudience, DpAudienceKind } from "../types/dp";
 
 export interface AudienceContext {
   isGM: boolean;
@@ -310,23 +310,4 @@ export function cycleAudience(audience: DpAudience): DpAudience {
     return { ...audience, kind: "selected", users: [...remembered], restore: null };
   }
   return { ...audience, kind: "everyone", users: [], restore: null };
-}
-
-/**
- * A description of the resulting state, as an i18n key plus data. Pure modules return
- * keys, never prose, so localisation happens at the edge.
- */
-export function describeAudience(audience: DpAudience, userCount: number): DpNotice {
-  switch (audience.kind) {
-    case "hidden":
-      return { key: "DP.audience.hidden" };
-    case "everyone":
-      return { key: "DP.audience.everyone" };
-    case "selected":
-      return { key: "DP.audience.selected", data: { count: audience.users.length, userCount } };
-    case "discovered":
-      return { key: "DP.audience.discovered", data: { count: audience.discovered.length } };
-    default:
-      return { key: "DP.audience.unknown" };
-  }
 }
