@@ -137,8 +137,10 @@ Hooks.on("canvasTearDown", () => {
 });
 
 Hooks.on("canvasPan", () => {
-  // Cheap and idempotent: both of these dirty-check before writing anything, so this
-  // hook firing every tick during an animated pan costs six float comparisons.
+  // Cheap and idempotent, and both dirty-checked: the overlay compares the stage's six
+  // matrix components and writes only when they moved — at once, inside the ticker's
+  // frame — and the reader re-places itself only when its rectangle changed, which in
+  // scene space a pan never does. This hook fires every tick of an animated pan.
   syncTransform();
   repositionReader();
 });

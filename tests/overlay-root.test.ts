@@ -110,6 +110,21 @@ describe("the overlay on canvasReady", () => {
     expect(element.style.height).toBe("1920px");
   });
 
+  /**
+   * During an animated pan `canvasPan` fires from inside the PIXI ticker, which is already
+   * a `requestAnimationFrame` callback: a transform queued from there landed on the NEXT
+   * frame, and every card was drawn a frame behind the map for the whole pan.
+   */
+  it("writes the stage transform at once, in the frame that moved the map", () => {
+    const world = installWorld({});
+    world.canvas.stage.worldTransform = { a: 2, b: 0, c: 0, d: 2, tx: -300, ty: 40 };
+
+    expect(overlayRoot.syncTransform()).toBe(true);
+
+    const element = document.getElementById("documents-pinner-overlay")!;
+    expect(element.style.transform).toBe("matrix(2,0,0,2,-300,40)");
+  });
+
   it("does nothing rather than sizing to zero when the scene has no dimensions", async () => {
     const world = installWorld({});
     world.canvas.dimensions = undefined;

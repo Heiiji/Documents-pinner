@@ -225,7 +225,7 @@ function upsert(entry: DomPropEntry, level: EffectsLevel): void {
       current.element.innerHTML = card.html;
       current.naturalHeight = card.naturalHeight ?? null;
       current.failures = 0;
-      applyOverflow(current);
+      write(current.element, () => markOverflow(current));
     })
     .catch((error) => {
       log.warn(`DOM prop failed to resolve:`, error);
@@ -274,8 +274,15 @@ export function invalidateDomProps(ids: Iterable<string>): void {
  * frame core drew — which is why a text prop showed no resize handle (it was under the
  * paper) and why a dragged prop trailed a white book (core's preview, where the tile
  * actually was).
+ *
+ * `now` writes in place rather than through `write()`'s frame, for `followDomProp`: core
+ * refreshes a dragged or resized tile from inside its own frame, and a queued write
+ * landed on the next one — the card a frame behind the handles. The LOD pass keeps the
+ * queue, which batches fifty cards into one frame. Either way the write reads the
+ * rectangle when it APPLIES, so a write queued by an earlier pass cannot put back a
+ * position an immediate one has already moved on from.
  */
-function placeGeometry(prop: DomProp, doc: any): void {
+function placeGeometry(prop: DomProp, doc: any, now = false): void {
   const next = tileRect(doc);
   const last = prop.placedAt;
   if (
@@ -290,38 +297,42 @@ function placeGeometry(prop: DomProp, doc: any): void {
   }
   prop.placedAt = next;
 
-  const element = prop.element;
-  write(element, () => {
-    element.style.left = `${next.x}px`;
-    element.style.top = `${next.y}px`;
-    element.style.width = `${next.width}px`;
-    element.style.height = `${next.height}px`;
-    element.style.transform = `rotate(${next.rotation}deg)`;
-  });
-  applyOverflow(prop);
+  if (now) paintGeometry(prop);
+  else write(prop.element, () => paintGeometry(prop));
+}
+
+/** The rectangle last placed, and the overflow mark that follows it, onto the element. */
+function paintGeometry(prop: DomProp): void {
+  const rect = prop.placedAt;
+  if (!rect) return;
+  const style = prop.element.style;
+  style.left = `${rect.x}px`;
+  style.top = `${rect.y}px`;
+  style.width = `${rect.width}px`;
+  style.height = `${rect.height}px`;
+  style.transform = `rotate(${rect.rotation}deg)`;
+  markOverflow(prop);
 }
 
 /**
  * Mark the card when its content does not fit the box, and unmark it when it does.
+ * Called INSIDE a write, never before one: it reads the card the element holds when the
+ * write applies, and the box and the height as they are then.
  *
  * The resolver marks the card for the size it was resolved at; a resize changes the box
  * without a resolve, so the mark has to follow the geometry here. Skipped entirely while
  * the natural height is unknown — a card that cannot be measured is never told it
  * overflows.
  */
-function applyOverflow(prop: DomProp): void {
+function markOverflow(prop: DomProp): void {
   const height = prop.placedAt?.height;
   if (prop.naturalHeight === null || height === undefined) return;
-  const overflow = prop.naturalHeight > height + 1;
-
   const card = prop.element.querySelector<HTMLElement>(".dp-card");
   if (!card) return;
-  const marked = card.dataset.dpOverflow === "true";
-  if (marked === overflow) return;
-  write(card, () => {
-    if (overflow) card.dataset.dpOverflow = "true";
-    else delete card.dataset.dpOverflow;
-  });
+  const overflow = prop.naturalHeight > height + 1;
+  if ((card.dataset.dpOverflow === "true") === overflow) return;
+  if (overflow) card.dataset.dpOverflow = "true";
+  else delete card.dataset.dpOverflow;
 }
 
 function applyAlpha(prop: DomProp, alpha: number): void {
@@ -363,7 +374,7 @@ function arrive(element: HTMLElement, entry: DomPropEntry): void {
  * Core's resize handles mutate the document in memory on every tick of the drag and
  * commit on release; the LOD pass only hears the commit. This is what lets the card
  * follow the handles live, and it is dirty-checked, so a refresh that moved nothing
- * costs a few compares.
+ * costs a few compares. Written at once, in core's own frame: see `placeGeometry`.
  *
  * `id` names the card when the document is not the card's own: a drag moves core's
  * preview clone, whose document is a copy, and the card that must follow it is the
@@ -372,7 +383,7 @@ function arrive(element: HTMLElement, entry: DomPropEntry): void {
 export function followDomProp(doc: any, id: string | undefined = doc?.id): void {
   const prop = id ? props.get(id) : undefined;
   if (!prop) return;
-  placeGeometry(prop, doc);
+  placeGeometry(prop, doc, true);
 }
 
 /**

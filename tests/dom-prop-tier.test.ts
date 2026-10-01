@@ -432,6 +432,48 @@ describe("followDomProp", () => {
     expect(domPropCount()).toBe(0);
     expect(vi.mocked(write)).not.toHaveBeenCalled();
   });
+
+  /**
+   * Core refreshes a dragged or resized tile from inside its own frame; a write queued
+   * from there landed on the next one, and the card trailed the handles by a frame.
+   */
+  it("writes the new geometry at once, not on the next frame", async () => {
+    syncDomTier([entry({ pin: sized() })]);
+    await settle();
+
+    followDomProp(doc({ x: 500, width: 640, height: 900 }));
+
+    const box = overlay()!.querySelector<HTMLElement>(".dp-prop")!;
+    expect(box.style.left).toBe("180px");
+    expect(box.style.width).toBe("640px");
+    expect(box.style.height).toBe("900px");
+  });
+
+  it("is not put back by a placement an earlier LOD pass queued", async () => {
+    syncDomTier([entry({ pin: sized() })]);
+    await settle();
+
+    // A pass queues the committed position; the drag then moves the card past it.
+    syncDomTier([entry({ pin: sized(), doc: doc({ x: 900 }) })]);
+    followDomProp(doc({ x: 500 }));
+    await settle();
+
+    expect(overlay()!.querySelector<HTMLElement>(".dp-prop")!.style.left).toBe("300px");
+  });
+});
+
+describe("placement by the LOD pass", () => {
+  it("still batches into the next frame, with every other card", async () => {
+    syncDomTier([entry({ pin: sized() })]);
+    await settle();
+    const box = overlay()!.querySelector<HTMLElement>(".dp-prop")!;
+
+    syncDomTier([entry({ pin: sized(), doc: doc({ x: 900 }) })]);
+    expect(box.style.left).toBe("-100px");
+
+    await settle();
+    expect(box.style.left).toBe("700px");
+  });
 });
 
 describe("the reveal", () => {
