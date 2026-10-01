@@ -1,15 +1,19 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { DELETE_PREFIX, FLAGS, INTERNAL_OPTION, MODULE_ID } from "../src/const";
+import { hidden, setUserVisible } from "../src/data/audience";
 import { defaultPin, validatePin } from "../src/data/pin-schema";
 import {
   all,
   batchUpdate,
   convertMode,
   enqueue,
+  removeMany,
   resize,
+  setTexture,
   settled,
   unpin,
   update,
+  updateWith,
 } from "../src/data/PinStore";
 
 const FLAG_PATH = `flags.${MODULE_ID}.${FLAGS.PIN}`;
@@ -412,5 +416,206 @@ describe("resize", () => {
     const doc = fakeDoc();
     await resize(doc, { width: 0, height: -5 });
     expect(doc.writes[0].data).toMatchObject({ width: 1, height: 1 });
+  });
+});
+
+/** Hold the doc's next write until the returned function is called; later ones pass. */
+function gateNextWrite(doc: any): () => void {
+  let release: () => void = () => {};
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  const original = doc.update.bind(doc);
+  let gated = false;
+  doc.update = async (data: any, options: any) => {
+    if (!gated) {
+      gated = true;
+      await gate;
+    }
+    return original(data, options);
+  };
+  return () => release();
+}
+
+/**
+ * A change decided inside the queue (DESIGN A29).
+ *
+ * The queue ordered every write, and still lost one: the HUD's chips built the whole next
+ * audience from the payload as it was BEFORE their turn, and `mergePin` replaces a list
+ * whole. Two clicks in one tick — hide it from Ali, hide it from Ben — each read
+ * `everyone`, each wrote "everybody but me", and the second put Ali back.
+ */
+describe("updateWith", () => {
+  const players = ["ali", "ben", "cy"];
+  const everyone = { audience: { ...defaultPin().audience, kind: "everyone" as const } };
+  const without = (userId: string) => (pin: any) => ({
+    audience: setUserVisible(pin.audience, userId, false, players),
+  });
+
+  it("decides the patch from the payload the write in flight leaves, not the one before it", async () => {
+    const doc = fakeDoc({ pin: everyone });
+    const release = gateNextWrite(doc);
+    const seen: string[] = [];
+
+    const first = update(doc, { display: { label: "in flight" } });
+    const second = updateWith(doc, (pin) => {
+      seen.push(pin.display.label);
+      return { display: { padding: 0.2 } };
+    });
+    release();
+    await Promise.all([first, second]);
+
+    expect(seen).toEqual(["in flight"]);
+    expect(currentPin(doc).display).toMatchObject({ label: "in flight", padding: 0.2 });
+  });
+
+  it("lands both of two chip clicks made in the same tick", async () => {
+    const doc = fakeDoc({ pin: everyone });
+    const release = gateNextWrite(doc);
+
+    const ali = updateWith(doc, without("ali"));
+    const ben = updateWith(doc, without("ben"));
+    release();
+    await Promise.all([ali, ben]);
+
+    expect(currentPin(doc).audience).toMatchObject({ kind: "selected", users: ["cy"] });
+  });
+
+  it("writes nothing when the decision is null, and says what it found", async () => {
+    const doc = fakeDoc({ pin: everyone });
+    const outcome = await updateWith(doc, () => null);
+    expect(doc.writes).toEqual([]);
+    expect(outcome.patch).toBeNull();
+    expect(outcome.result).toBeNull();
+    expect(outcome.before?.audience.kind).toBe("everyone");
+  });
+
+  it("does nothing to a tile that is not a pin, and never asks", async () => {
+    const doc = fakeDoc({ noPin: true });
+    const fn = vi.fn(() => ({ display: { padding: 0.2 } }));
+    await expect(updateWith(doc, fn)).resolves.toEqual({ before: null, patch: null, result: null });
+    expect(fn).not.toHaveBeenCalled();
+    expect(doc.writes).toEqual([]);
+  });
+
+  it("derives `hidden` from the patch it decided, and only when that patch moves the audience", async () => {
+    const doc = fakeDoc();
+    const shown = await updateWith(doc, () => ({ audience: { kind: "everyone" as const } }));
+    expect(doc.writes[0].data.hidden).toBe(false);
+    expect(shown.patch).toEqual({ audience: { kind: "everyone" } });
+    expect(shown.result).toBe(doc);
+
+    await updateWith(doc, () => ({ display: { label: "renamed" } }));
+    expect("hidden" in doc.writes[1].data).toBe(false);
+    expect(doc.writes[1].options[INTERNAL_OPTION]).toBe(true);
+  });
+
+  it("decides the implied tile fields from the same payload", async () => {
+    const doc = fakeDoc();
+    await updateWith(
+      doc,
+      () => ({ mode: "pin" as const }),
+      (pin) => ({ "texture.src": `was-${pin.mode}` })
+    );
+    expect(doc.writes[0].data["texture.src"]).toBe("was-prop");
+  });
+});
+
+describe("batchUpdate's function form", () => {
+  it("does not overwrite a chip click still in flight", async () => {
+    const doc = fakeDoc({ pin: { audience: { ...defaultPin().audience, kind: "everyone" } } });
+    const scene: any = fakeScene([doc]);
+    // Core's scene write lands each change on its document.
+    scene.updateEmbeddedDocuments = async (_type: string, updates: any[], options: any) => {
+      scene.calls.push({ updates, options });
+      for (const change of updates) {
+        const data = { ...change };
+        delete data._id;
+        await doc.update(data, options);
+      }
+      return updates;
+    };
+    const release = gateNextWrite(doc);
+
+    // The chip: hide it from Ali. The batch: hide the pin, remembering who it was for.
+    const chip = updateWith(doc, (pin) => ({
+      audience: setUserVisible(pin.audience, "ali", false, ["ali", "ben", "cy"]),
+    }));
+    const batch = batchUpdate(scene, [
+      { doc, patch: (pin) => ({ audience: hidden(pin.audience) }) },
+    ]);
+    release();
+    await Promise.all([chip, batch]);
+
+    expect(currentPin(doc).audience).toMatchObject({
+      kind: "hidden",
+      restore: { kind: "selected", users: ["ben", "cy"] },
+    });
+  });
+
+  it("leaves out a pin whose decision is null, and writes nothing when every one is", async () => {
+    const docs = [fakeDoc({ id: "a" }), fakeDoc({ id: "b" })];
+    const scene = fakeScene(docs);
+    await batchUpdate(scene, [
+      { doc: docs[0], patch: () => null },
+      { doc: docs[1], patch: () => ({ display: { label: "b" } }) },
+    ]);
+    expect(scene.calls[0].updates.map((u: any) => u._id)).toEqual(["b"]);
+
+    await batchUpdate(scene, [{ doc: docs[0], patch: () => null }]);
+    expect(scene.calls).toHaveLength(1);
+  });
+});
+
+describe("setTexture", () => {
+  it("waits its turn and compares with the texture the write before it left", async () => {
+    const doc = fakeDoc();
+    doc.texture = { src: "icons/svg/book.svg" };
+    const original = doc.update.bind(doc);
+    doc.update = async (data: any, options: any) => {
+      if (data["texture.src"]) doc.texture = { src: data["texture.src"] };
+      return original(data, options);
+    };
+
+    const [first, second] = await Promise.all([
+      setTexture(doc, "icons/svg/skull.svg"),
+      setTexture(doc, "icons/svg/skull.svg"),
+    ]);
+
+    expect([first, second]).toEqual([true, false]);
+    expect(doc.writes).toHaveLength(1);
+    expect(doc.writes[0].data).toEqual({ "texture.src": "icons/svg/skull.svg" });
+    expect(doc.writes[0].options[INTERNAL_OPTION]).toBe(true);
+  });
+
+  it("refuses an image pin, whose texture is its source", async () => {
+    const doc = fakeDoc({
+      pin: { source: { ...defaultPin().source, kind: "image", src: "maps/a.webp" } },
+    });
+    await expect(setTexture(doc, "icons/svg/skull.svg")).resolves.toBe(false);
+    expect(doc.writes).toEqual([]);
+  });
+});
+
+describe("removeMany", () => {
+  it("lets the writes already queued land, runs its first step, then deletes in one write", async () => {
+    const docs = [fakeDoc({ id: "a" }), fakeDoc({ id: "b" })];
+    const order: string[] = [];
+    const scene: any = {
+      async deleteEmbeddedDocuments(_type: string, ids: string[], options: any) {
+        order.push(`delete ${ids.join(",")} ${options[INTERNAL_OPTION]}`);
+        return ids;
+      },
+    };
+    const original = docs[0].update.bind(docs[0]);
+    docs[0].update = async (data: any, options: any) => {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      order.push("write a");
+      return original(data, options);
+    };
+
+    const write = update(docs[0], { display: { label: "queued" } });
+    await removeMany(scene, docs, async () => void order.push("release"));
+    await write;
+
+    expect(order).toEqual(["write a", "release", "delete a,b true"]);
   });
 });

@@ -11,7 +11,9 @@
  *    a HUD chip click landing while a Pin Studio field is still saving — would each
  *    read the payload, patch their own copy and write the whole thing back, and the
  *    slower one would silently undo the faster. The queue makes that impossible
- *    without holding a lock across an await in the caller.
+ *    without holding a lock across an await in the caller — provided the change is
+ *    DECIDED inside it too: a whole audience built from a payload read before the queue
+ *    was reached is ordered correctly and wrong all the same (`updateWith`, A29).
  *
  * 3. **`hidden` is derived, never set by hand.** The core field and our audience must
  *    agree, so the module writes them here, together, in one update — and only when the
@@ -268,12 +270,85 @@ export function update(
   return enqueue(queueKey(doc), async () => {
     const current = readPin(doc);
     if (!current) return null;
+    return writePatch(doc, current, patch, fields);
+  });
+}
 
-    const { pin } = mergePin(current, patch);
-    return doc.update(
-      { ...fields, ...hiddenFor(patch, pin), ...payloadWrite(rawPinFlag(doc), pin) },
-      internal()
-    );
+/** One patch merged onto the payload the queue found, with the tile fields it implies. */
+function writePatch(
+  doc: any,
+  current: DpPinFlags,
+  patch: PinPatch,
+  fields: Record<string, unknown>
+): Promise<any> {
+  const { pin } = mergePin(current, patch);
+  return doc.update(
+    { ...fields, ...hiddenFor(patch, pin), ...payloadWrite(rawPinFlag(doc), pin) },
+    internal()
+  );
+}
+
+/**
+ * A patch decided from the payload as the queue finds it: `null` writes nothing. Its
+ * caller sees the result, so it can collect what it decided as well.
+ */
+export type PatchOf<P extends PinPatch = PinPatch> = (current: DpPinFlags) => P | null;
+
+/** What `updateWith` did: the payload it decided from, the patch it wrote, the update. */
+export interface UpdateOutcome<P extends PinPatch = PinPatch> {
+  /** The payload the patch was decided from, or null for a tile that is not a pin. */
+  before: DpPinFlags | null;
+  /** The patch written, or null when nothing was. */
+  patch: P | null;
+  /** What the document update resolved to; null when nothing was written. */
+  result: any;
+}
+
+/**
+ * Patch a pin with a change that depends on what the pin holds NOW (DESIGN A29).
+ *
+ * `update` serialises the write, but every caller that built a whole audience did it from
+ * a payload read BEFORE its turn in the queue, and `mergePin` replaces an array whole. So
+ * two chip clicks in one tick — hide it from Ali, hide it from Ben — each read the same
+ * `everyone`, each wrote a list of everybody else, and the second put Ali back. The queue
+ * ordered two writes that had already been decided wrong.
+ *
+ * `fn` is the decision, and it runs inside the queue, on the payload the previous write
+ * left. `fields` are the tile fields the write implies, as for `update`; given as a
+ * function, they are decided from the same payload. The return value is not `update`'s —
+ * `patch()` hands that one to other modules — but the payload decided from and the patch
+ * written beside it, which is what a caller needs to say what happened.
+ */
+export function updateWith<P extends PinPatch>(
+  doc: any,
+  fn: PatchOf<P>,
+  fields: Record<string, unknown> | ((current: DpPinFlags) => Record<string, unknown>) = {}
+): Promise<UpdateOutcome<P>> {
+  return enqueue(queueKey(doc), async () => {
+    const before = readPin(doc);
+    if (!before) return { before: null, patch: null, result: null };
+    const patch = fn(before);
+    if (!patch) return { before, patch: null, result: null };
+    const implied = typeof fields === "function" ? fields(before) : fields;
+    return { before, patch, result: await writePatch(doc, before, patch, implied) };
+  });
+}
+
+/**
+ * Point the tile at another texture: a document pin's icon.
+ *
+ * Through the queue, and compared inside it, like every other write: an icon chosen while
+ * a retarget was still landing compared itself with the texture the retarget was about to
+ * replace. An image pin is refused here rather than by its caller, for the same reason —
+ * its texture IS its source (`anchorTexture` in `api.ts`), and only a change of source
+ * may move it. Resolves whether anything was written.
+ */
+export function setTexture(doc: any, src: string): Promise<boolean> {
+  return enqueue(queueKey(doc), async () => {
+    const pin = readPin(doc);
+    if (!pin || pin.source.kind !== "document" || doc.texture?.src === src) return false;
+    await doc.update({ "texture.src": src }, internal());
+    return true;
   });
 }
 
@@ -360,8 +435,16 @@ function derivedSize(mode: DpMode): { width: number; height: number } {
  *
  * The Pinboard's bulk actions are the reason this exists: "reveal to all" over a dozen
  * pins must land as one change on every client, not a dozen staggered ones.
+ *
+ * A patch may be a function of the payload, as for `updateWith`, and that is the form a
+ * bulk reveal needs: what it writes depends on the audience each pin holds, and an
+ * audience built before the queue was reached could undo a chip click still in flight
+ * (DESIGN A25's follow-up, A29). A function's `null` leaves its pin out of the write.
  */
-export function batchUpdate(scene: any, entries: { doc: any; patch: PinPatch }[]): Promise<any[]> {
+export function batchUpdate(
+  scene: any,
+  entries: { doc: any; patch: PinPatch | PatchOf }[]
+): Promise<any[]> {
   // Through the queue, like every other writer. The payloads are read INSIDE it, so a
   // bulk reveal landing on top of an in-flight chip toggle sees that toggle's result
   // rather than the payload as it was before.
@@ -369,9 +452,11 @@ export function batchUpdate(scene: any, entries: { doc: any; patch: PinPatch }[]
     entries.map(({ doc }) => queueKey(doc)),
     async () => {
       const updates = entries
-        .map(({ doc, patch }) => {
+        .map(({ doc, patch: given }) => {
           const current = readPin(doc);
           if (!current) return null;
+          const patch = typeof given === "function" ? given(current) : given;
+          if (!patch) return null;
           const { pin } = mergePin(current, patch);
           return { _id: doc.id, ...hiddenFor(patch, pin), ...payloadWrite(rawPinFlag(doc), pin) };
         })
@@ -381,6 +466,30 @@ export function batchUpdate(scene: any, entries: { doc: any; patch: PinPatch }[]
       return scene.updateEmbeddedDocuments("Tile", updates, internal());
     }
   );
+}
+
+/**
+ * Delete many anchors in one scene write, after every write already queued on them.
+ *
+ * The bulk delete read nothing from the queue and joined none of it, so a chip click still
+ * in flight landed on a tile that was being deleted, and a sync it then started granted on
+ * behalf of a pin that no longer existed. `first` runs inside the same turn, before the
+ * delete — the place for the grants' release. It must not wait on a write queued on one of
+ * these anchors (`update`, `updateWith`, ...): it would wait for itself (DESIGN A22).
+ */
+export function removeMany(
+  scene: any,
+  docs: readonly any[],
+  first: () => Promise<unknown> = async () => {}
+): Promise<any> {
+  return enqueueAll(docs.map(queueKey), async () => {
+    await first();
+    return scene?.deleteEmbeddedDocuments(
+      "Tile",
+      docs.map((doc: any) => doc.id),
+      internal()
+    );
+  });
 }
 
 /**
