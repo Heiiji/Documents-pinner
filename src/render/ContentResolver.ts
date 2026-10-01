@@ -30,6 +30,7 @@ import { pdfSourceOf, renderPdfPage } from "./PdfPage";
 import { hashContent } from "./TextureCache";
 import { measureCardHeight } from "./measure";
 import { cardMetrics } from "../data/pin-schema";
+import { packLockedHere } from "../sources/packs";
 import type { DpPinFlags } from "../types/dp";
 
 export interface ResolvedCard {
@@ -40,6 +41,11 @@ export interface ResolvedCard {
   /** Changes whenever the rendered content would change. Part of the cache key. */
   contentHash: string;
   missing: boolean;
+  /**
+   * Why a placeholder is one: the document is gone, or it is in a compendium this
+   * client's role cannot read. Absent on a card that drew its source.
+   */
+  reason?: "missing" | "packLocked";
   /**
    * The height at which the whole content fits at this width, type size and margin —
    * what "fit to content" writes — or `null` when it cannot be measured.
@@ -153,8 +159,11 @@ export async function resolveCard(
     };
   }
 
+  // Never a blank and never a request the server will refuse: a player whose role cannot
+  // read the pack gets a placeholder that says so, and no load is attempted (R2).
+  if (packLockedHere(pin.source.uuid)) return placeholder(common, "packLocked");
   const source = await api.resolveSource(pin);
-  if (!source) return placeholder(common);
+  if (!source) return placeholder(common, "missing");
 
   // A PDF is drawn, not enriched: pdf.js paints the page and the card carries the image.
   // This is also the one source type that can reach the canvas tier — see `PdfPage.ts`.
@@ -208,14 +217,15 @@ export async function resolveCard(
   };
 }
 
-function placeholder(common: any): ResolvedCard {
-  const title = t("DP.card.missing");
+function placeholder(common: any, reason: "missing" | "packLocked"): ResolvedCard {
+  const title = t(reason === "packLocked" ? "DP.card.packLocked" : "DP.card.missing");
   return {
     html: cardHtml({ ...common, title, bodyHtml: "", missing: true, showTitle: false }),
     title,
     readable: false,
-    contentHash: hashContent("missing"),
+    contentHash: hashContent(reason),
     missing: true,
+    reason,
     naturalHeight: null,
   };
 }

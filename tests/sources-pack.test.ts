@@ -24,6 +24,7 @@ import {
   uninstallWorld,
   USER_ROLES,
   type FakePackOptions,
+  type InstalledSources,
 } from "./helpers/fake-foundry";
 
 vi.mock("../src/render/PdfPage", async (importOriginal) => ({
@@ -92,10 +93,11 @@ function pinTile(source: Partial<DpSource>, over: Record<string, any> = {}) {
 const pinOf = (tile: any) => tile.flags[MODULE_ID][FLAGS.PIN];
 
 let world: ReturnType<typeof installWorld>;
+let sources: InstalledSources;
 
 function install(tile: any, pack = handouts(), isGM = true) {
   world = installWorld({ isGM, players: PLAYERS, tiles: [tile] });
-  installSources(world, { packs: [pack] });
+  sources = installSources(world, { packs: [pack] });
   return pack;
 }
 
@@ -243,4 +245,36 @@ describe("Pin Studio's Content tab on a compendium pin", () => {
       expect([...options].map((option) => option.value)).toEqual(["", "baron", "keep", "deed"]);
     }
   });
+});
+
+describe("a player whose role cannot read the compendium", () => {
+  it.each([
+    ["resolves null", "null" as const],
+    ["throws", "throw" as const],
+  ])(
+    "gets a placeholder that says why, and nothing is asked of the server (a refused load %s)",
+    async (_load, refuses) => {
+      const prop = pinTile({ uuid: ENTRY });
+      install(prop, handouts({ ownership: TRUSTED_ONLY, refuses }), false);
+      const { resolveCard } = await import("../src/render/ContentResolver");
+      const { openReader } = await import("../src/apps/ReaderOverlay");
+      const { openLocally } = await import("../src/api");
+
+      const card = await resolveCard(pinOf(prop), { width: 400, height: 560 });
+      expect(card).toMatchObject({ missing: true, reason: "packLocked" });
+
+      await openReader(prop);
+      expect(document.querySelector(".dp-reader")).toBeNull();
+
+      // An icon opens the sheet rather than the reader, and says the same.
+      pinOf(prop).mode = "pin";
+      await openLocally(prop);
+
+      expect(world.notifications.map((n) => n.message)).toEqual([
+        "DP.notice.packLocked",
+        "DP.notice.packLocked",
+      ]);
+      expect(sources.fromUuidCalls).toEqual([]);
+    }
+  );
 });

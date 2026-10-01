@@ -34,7 +34,7 @@ import * as settings from "./settings";
 import { centreOf, docPositionFor } from "./canvas/transform";
 import { nextToReveal, type PinboardQuery, type RowFacts } from "./apps/pinboard-model";
 import { describeSource, rememberShown } from "./sources/describe";
-import { packOf, packReadableBy } from "./sources/packs";
+import { packLockedHere, packOf, packReadableBy } from "./sources/packs";
 import { isPackUuid } from "./sources/uuid";
 import type { DpAudience, DpMode, DpPinFlags, DpSource } from "./types/dp";
 
@@ -106,10 +106,12 @@ export function sourceFromDocument(doc: any): DpSource | null {
 
 /**
  * The document a pin shows, loaded: the chosen page, else the named document, or `null`
- * for an image source or a deleted target.
+ * for an image source, a deleted target — or a compendium this client's role cannot read,
+ * which is never asked for (`packLockedHere`).
  */
 export async function resolveSource(pin: DpPinFlags): Promise<any> {
   if (pin.source.kind !== "document") return null;
+  if (packLockedHere(pin.source.uuid)) return null;
   const doc = await resolveUuid(pin.source.uuid);
   if (!doc) return null;
   const shown =
@@ -172,6 +174,7 @@ export async function pageChoicesFor(
 ): Promise<{ id: string; name: string; type: string }[]> {
   if (pin.source.kind !== "document") return [];
   if (!isPackUuid(pin.source.uuid)) return pageChoices(pin);
+  if (packLockedHere(pin.source.uuid)) return [];
   return pagesOf(await resolveUuid(pin.source.uuid));
 }
 
@@ -574,6 +577,12 @@ export async function openLocally(anchorDoc: any): Promise<void> {
 
   if (readsInPlace(pin)) {
     Hooks.call(`${MODULE_ID}.openReader`, anchorDoc);
+    return;
+  }
+
+  // A compendium this player's role cannot read is not asked for: say so, as the card does.
+  if (packLockedHere(pin.source.uuid)) {
+    notify({ key: "DP.notice.packLocked" }, "info");
     return;
   }
 

@@ -233,9 +233,13 @@ export async function openReader(tileDoc: any): Promise<void> {
   // top of that rather than the gate. A GM who wants the gate leaves ownership sync on,
   // and the ⚿ glyph tells them when presence and access disagree.
   //
-  // The refusal belongs to a source that is genuinely gone, and that one says so.
+  // The refusal belongs to a source that is genuinely gone, and that one says so — or to
+  // one in a compendium this player's role cannot open, which says that instead.
   if (card.missing) {
-    notify({ key: "DP.notice.sourceMissing" }, "warn");
+    notify(
+      { key: card.reason === "packLocked" ? "DP.notice.packLocked" : "DP.notice.sourceMissing" },
+      "warn"
+    );
     return;
   }
 
