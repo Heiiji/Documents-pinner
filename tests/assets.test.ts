@@ -1,8 +1,8 @@
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
+import { ROOT, cssFiles, decomment } from "./helpers/styles";
 
-const ROOT = join(import.meta.dirname, "..");
 const manifest = JSON.parse(readFileSync(join(ROOT, "module.json"), "utf8"));
 
 /** Every TypeScript source file, which is where all of this module's markup lives. */
@@ -11,15 +11,6 @@ function sourceFiles(dir: string, out: string[] = []): string[] {
     const full = join(dir, entry);
     if (statSync(full).isDirectory()) sourceFiles(full, out);
     else if (entry.endsWith(".ts") && !entry.endsWith(".d.ts")) out.push(full);
-  }
-  return out;
-}
-
-function cssFiles(dir: string, out: string[] = []): string[] {
-  for (const entry of readdirSync(dir)) {
-    const full = join(dir, entry);
-    if (statSync(full).isDirectory()) cssFiles(full, out);
-    else if (entry.endsWith(".css")) out.push(full);
   }
   return out;
 }
@@ -47,7 +38,7 @@ describe("module.json", () => {
 });
 
 describe("stylesheets", () => {
-  const files = cssFiles(join(ROOT, "styles"));
+  const files = cssFiles();
 
   it("resolve every @import to a real file", () => {
     // These imports are followed by the browser at runtime, not by a bundler, so a
@@ -87,8 +78,7 @@ describe("stylesheets", () => {
   it("keep every module selector namespaced so nothing leaks into Foundry's UI", () => {
     const offenders: string[] = [];
     for (const file of files) {
-      const css = readFileSync(file, "utf8")
-        .replace(/\/\*[\s\S]*?\*\//g, "")
+      const css = decomment(readFileSync(file, "utf8"))
         // @keyframes blocks are stripped whole: their contents are timeline offsets
         // ("50%", "from"), not selectors, and they cannot leak anywhere. Their NAMES
         // are global, and are checked separately below.
@@ -132,13 +122,13 @@ describe("stylesheets", () => {
  * Dead CSS is worse than missing CSS: it makes a reviewer believe a mechanism is in place.
  */
 describe("CSS selectors match markup the module actually emits", () => {
-  const CSS_FILES = cssFiles(join(ROOT, "styles"));
+  const CSS_FILES = cssFiles();
 
   /** Every `.dp-*` class name any stylesheet targets. */
   function styledClasses(): Map<string, string> {
     const found = new Map<string, string>();
     for (const file of CSS_FILES) {
-      const css = readFileSync(file, "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+      const css = decomment(readFileSync(file, "utf8"));
       for (const m of css.matchAll(/\.(dp-[a-z0-9_-]+)/gi)) {
         if (!found.has(m[1])) found.set(m[1], file.slice(ROOT.length + 1));
       }
@@ -163,10 +153,7 @@ describe("CSS selectors match markup the module actually emits", () => {
   it("keys the reduced-motion guard off the attribute that carries the level", () => {
     // Comments stripped: the file explains the old selector, and quoting it in prose
     // must not read as still using it.
-    const props = readFileSync(join(ROOT, "styles", "fx", "_props.css"), "utf8").replace(
-      /\/\*[\s\S]*?\*\//g,
-      ""
-    );
+    const props = decomment(readFileSync(join(ROOT, "styles", "fx", "_props.css"), "utf8"));
     expect(props).toContain('[data-dp-level="reduced"]');
     // `data-dp-fx` carries a preset ID, so a level value can never appear in it.
     expect(props).not.toContain('[data-dp-fx="reduced"]');

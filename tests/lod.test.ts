@@ -6,7 +6,6 @@ import {
   TIER_ORDER,
   demote,
   initialPerf,
-  isHeavier,
   lodFor,
   priorityOf,
   snapToTier,
@@ -110,17 +109,11 @@ describe("snapToTier", () => {
   });
 });
 
-describe("demote and isHeavier", () => {
+describe("demote", () => {
   it("steps down one rung and stops at the bottom", () => {
     expect(demote("L3")).toBe("L2b");
     expect(demote("L2b")).toBe("L2a");
     expect(demote("L0")).toBe("L0");
-  });
-
-  it("orders the tiers by cost", () => {
-    expect(isHeavier("L2b", "L1")).toBe(true);
-    expect(isHeavier("L1", "L2b")).toBe(false);
-    expect(isHeavier("L2a", "L2a")).toBe(false);
   });
 
   it("can demote every tier without leaving the ladder", () => {

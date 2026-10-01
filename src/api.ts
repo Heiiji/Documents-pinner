@@ -14,7 +14,7 @@
  */
 
 import { MODULE_ID, PLACEHOLDER_TEXTURE } from "./const";
-import { cfg, cv, g, isGM, notify, ns, playerIds, resolveUuid } from "./fvtt";
+import { cfg, cv, g, internal, isGM, notify, ns, playerIds } from "./fvtt";
 import { logger } from "./log";
 import * as audience from "./data/audience";
 import * as store from "./data/PinStore";
@@ -23,28 +23,29 @@ import {
   DEFAULT_MARGIN_EM,
   defaultPin,
   defaultTypeSize,
+  documentSource,
   freezeMetrics,
   naturalSize,
   type PinPatch,
 } from "./data/pin-schema";
-import { grantTargets, releaseAnchor, syncAnchor } from "./data/ownership-sync";
+import { releaseAnchor, syncAnchor } from "./data/ownership-sync";
 import { findPreset } from "./effects/preset-library";
 import { resolveCard } from "./render/ContentResolver";
 import * as settings from "./settings";
 import { centreOf, docPositionFor } from "./canvas/transform";
 import { nextToReveal, type PinboardQuery, type RowFacts } from "./apps/pinboard-model";
-import { describeSource, rememberShown } from "./sources/describe";
-import { fieldsFor, rankDefault, type FieldChoice } from "./sources/fields";
-import {
-  adapterFor,
-  adapterForDoc,
-  adapterOrJournal,
-  isRefusal,
-  type PageChoice,
-  type Refusal,
-} from "./sources/index";
-import { packFacts, packLockedHere, packOf, packReadableBy, playersCanRead } from "./sources/packs";
+import { describeSource } from "./sources/describe";
+import { adapterFor, adapterForDoc, canOpenShown, isRefusal } from "./sources/index";
+import { packFacts, packLockedHere, packOf, packReadableBy } from "./sources/packs";
 import { isPackUuid, parseSourceUuid } from "./sources/uuid";
+import {
+  adapterOf,
+  labelFor,
+  resolveSource,
+  sourceFromDocument,
+  sourceFromDropData,
+  warnIfPlayersCannotRead,
+} from "./sources/view";
 import type { DpAudience, DpMode, DpPinFlags, DpSource } from "./types/dp";
 
 declare const Hooks: any;
@@ -70,205 +71,24 @@ export function fireAndReport(task: unknown, after?: () => unknown): void {
 }
 
 // ---------------------------------------------------------------------------
-// Sources
+// Sources — `sources/view.ts`, re-exported: the API reads them here, as it always did.
 // ---------------------------------------------------------------------------
 
-/**
- * A pin source from a sidebar drag payload — or, for a document of a type the module
- * knows but will not pin (an item an actor owns, a token's actor), the notice that says
- * why, so the drop can be refused rather than left to core as if it were not ours.
- *
- * A document of a type some adapter answers for (`sources/index.ts`) becomes a document
- * source, and bare image files an image source. Anything else returns `null`, which lets
- * the drop fall through to whatever core or another module would have done, rather than
- * producing a pin of the wrong thing.
- */
-export function dropOutcome(data: any): DpSource | Refusal | null {
-  if (!data) return null;
-
-  const named = adapterFor(data.type)?.fromDrop(data);
-  if (named) return named;
-  // Core's file browser drags a TILE: `{type: "Tile", texture: {src}, fromFilePicker}`
-  // (foundry.mjs 14.367, 33809). Reading only a bare `src` or `path` missed it, so an
-  // Alt-drop of an image from the browser fell through to core and made a plain tile.
-  const path =
-    data.src ??
-    data.path ??
-    (data.type === "Tile" ? data.texture?.src : null) ??
-    (typeof data === "string" ? data : null);
-  if (typeof path === "string" && path) {
-    return { kind: "image", uuid: null, src: path, pageId: null, pdfPage: null, followName: false };
-  }
-  return null;
-}
-
-/** `dropOutcome`, for a caller that only wants a source: a refused drop is none. */
-export function sourceFromDropData(data: any): DpSource | null {
-  const outcome = dropOutcome(data);
-  return isRefusal(outcome) ? null : outcome;
-}
-
-/** A source from a document — the menus, the sheet header — or null for one not pinned. */
-export function sourceFromDocument(doc: any): DpSource | null {
-  const outcome = adapterFor(doc?.documentName)?.fromDocument(doc) ?? null;
-  return isRefusal(outcome) ? null : outcome;
-}
-
-/** The adapter for the document a source names, by its uuid or its pack: no load. */
-function adapterOf(source: DpSource) {
-  return adapterOrJournal(source.kind === "document" ? describeSource(source).documentName : null);
-}
-
-/**
- * The document a pin shows, loaded: the chosen page, else the named document, or `null`
- * for an image source, a deleted target — or a compendium this client's role cannot read,
- * which is never asked for (`packLockedHere`).
- */
-export async function resolveSource(pin: DpPinFlags): Promise<any> {
-  if (pin.source.kind !== "document") return null;
-  if (packLockedHere(pin.source.uuid)) return null;
-  const doc = await resolveUuid(pin.source.uuid);
-  if (!doc) return null;
-  const shown = adapterForDoc(doc).shown(doc, pin.source.pageId);
-  // A compendium page's name and type are not in its pack's index; now they are known.
-  rememberShown(pin.source, shown);
-  return shown;
-}
-
-/**
- * The synchronous form, for render paths. Returns `null` rather than awaiting — and
- * always for a compendium source, whatever core's cache happens to hold: see
- * `describeSource`, which this reads.
- */
-export function resolveSourceSync(pin: DpPinFlags): any {
-  if (pin.source.kind !== "document") return null;
-  return describeSource(pin.source).shown;
-}
-
-/**
- * What the pin shows, for a caller that can wait: a world source at once, a compendium
- * source once its document has loaded.
- */
-export async function shownSource(pin: DpPinFlags): Promise<any> {
-  if (pin.source.kind !== "document") return null;
-  return isPackUuid(pin.source.uuid) ? resolveSource(pin) : resolveSourceSync(pin);
-}
-
-/** The parts of a document a GM may choose between: a journal's pages, or none. */
-const pagesOf = (named: any): PageChoice[] => adapterForDoc(named).pages(named);
-
-/**
- * The pages a GM may choose between for this pin.
- *
- * Empty when there is no choice to make: an image source, a pin whose uuid already names
- * one page (`doc.pages` is undefined on a JournalEntryPage, so that falls out with no
- * type check), a source that no longer resolves, or a single-page journal — which is one
- * thing to a GM, the same rule `pickerEntries` applies in the picker.
- *
- * Reads the NAMED document rather than `resolveSourceSync`'s: that one already returns
- * the chosen page, which is the wrong document to enumerate siblings of. World sources
- * only — a compendium journal's pages exist only once it has loaded: `pageChoicesFor`.
- */
-export function pageChoices(pin: DpPinFlags): PageChoice[] {
-  if (pin.source.kind !== "document") return [];
-  return pagesOf(describeSource(pin.source).doc);
-}
-
-/** `pageChoices`, for any source: a compendium journal is loaded to list its pages. */
-export async function pageChoicesFor(pin: DpPinFlags): Promise<PageChoice[]> {
-  if (pin.source.kind !== "document") return [];
-  if (!isPackUuid(pin.source.uuid)) return pageChoices(pin);
-  if (packLockedHere(pin.source.uuid)) return [];
-  return pagesOf(await resolveUuid(pin.source.uuid));
-}
-
-/** The text fields a GM may choose between for an actor's or an item's card. */
-export interface FieldChoices {
-  fields: FieldChoice[];
-  /** The label of the field the automatic choice shows, or null when none would. */
-  automatic: string | null;
-}
-
-/**
- * The fields of the document a portrait pin shows, or null for a pin that has none to
- * choose — a journal, an image. A compendium document needs no load: its type is in the
- * pack's index, and its fields are its type's.
- */
-export function fieldChoices(pin: DpPinFlags): FieldChoices | null {
-  if (pin.source.kind !== "document") return null;
-  const summary = describeSource(pin.source);
-  const documentName = summary.documentName;
-  if (!documentName || adapterOrJournal(documentName).layout !== "portrait") return null;
-  const fields = fieldsFor(documentName, summary.doc?.type ?? summary.index?.type, summary.doc);
-  const automatic = rankDefault(fields);
-  return { fields, automatic: fields.find((field) => field.path === automatic)?.label ?? null };
-}
-
-/** What revealing a pin shares, for the Studio to say where the choice is made. */
-export type GrantScope =
-  | { kind: "page"; page: string; entry: string }
-  | { kind: "journal"; entry: string; pages: number }
-  | { kind: "pack"; pack: string; entry: string }
-  | { kind: "actor"; name: string; level: number }
-  | { kind: "item"; name: string; level: number };
-
-/**
- * One page and its journal's listing, a whole journal, or a compendium document — which
- * grants nothing, and says so — or null when there is nothing to say: an image, a
- * document that is gone.
- *
- * Read off `grantTargets`, the function the grant itself is made by, so the sentence the
- * GM reads and the permission the player receives cannot drift apart.
- */
-export function grantScope(pin: DpPinFlags): GrantScope | null {
-  if (pin.source.kind !== "document") return null;
-  const summary = describeSource(pin.source);
-  if (summary.origin === "pack" && summary.pack) {
-    return { kind: "pack", pack: summary.pack.title, entry: summary.name };
-  }
-  const named = summary.doc;
-  if (!named) return null;
-  const targets = grantTargets(named, pin.source.pageId, pin.audience.ownershipSync.level);
-  const [shown, entry] = targets.map((target) => target.doc);
-  if (!shown) return null;
-  if (summary.documentName === "Actor" || summary.documentName === "Item") {
-    const kind = summary.documentName === "Actor" ? ("actor" as const) : ("item" as const);
-    return { kind, name: shown.name ?? "", level: targets[0].level };
-  }
-  if (entry) return { kind: "page", page: shown.name ?? "", entry: entry.name ?? "" };
-  return { kind: "journal", entry: shown.name ?? "", pages: shown.pages?.contents?.length ?? 0 };
-}
-
-const untitled = (): string => g()?.i18n?.localize?.("DP.pin.untitled") ?? "Pin";
-
-/** The label for a source that has no pin yet — the placement ghost's chip. */
-export function labelForSource(source: DpSource): string {
-  return describeSource(source).name || untitled();
-}
-
-/**
- * What to write on the pin.
- *
- * An explicit label always wins. Otherwise the source's own name is used and kept in
- * step with it, which is what `followName` is for — a GM who renames "Letter" to "The
- * Duke's Letter" should not have to find every pin of it.
- */
-export function labelFor(pin: DpPinFlags): string {
-  if (pin.display.label) return pin.display.label;
-  return describeSource(pin.source).name || untitled();
-}
-
-/**
- * Tell the GM, once, when some player cannot open the compendium a pin was just pointed
- * at. Their client shows a placeholder that says why; the GM learns it here, where the
- * choice was made, rather than from the table.
- */
-function warnIfPlayersCannotRead(source: DpSource): void {
-  if (source.kind !== "document") return;
-  const pack = packOf(source.uuid);
-  if (!pack || playersCanRead(pack)) return;
-  notify({ key: "DP.notice.packUnreadable", data: { pack: packFacts(pack).title } }, "warn");
-}
+export {
+  dropOutcome,
+  fieldChoices,
+  grantScope,
+  labelFor,
+  labelForSource,
+  pageChoices,
+  pageChoicesFor,
+  resolveSource,
+  shownSource,
+  sourceFromDocument,
+  sourceFromDropData,
+  type FieldChoices,
+  type GrantScope,
+} from "./sources/view";
 
 // ---------------------------------------------------------------------------
 // Placing
@@ -361,10 +181,10 @@ export async function pinAt(scene: any, source: DpSource, at: PinPlacement): Pro
 }
 
 /**
- * D3 at every door: an item an actor owns, or a token's own actor, is refused to an API
- * caller as its drop, its header and the picker refuse it — with the same notice, and
- * nothing written. Their ownership is their parent's, so no grant could follow, and a card
- * of an owned item was drawn all the same.
+ * DESIGN A28's D3 at every door: an item an actor owns, or a token's own actor, is refused
+ * to an API caller as its drop, its header and the picker refuse it — with the same notice,
+ * and nothing written. Their ownership is their parent's, so no grant could follow, and a
+ * card of an owned item was drawn all the same.
  */
 function refused(source: DpSource): boolean {
   if (source?.kind !== "document") return false;
@@ -409,18 +229,91 @@ export async function setAudience(anchorDoc: any, next: DpAudience): Promise<voi
   const before = readPin(anchorDoc);
   await store.update(anchorDoc, { audience: next });
   await syncAnchor(anchorDoc);
+  if (revealsUnopenable(before, next)) notify({ key: "DP.notice.revealedNoAccess" }, "info");
+}
 
-  // A prop reads in place whatever the ownership says; a PIN opens the sheet, and the
-  // sheet refuses without access. Revealing one with sync off is the exact moment a GM
-  // ships "I can see it but it won't open" to the table, so say so once, here.
-  if (
+/**
+ * Whether this audience change shows the players a pin whose sheet will refuse them: an
+ * icon pin that opens its document's sheet, revealed with access off.
+ *
+ * A prop reads in place whatever the ownership says, and so does an icon pin set to *Read
+ * in place*; a *Not interactive* pin opens nothing. Only a pin that opens the sheet — which
+ * refuses without access — ships "I can see it but it won't open" to the table, so only
+ * its reveal is the moment to say so.
+ */
+function revealsUnopenable(before: DpPinFlags | null, next: DpAudience): boolean {
+  return (
     before?.mode === "pin" &&
+    !readsInPlace(before) &&
+    before.interaction.open !== "never" &&
     before.audience.kind === "hidden" &&
     next.kind !== "hidden" &&
     !next.ownershipSync.enabled
-  ) {
+  );
+}
+
+/**
+ * Reveal or hide many pins of one scene: the Pinboard's bulk bar, "Reveal all" and "Hide
+ * all". Resolves how many it changed.
+ *
+ * A reveal is the eye's own rule (`revealed`): each pin goes back to the audience it
+ * remembers, never to everyone. A hide is `hidden`, which leaves a pin already hidden as
+ * it is. Only the pins the gesture changes are written, in ONE scene write; ownership then
+ * follows one source at a time, the queue in `ownership-sync` keeping two pins of the same
+ * journal from racing.
+ *
+ * And it says what `setAudience` says, once for the batch (`revealsUnopenable`): revealing
+ * an icon pin that opens its sheet, with access off, shows a pin whose sheet refuses to
+ * open. A bulk reveal used to say nothing, for as many such pins as it touched.
+ */
+export async function setVisibilityMany(scene: any, docs: any[], reveal: boolean): Promise<number> {
+  if (!isGM()) return 0;
+  const changes = docs.flatMap((doc) => {
+    const pin = readPin(doc);
+    if (!pin) return [];
+    const next = reveal ? audience.revealed(pin.audience) : audience.hidden(pin.audience);
+    const same =
+      audience.sameAudience(next, pin.audience) &&
+      (doc.hidden === true) === audience.anchorHidden(next);
+    return same ? [] : [{ doc, before: pin, patch: { audience: next } }];
+  });
+  if (!changes.length) return 0;
+
+  await store.batchUpdate(
+    scene,
+    changes.map(({ doc, patch }) => ({ doc, patch }))
+  );
+  for (const { doc } of changes) await syncAnchor(doc);
+
+  if (changes.some(({ before, patch }) => revealsUnopenable(before, patch.audience))) {
     notify({ key: "DP.notice.revealedNoAccess" }, "info");
   }
+  return changes.length;
+}
+
+/**
+ * Delete many pins of one scene: every grant released first, then ONE scene write.
+ * `deletePin` per pin is a round trip each — for a dozen selected pins, a visible stagger
+ * on every client and a dozen separate undo entries.
+ */
+export async function deletePins(scene: any, docs: any[]): Promise<void> {
+  if (!isGM() || !docs.length) return;
+  for (const doc of docs) await releaseAnchor(doc);
+  await scene?.deleteEmbeddedDocuments(
+    "Tile",
+    docs.map((doc: any) => doc.id),
+    internal()
+  );
+}
+
+/** Persist a new reveal order — the pins' `sort` — in one scene write. */
+export async function reorder(scene: any, updates: { id: string; sort: number }[]): Promise<void> {
+  if (!isGM() || !updates.length) return;
+  await scene?.updateEmbeddedDocuments(
+    "Tile",
+    updates.map((u) => ({ _id: u.id, sort: u.sort })),
+    internal()
+  );
 }
 
 /**
@@ -473,7 +366,20 @@ export function soloUser(anchorDoc: any, userId: string): Promise<void> | undefi
   return withAudience(anchorDoc, (a) => audience.soloUser(a, userId));
 }
 
-/** Alt-click on a chip: change who can open the document without changing who sees it. */
+/**
+ * A click on a player's chip, on any surface — the HUD, the Pinboard, the Studio: a plain
+ * click toggles that player, Shift shows the pin to them alone. `wasOn` is what the chip
+ * showed when it was clicked. Each surface keeps its own re-render.
+ */
+export function chipClick(
+  anchorDoc: any,
+  userId: string,
+  { solo, wasOn }: { solo: boolean; wasOn: boolean }
+): Promise<void> | undefined {
+  return solo ? soloUser(anchorDoc, userId) : setUserVisible(anchorDoc, userId, !wasOn);
+}
+
+/** The HUD's access box: change who can open the document without changing who sees it. */
 export function setOwnershipSync(anchorDoc: any, enabled: boolean): Promise<void> | undefined {
   const pin = readPin(anchorDoc);
   if (!pin) return undefined;
@@ -553,7 +459,7 @@ export function canUserOpen(anchorDoc: any, userId: string): boolean {
   if (!source) return false;
   // The level the document's own sheet asks for: for a journal, OBSERVER is the level at
   // which a text page actually opens, and LIMITED is the tease.
-  if (source.testUserPermission?.(user, adapterForDoc(source).openLevel) === true) return true;
+  if (canOpenShown(source, user)) return true;
   return readsInPlace(pin) && canUserSee(anchorDoc, userId);
 }
 
@@ -564,7 +470,7 @@ export function canUserOpen(anchorDoc: any, userId: string): boolean {
  * and so does a pin set to read in place. One definition, because the opening itself and
  * the badge that predicts it must never disagree.
  */
-export function readsInPlace(pin: DpPinFlags): boolean {
+function readsInPlace(pin: DpPinFlags): boolean {
   return pin.mode === "prop" || pin.interaction.open === "readInPlace";
 }
 
@@ -674,17 +580,13 @@ export async function openLocally(anchorDoc: any): Promise<void> {
   // The player-side half of the key glyph. A GM sees ⚿ on a chip whose player can see
   // the pin but not open the document; the player used to get core's generic refusal,
   // or nothing. Say what the state is — not a fault, a "not yet".
-  const adapter = adapterForDoc(source);
-  const canOpen = source.testUserPermission
-    ? source.testUserPermission(g()?.user, adapter.openLevel) === true
-    : true;
-  if (!isGM() && !canOpen) {
+  if (!isGM() && !canOpenShown(source, g()?.user)) {
     notify({ key: "DP.notice.cannotOpenYet" }, "info");
     return;
   }
 
   // Where it opens is the document's to say: a journal page inside its journal's sheet.
-  adapter.open(source);
+  adapterForDoc(source).open(source);
 }
 
 /**
@@ -820,11 +722,11 @@ export function flash(anchorDoc: any): void {
  * second spotlight on a revealed pin points at it again and hides nothing — and it lands
  * before anything points: a player pulled to the spot finds the pin already there.
  *
- * Every view is pulled only for a pin for everyone (K1). A core ping reaches every client
- * whoever the pin is for, so pulling the table to the rogue's note walks everyone else to
- * where it lies. For a narrower audience the GM's own screen is pointed at, and they are
- * told, once, why nobody's view moved. A pin on a scene the GM is not viewing is revealed
- * and not pointed at: its coordinates here would point at the wrong map.
+ * Every view is pulled only for a pin for everyone (DESIGN A25). A core ping reaches every
+ * client whoever the pin is for, so pulling the table to the rogue's note walks everyone
+ * else to where it lies. For a narrower audience the GM's own screen is pointed at, and
+ * they are told, once, why nobody's view moved. A pin on a scene the GM is not viewing is
+ * revealed and not pointed at: its coordinates here would point at the wrong map.
  */
 export async function spotlight(anchorDoc: any): Promise<{ revealed: boolean; pulled: boolean }> {
   const outcome = { revealed: false, pulled: false };
@@ -1095,9 +997,9 @@ export async function unpin(anchorDoc: any): Promise<void> {
  * players may be reading at that moment. Only the source moves, and the ownership grant
  * that follows it.
  *
- * **Never wrap this in `enqueue`.** `store.update` queues itself on the same anchor id,
+ * **Never wrap this in `enqueue`.** `store.update` queues itself on the same anchor,
  * and `enqueue` chains a task after the tracked promise it has already registered — so an
- * outer task awaiting an inner one on the same id awaits its own completion. Neither ever
+ * outer task awaiting an inner one on the same anchor awaits its own completion. Neither ever
  * settles: no error, no timeout, the button simply does nothing forever. `fitToContent`
  * is the shape to copy — a plain async function whose callees queue themselves.
  *
@@ -1130,9 +1032,10 @@ export async function retarget(anchorDoc: any, source: DpSource): Promise<boolea
   // part of the pin, like its size and its effect.
   const keepIcon = before.source.kind === "document" && source.kind === "document";
   // A pin that comes to show an actor starts with access off, as one placed on it does
-  // (D2): a journal shared with access on, retargeted onto an NPC, would otherwise list
-  // the NPC in every sidebar its audience reaches at the very next sync. Switching off
-  // never widens anything. A pin already on an actor keeps what the GM chose for it.
+  // (DESIGN A28, D2): a journal shared with access on, retargeted onto an NPC, would
+  // otherwise list the NPC in every sidebar its audience reaches at the very next sync.
+  // Switching off never widens anything. A pin already on an actor keeps what the GM chose
+  // for it.
   const syncOff =
     before.audience.ownershipSync.enabled &&
     adapterOf(before.source).syncOnCreate &&
@@ -1238,26 +1141,10 @@ export async function adoptNote(noteDoc: any, source?: DpSource | null): Promise
 /** The journal a Note points at, preferring the specific page over its parent entry. */
 export function sourceFromNote(noteDoc: any): DpSource | null {
   const pageUuid = noteDoc?.page?.uuid;
-  if (pageUuid) {
-    return {
-      kind: "document",
-      uuid: pageUuid,
-      src: null,
-      pageId: null,
-      pdfPage: null,
-      followName: true,
-    };
-  }
+  if (pageUuid) return documentSource(pageUuid);
   const entryUuid = noteDoc?.entry?.uuid;
   if (entryUuid) {
-    return {
-      kind: "document",
-      uuid: entryUuid,
-      src: null,
-      pageId: typeof noteDoc.pageId === "string" ? noteDoc.pageId : null,
-      pdfPage: null,
-      followName: true,
-    };
+    return documentSource(entryUuid, typeof noteDoc.pageId === "string" ? noteDoc.pageId : null);
   }
   return null;
 }

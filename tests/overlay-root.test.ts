@@ -20,7 +20,7 @@
  * positioned in SCENE coordinates — two different spaces, one box — so even once sized,
  * `overflow: hidden` clipped away every prop past the screen's width on the map.
  */
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { installWorld, uninstallWorld } from "./helpers/fake-foundry";
 
 const frame = () => new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
@@ -35,6 +35,7 @@ beforeEach(async () => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   overlayRoot.destroyOverlay();
   uninstallWorld();
 });
@@ -138,6 +139,9 @@ describe("when the tab is hidden and rAF never fires", () => {
     // A rAF that never calls back, which is exactly what a hidden document provides.
     globalThis.requestAnimationFrame = (() => 1) as typeof globalThis.requestAnimationFrame;
 
+    // The floor's timeout, on fake timers: run, not waited out.
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+
     try {
       const element = document.createElement("div");
       overlayRoot.write(element, () => {
@@ -145,7 +149,7 @@ describe("when the tab is hidden and rAF never fires", () => {
       });
 
       expect(element.style.width).toBe("");
-      await new Promise((resolve) => setTimeout(resolve, 400));
+      await vi.runAllTimersAsync();
       expect(element.style.width).toBe("123px");
     } finally {
       globalThis.requestAnimationFrame = raf;
@@ -153,12 +157,14 @@ describe("when the tab is hidden and rAF never fires", () => {
   });
 
   it("applies each write only once when both schedulers are armed", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     const element = document.createElement("div");
     let runs = 0;
     overlayRoot.write(element, () => runs++);
 
+    // The frame lands first; the floor, run after it, must find nothing left to apply.
     await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
-    await new Promise((resolve) => setTimeout(resolve, 400));
+    await vi.runAllTimersAsync();
     expect(runs).toBe(1);
   });
 });
@@ -254,9 +260,12 @@ describe("leave", () => {
   });
 
   it("removes the element on the timeout floor when no transition ever ends", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     const element = document.createElement("div");
     document.body.appendChild(element);
     const done = overlayRoot.leave(element, "gone");
+    expect(element.isConnected).toBe(true);
+    await vi.runAllTimersAsync();
     await done;
     expect(element.isConnected).toBe(false);
   });

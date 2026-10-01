@@ -526,7 +526,7 @@ export function syncSceneDim(force = false): void {
   }
 }
 
-/** For the Pinboard's diagnostics and for tests. */
+/** How many cards are mounted. A test seam. */
 export function domPropCount(): number {
   return props.size;
 }

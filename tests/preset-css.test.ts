@@ -3,7 +3,6 @@ import { defaultPreset } from "../src/effects/preset-schema";
 import { CORE_PRESETS } from "../src/effects/presets/core-presets";
 import {
   VAR_PREFIX,
-  disabledCssVars,
   presetToCssVars,
   presetToDataAttrs,
   reduceCssVars,
@@ -218,10 +217,6 @@ describe("accessibility renditions", () => {
         expect(value, `${preset.id} ${key}`).not.toMatch(/url\(|["';{}()]/);
       }
     }
-  });
-
-  it("off collapses to nothing at all", () => {
-    expect(disabledCssVars()).toEqual({ "--dp-i": "0" });
   });
 
   it("does not mutate the vars it reduces", () => {

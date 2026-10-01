@@ -103,6 +103,12 @@ export interface SourceAdapter {
   /** Whether core's `Journal.show` can put it on a player's screen. */
   readonly canShow: boolean;
   /**
+   * The context-menu hooks of every list a document of this kind is shown in — its
+   * sidebar directory, a compendium window — where "Pin this" is offered. `main.ts`
+   * registers them all (`contextHookNames`).
+   */
+  readonly contextHooks: readonly string[];
+  /**
    * A source from a drag payload of one of `names`; a refusal for one this module will not
    * pin (an owned item, a token's actor); null to leave the drop to core.
    */
@@ -137,7 +143,7 @@ export interface SourceAdapter {
 const adapters = new Map<string, SourceAdapter>();
 
 /** Answer for every `documentName` the adapter names. A later registration wins. */
-export function register(adapter: SourceAdapter): void {
+function register(adapter: SourceAdapter): void {
   for (const name of adapter.names) adapters.set(name, adapter);
 }
 
@@ -157,6 +163,20 @@ export function adapterOrJournal(documentName: unknown): SourceAdapter {
 /** The adapter for a resolved document, by its type. See `adapterOrJournal`. */
 export function adapterForDoc(doc: any): SourceAdapter {
   return adapterOrJournal(doc?.documentName);
+}
+
+/**
+ * Whether this user may open the document a pin shows, at the level its own sheet asks
+ * (`openLevel`). The one answer the key glyph, the card's `readable` and an icon pin's
+ * open all read. A document that cannot say is not opened: false, never "probably".
+ */
+export function canOpenShown(shown: any, user: unknown): boolean {
+  return shown?.testUserPermission?.(user, adapterForDoc(shown).openLevel) === true;
+}
+
+/** Every adapter's context-menu hooks, each once, in registration order. */
+export function contextHookNames(): string[] {
+  return [...new Set([...adapters.values()].flatMap((adapter) => adapter.contextHooks))];
 }
 
 /** Every `documentName` whose edits can change a pin: the update hooks `main.ts` wires. */

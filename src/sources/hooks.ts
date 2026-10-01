@@ -6,15 +6,15 @@
  * labels, the textures and the Pinboard belong to modules a test may mock with a partial
  * factory, and `sources/` imports none of them. `main.ts` wires the four in.
  *
- * Filtered before any work (P5). An actor's update hook fires on every hit-point change in
- * combat, and each one that reached the textures would re-enrich and re-rasterise a
- * wanted poster on the map. So an edit to an owned item or a token's actor is nothing to
- * a pin; the ledger is rebased only when ownership changed and a label followed only when
- * the name did, as their own guards already said; and the card is redrawn only when the
- * adapter says the change reaches it — for a journal, any change — and a pin on the scene
- * being viewed shows the document. Every journal edit anywhere used to cost every client an
- * LOD pass, and the GM a Pinboard render, and a stream of them kept postponing the pass a
- * reveal had asked for.
+ * Filtered before any work (DESIGN A28, P5). An actor's update hook fires on every
+ * hit-point change in combat, and each one that reached the textures would re-enrich and
+ * re-rasterise a wanted poster on the map. So an edit to an owned item or a token's actor
+ * is nothing to a pin; the ledger is rebased only when ownership changed and a label
+ * followed only when the name did, as their own guards already said; and the card is
+ * redrawn only when the adapter says the change reaches it — for a journal, any change —
+ * and a pin on the scene being viewed shows the document. Every journal edit anywhere used
+ * to cost every client an LOD pass, and the GM a Pinboard render, and a stream of them kept
+ * postponing the pass a reveal had asked for.
  */
 
 import { cv, isOurs } from "../fvtt";

@@ -11,7 +11,7 @@
  */
 
 import { MODULE_ID } from "../const";
-import { g, isGM } from "../fvtt";
+import { g, isGM, ns } from "../fvtt";
 import { t } from "../i18n";
 import { escapeHtml } from "../html";
 import * as settings from "../settings";
@@ -64,7 +64,7 @@ function moduleVersion(): string {
 /** Run at `ready`. GM only; nothing is awaited by the caller. */
 export async function onboardingReady(): Promise<void> {
   if (!isGM()) return;
-  const DialogV2 = (globalThis as any).foundry?.applications?.api?.DialogV2;
+  const DialogV2 = ns("applications.api.DialogV2");
   if (!DialogV2?.confirm) return;
 
   const version = moduleVersion();

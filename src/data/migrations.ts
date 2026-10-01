@@ -38,13 +38,13 @@
 
 import { logger } from "../log";
 import { FLAGS, MODULE_ID, SCHEMA_VERSION } from "../const";
-import { g, internal, isPrimaryGM, notify } from "../fvtt";
+import { confirmDialog, g, internal, isPrimaryGM, notify } from "../fvtt";
 import * as settings from "../settings";
-import { pdfSourceForPin } from "../sources/describe";
+import { isPdfPin } from "../sources/describe";
 import { docPositionFor } from "../canvas/transform";
 import { freezeMetrics, validatePin } from "./pin-schema";
 import { rawPinFlag } from "./PinData";
-import { enqueueAll, payloadWrite } from "./PinStore";
+import { enqueueAll, payloadWrite, queueKey } from "./PinStore";
 import type { DpPinFlags } from "../types/dp";
 
 /** The payload version from which a document's point is stored as the tile's centre. */
@@ -154,7 +154,7 @@ function reanchor(
  */
 function drawnAsCard(pin: DpPinFlags): boolean {
   if (settings.get("rendering") === "dom") return true;
-  return pdfSourceForPin(pin) === null;
+  return !isPdfPin(pin);
 }
 
 /**
@@ -192,10 +192,7 @@ export function pendingCount(scene: any): number {
 export async function migrateScene(scene: any): Promise<number> {
   const pins = (scene?.tiles?.contents ?? []).filter((tile: any) => rawPinFlag(tile) !== null);
   if (!pins.length) return 0;
-  return enqueueAll(
-    pins.map((tile: any) => tile.id),
-    () => writeMigration(scene)
-  );
+  return enqueueAll(pins.map(queueKey), () => writeMigration(scene));
 }
 
 /** Planned from the scene as it is once the queue reaches it, not as it was when asked. */
@@ -301,14 +298,11 @@ export async function onCanvasReady(scene: any): Promise<void> {
  * Falls back to declining if this build has no DialogV2: a migration that cannot ask
  * must not proceed, and declining costs nothing because reads normalise anyway.
  */
-async function confirmSweep(sceneCount: number, pinCount: number): Promise<boolean> {
-  const DialogV2 = (globalThis as any).foundry?.applications?.api?.DialogV2;
-  if (!DialogV2?.confirm) return false;
-
-  const i18n = g()?.i18n;
-  return DialogV2.confirm({
-    window: { title: i18n?.localize?.("DP.migration.title") ?? "Documents Pinner" },
-    content: `<p>${i18n?.format?.("DP.migration.prompt", { sceneCount, pinCount }) ?? ""}</p>`,
-    yes: { default: true },
-  }).catch(() => false);
+function confirmSweep(sceneCount: number, pinCount: number): Promise<boolean> {
+  return confirmDialog(
+    "DP.migration.title",
+    "DP.migration.prompt",
+    { sceneCount, pinCount },
+    { yes: { default: true } }
+  );
 }

@@ -15,7 +15,7 @@ import { logger } from "./log";
 import { cv, g } from "./fvtt";
 import { publicApi } from "./api";
 import * as settings from "./settings";
-import { concernsPins, definePinData } from "./data/PinData";
+import { definePinData } from "./data/PinData";
 import {
   onCreateTile,
   onPreDeleteTile,
@@ -31,6 +31,7 @@ import {
   refreshAllPins,
 } from "./canvas/PinnedTile";
 import { registerPropHitLayer, syncHitLayer } from "./canvas/PropHitLayer";
+import { tileChangeHandler } from "./canvas/tile-hooks";
 import { propManager, teardownProps } from "./canvas/PropManager";
 import { probeRasterisation } from "./render/Rasterizer";
 import { clearPdfCache } from "./render/PdfPage";
@@ -57,28 +58,11 @@ import {
 import { flashDomProp, setDomPropHover, syncSceneDim } from "./canvas/DomPropTier";
 import { onboardingReady } from "./ui/onboarding";
 import { sourceLifecycleHandler, sourceUpdateHandler } from "./sources/hooks";
-import { hookedDocumentNames } from "./sources/index";
+import { contextHookNames, hookedDocumentNames } from "./sources/index";
 
 const log = logger("boot");
 
 declare const Hooks: any;
-
-/**
- * The context-menu hooks of every directory a pin's source can be listed in — journals,
- * actors, items, the sidebar's and a compendium window's alike — and of a journal sheet's
- * pages. A v14 directory fires `get${documentName}ContextOptions` (foundry.mjs 14.368,
- * 131819), and a sheet's pages `getJournalEntryPageContextOptions` (101133); the 14.366
- * types name the journal sidebar's `getJournalContextOptions`, so that one is registered too,
- * and `addContextOption` adds its entry once however many of them fire. The AppV1 names
- * (`get…DirectoryEntryContext`, `getJournalSheetPageContextOptions`) cannot fire on 14.
- */
-const CONTEXT_HOOKS = [
-  "getJournalEntryContextOptions",
-  "getJournalContextOptions",
-  "getJournalEntryPageContextOptions",
-  "getActorContextOptions",
-  "getItemContextOptions",
-];
 
 Hooks.once("init", () => {
   settings.register();
@@ -202,9 +186,11 @@ Hooks.on("chatMessage", onChatMessage);
 // and registering only the Tile one made adopting an existing Note impossible.
 Hooks.on("renderTileConfig", onRenderConfig);
 Hooks.on("renderNoteConfig", onRenderConfig);
-// The application rides along: a compendium window fires the same hooks as the sidebar,
-// and only its collection says that the row it was opened on is in a pack.
-for (const hook of CONTEXT_HOOKS) {
+// The context menus of every list a pin's source can be shown in — each adapter names its
+// own (`contextHooks`). The application rides along: a compendium window fires the same
+// hooks as the sidebar, and only its collection says that the row it was opened on is in a
+// pack.
+for (const hook of contextHookNames()) {
   Hooks.on(hook, (app: any, options: any[]) => addContextOption(options, app));
 }
 
@@ -231,50 +217,23 @@ Hooks.on("preUpdateTile", onPreUpdateTile);
 Hooks.on("preCreateTile", onPreCreateTile);
 Hooks.on("updateTile", syncAfterCoreHidden);
 
-/**
- * Tile changes, coalesced.
- *
- * Foundry fires `updateTile` once per document, so a correctly-batched fifty-pin "Reveal
- * all" arrives as fifty hook calls — and each one did O(all placeables) work: a full
- * `PropManager.refresh`, a full hit-layer rebuild (a `PIXI.Container` and a `Polygon`
- * allocated and destroyed per prop), a full Pinboard render and up to N `testVisibility`
- * calls. Fifty of those in one tick is ~2500 allocations and fifty renders for one
- * gesture.
- *
- * The ids are gathered and the refresh runs ONCE from a microtask, so a batch of any size
- * costs one pass. Everything here was already idempotent; only the arithmetic changes.
- */
-const changedTiles = new Map<string, string>();
-let tileRefreshQueued = false;
-
-function onTileChanged(doc: any, changed?: any): void {
-  if (!concernsPins(doc, changed)) return;
-  if (doc?.id) changedTiles.set(doc.uuid ?? doc.id, doc.id);
-  if (tileRefreshQueued) return;
-  tileRefreshQueued = true;
-
-  void Promise.resolve().then(() => {
-    tileRefreshQueued = false;
-    const uuids = [...changedTiles.keys()];
-    const ids = [...new Set(changedTiles.values())];
-    changedTiles.clear();
-
-    // Core re-tests a tile's visibility only when `hidden`, `sort` or `locked` change.
-    // Who is in a pin's audience lives in its flags, so moving a player in or out of it
-    // left a pin icon — and a PDF, which is drawn on the tile's own mesh — showing to
-    // the player just removed and hidden from the one just added.
-    refreshAllPins(ids);
-    propManager().refresh();
-    syncHitLayer();
-    revalidateReader();
-    // The HUD is bound to at most one anchor, so it only cares whether that one moved.
-    for (const id of ids) refreshPinHUD({ id });
-    // Only the Studios showing a pin that changed: re-rendering every open Studio on any
-    // pin's change threw away the focus — and a half-typed label — in all of them.
-    refreshStudios(uuids);
-    refreshPinboard();
-  });
-}
+// Any change to a pin's tile, by anyone: a batch of any size is one refresh (`tile-hooks`).
+const onTileChanged = tileChangeHandler((ids, uuids) => {
+  // Core re-tests a tile's visibility only when `hidden`, `sort` or `locked` change.
+  // Who is in a pin's audience lives in its flags, so moving a player in or out of it
+  // left a pin icon — and a PDF, which is drawn on the tile's own mesh — showing to
+  // the player just removed and hidden from the one just added.
+  refreshAllPins(ids);
+  propManager().refresh();
+  syncHitLayer();
+  revalidateReader();
+  // The HUD is bound to at most one anchor, so it only cares whether that one moved.
+  for (const id of ids) refreshPinHUD({ id });
+  // Only the Studios showing a pin that changed: re-rendering every open Studio on any
+  // pin's change threw away the focus — and a half-typed label — in all of them.
+  refreshStudios(uuids);
+  refreshPinboard();
+});
 
 for (const hook of ["createTile", "updateTile", "deleteTile"]) Hooks.on(hook, onTileChanged);
 

@@ -7,15 +7,14 @@
  * that cheap and correct — the mapping, the write discipline, and that darkness is in no
  * content key, so a dusk transition never re-resolves a single card.
  */
-import { readFileSync, readdirSync, statSync } from "node:fs";
-import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { makeAudience } from "../src/data/audience";
 import { cardHtml } from "../src/render/CardTemplate";
 import { defaultPin } from "../src/data/pin-schema";
 import { dressing } from "../src/effects/EffectRegistry";
-import { getCorePreset } from "../src/effects/presets/core-presets";
 import { installWorld, uninstallWorld } from "./helpers/fake-foundry";
+import { getCorePreset } from "./helpers/presets";
+import { cssRules } from "./helpers/styles";
 
 vi.mock("../src/render/ContentResolver", () => ({
   resolveCard: vi.fn(async () => ({
@@ -255,20 +254,7 @@ describe("darkness and the cards", () => {
  * beats any it would inherit, and a card with none inherits its prop's.
  */
 describe("the projection stock in the dark", () => {
-  const css = (() => {
-    const out: string[] = [];
-    const walk = (dir: string) => {
-      for (const entry of readdirSync(dir)) {
-        const full = join(dir, entry);
-        if (statSync(full).isDirectory()) walk(full);
-        else if (entry.endsWith(".css")) out.push(readFileSync(full, "utf8"));
-      }
-    };
-    walk(join(import.meta.dirname, "..", "styles"));
-    return out.join("\n").replace(/\/\*[\s\S]*?\*\//g, "");
-  })();
-  const setters = [...css.matchAll(/([^{};]+)\{([^{}]*)\}/g)]
-    .map((m) => ({ selector: m[1].trim(), body: m[2] }))
+  const setters = cssRules()
     .filter((rule) => /--dp-card-dim\s*:/.test(rule.body))
     .map((rule) => ({
       selector: rule.selector,
@@ -296,6 +282,9 @@ describe("the projection stock in the dark", () => {
   }
 
   it("keeps a projected readout at full brightness in a dark scene, and darkens every paper", () => {
+    // Two setters: the prop's, and projected light's. A third is a card dimmed, or spared,
+    // by something other than the scene — say where it is and why before allowing it here.
+    expect(setters).toHaveLength(2);
     expect(cardDim("projection")).toBe("1");
     for (const paper of ["parchment", "vellum", "paper", "linen", "slate", "bloodied"]) {
       expect(cardDim(paper), paper).toBe("var(--dp-scene-dim, 1)");

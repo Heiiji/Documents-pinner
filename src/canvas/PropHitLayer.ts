@@ -32,10 +32,12 @@
  */
 
 import { MODULE_ID } from "../const";
-import { cfg, cv, g } from "../fvtt";
+import { cfg, cv, g, ns } from "../fvtt";
 import { readPin } from "../data/PinData";
 import * as api from "../api";
 import { isArmed } from "../apps/PlacementGhost";
+import { rotatedCorners, tileRect } from "./transform";
+import type { DpPinFlags } from "../types/dp";
 
 const LAYER_NAME = "documentsPinnerHits";
 
@@ -51,7 +53,7 @@ export function registerPropHitLayer(): boolean {
   if (registered) return true;
 
   const config = cfg();
-  const CanvasLayer = (globalThis as any).foundry?.canvas?.layers?.CanvasLayer;
+  const CanvasLayer = ns("canvas.layers.CanvasLayer");
   if (!config?.Canvas?.layers || !CanvasLayer) return false;
 
   config.Canvas.layers[LAYER_NAME] = {
@@ -173,7 +175,7 @@ function buildLayerClass(CanvasLayer: any): any {
       return container;
     }
 
-    #buildHit(tile: any, pin: any): any {
+    #buildHit(tile: any, pin: DpPinFlags): any {
       const PIXI = (globalThis as any).PIXI;
       const doc = tile.document;
       const container = new PIXI.Container();
@@ -243,25 +245,13 @@ function belowTokens(): number {
 }
 
 /**
- * The prop's footprint in scene space, rotated about its centre — which is the document's
- * own point on v14 (see `tileRect` in `transform.ts`), so the corners are laid out around
- * `x, y` directly. Deriving a corner from the point first is what put every player's hit
- * area half a card down and right of the paper.
+ * The prop's footprint in scene space, rotated about its centre: `tileRect`, the one place
+ * that remembers the document's own point is its centre on v14. Deriving a corner from the
+ * point by hand is what once put every player's hit area half a card down and right of the
+ * paper.
  */
 export function rotatedPolygon(doc: any, PIXI: any): any {
-  const { x: cx, y: cy, width, height } = doc;
-  const rotation = ((doc.rotation ?? 0) * Math.PI) / 180;
-  const cos = Math.cos(rotation);
-  const sin = Math.sin(rotation);
-
-  const corners = [
-    [-width / 2, -height / 2],
-    [width / 2, -height / 2],
-    [width / 2, height / 2],
-    [-width / 2, height / 2],
-  ].flatMap(([dx, dy]) => [cx + dx * cos - dy * sin, cy + dx * sin + dy * cos]);
-
-  return new PIXI.Polygon(corners);
+  return new PIXI.Polygon(rotatedCorners(tileRect(doc)).flatMap((p) => [p.x, p.y]));
 }
 
 /** The live layer, if the canvas has been drawn. */

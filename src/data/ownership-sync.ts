@@ -29,7 +29,6 @@ import {
   ns,
   playerIds,
   resolveUuid,
-  resolveUuidSync,
 } from "../fvtt";
 import type { DpGrantLedger } from "../types/dp";
 import { grantKeysFor } from "./audience";
@@ -44,6 +43,7 @@ import {
 } from "./ownership-plan";
 import { enqueue } from "./PinStore";
 import { readPin } from "./PinData";
+import { describeSource } from "../sources/describe";
 import { adapterForDoc, type GrantTarget } from "../sources/index";
 import { isPackUuid } from "../sources/uuid";
 
@@ -142,13 +142,11 @@ function writeLedger(
   if (doc?.flags?.[MODULE_ID]?.[FLAGS.GRANTS] !== undefined) data[path] = forcedDeletion() ?? null;
 }
 
-export type { GrantTarget } from "../sources/index";
-
 /**
  * Where one anchor's grant lands, and at what level: the source's adapter says (for a
  * journal, the page the pin shows and LIMITED on its journal beside it — DESIGN A22).
  */
-export function grantTargets(named: any, pageId: string | null, level: number): GrantTarget[] {
+function grantTargets(named: any, pageId: string | null, level: number): GrantTarget[] {
   return adapterForDoc(named).grantTargets(named, pageId, level);
 }
 
@@ -410,7 +408,9 @@ export async function reconcile(): Promise<number> {
     for (const tile of scene.tiles?.contents ?? []) {
       const pin = readPin(tile);
       if (!pin) continue;
-      const named = pin.source.kind === "document" ? resolveUuidSync(pin.source.uuid) : null;
+      // `describeSource`, the one reader of core's synchronous cache: a world document, or
+      // null — for a compendium source always, whatever the cache holds.
+      const named = pin.source.kind === "document" ? describeSource(pin.source).doc : null;
       const targets = grantTargets(
         grantable(named) ? named : null,
         pin.source.pageId,

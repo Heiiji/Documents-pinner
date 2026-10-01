@@ -13,12 +13,14 @@
  * out of the way, because the questions that remain are all about the map.
  */
 
-import { ns } from "../fvtt";
+import { browseFiles, ns } from "../fvtt";
 import { t, tOr } from "../i18n";
 import { escapeAttr, escapeHtml } from "../html";
 import { arm } from "./PlacementGhost";
 import * as api from "../api";
 import { importForPin } from "../sources/import";
+import { adapterOrJournal } from "../sources/index";
+import { documentSource, imageSource } from "../data/pin-schema";
 import {
   filterEntries,
   packEntries,
@@ -32,9 +34,6 @@ import type { DpSource } from "../types/dp";
 let PickerClass: any = null;
 let instance: any = null;
 
-/** What can be picked, searched and filtered: the search itself is `sources/search.ts`. */
-export { filterEntries, packEntries, pickerEntries, type PickerEntry } from "../sources/search";
-
 /** The chips above the list: every kind at once, or one. Images stay the Browse button. */
 type PickerKind = "all" | Pinnable;
 const KINDS: { kind: PickerKind; key: string }[] = [
@@ -47,12 +46,15 @@ const KINDS: { kind: PickerKind; key: string }[] = [
 /** What one chip lets through. */
 const kindsOf = (kind: PickerKind): readonly Pinnable[] => (kind === "all" ? PINNABLE : [kind]);
 
-/** A row's icon: a compendium's, or the kind of document it is. */
+/**
+ * A row's icon: a compendium's, or the kind of document it is — asked of its adapter, which
+ * draws the same icon on the Pinboard. A page is a page here, whatever its type: the row
+ * names the type beside it.
+ */
 function iconOf(entry: PickerEntry): string {
   if (entry.origin === "pack") return "fa-book-atlas";
-  if (entry.documentName === "Actor") return "fa-user";
-  if (entry.documentName === "Item") return "fa-suitcase";
-  return entry.kind === "entry" ? "fa-book" : "fa-file-lines";
+  const documentName = entry.kind === "page" ? "JournalEntryPage" : entry.documentName;
+  return adapterOrJournal(entry.documentName).describe({ documentName }).icon;
 }
 
 function entryMarkup(entry: PickerEntry, index: number, active: boolean, busy: boolean): string {
@@ -300,14 +302,7 @@ export function definePicker(): any {
       if (!uuid) return;
       if (item.dataset.dpImport !== "true") {
         this.close();
-        this.take({
-          kind: "document",
-          uuid,
-          src: null,
-          pageId: null,
-          pdfPage: null,
-          followName: true,
-        });
+        this.take(documentSource(uuid));
         return;
       }
       if (this.importing) return;
@@ -362,24 +357,10 @@ function onKind(this: any, _event: Event, target: HTMLElement) {
 
 /** The file-browser route, for a map scrap with no journal behind it. */
 async function onBrowse(this: any) {
-  const FilePicker = ns("applications.apps.FilePicker.implementation");
-  if (!FilePicker) return;
-
-  const picker = new FilePicker({
-    type: "imagevideo",
-    callback: (path: string) => {
-      this.close();
-      this.take({
-        kind: "image",
-        uuid: null,
-        src: path,
-        pageId: null,
-        pdfPage: null,
-        followName: false,
-      });
-    },
+  browseFiles("imagevideo", (path) => {
+    this.close();
+    this.take(imageSource(path));
   });
-  picker.render(true);
 }
 
 /** Attach the chosen source to the placeable that opened the picker. */
@@ -414,6 +395,6 @@ export function openPicker(options: PickerOptions = {}): any {
     instance.search = options.search;
     instance.activeIndex = 0;
   }
-  instance.render(true);
+  instance.render({ force: true });
   return instance;
 }

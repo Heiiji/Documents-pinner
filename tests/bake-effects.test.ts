@@ -12,7 +12,7 @@
  * jsdom has no 2D context, so what is asserted here is the SEQUENCE of drawing operations,
  * which is the part that has to be right. The pixels were checked in a browser.
  */
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { bakeEffects, clearBakeCache, copyCanvas } from "../src/render/BakeEffects";
 
 interface Call {
@@ -21,6 +21,8 @@ interface Call {
 }
 let calls: Call[];
 let realGetContext: typeof HTMLCanvasElement.prototype.getContext;
+/** Put back after every test, whatever it did to it — not after its last assertion. */
+const RealImage = globalThis.Image;
 
 function fakeContext(): Record<string, unknown> {
   const ctx: Record<string, unknown> = {
@@ -66,6 +68,8 @@ beforeEach(() => {
 
 afterEach(() => {
   HTMLCanvasElement.prototype.getContext = realGetContext;
+  globalThis.Image = RealImage;
+  vi.useRealTimers();
 });
 
 const ops = () => calls.map((c) => c.op);
@@ -127,7 +131,6 @@ describe("bakeEffects", () => {
   it("survives a layer it cannot decode, and still paints the rest", async () => {
     // jsdom neither loads nor errors a generated data URI, which is exactly the state the
     // decode timeout exists for — modelled here as a prompt failure so the test is quick.
-    const RealImage = globalThis.Image;
     globalThis.Image = class {
       onerror: (() => void) | null = null;
       onload: (() => void) | null = null;
@@ -145,13 +148,11 @@ describe("bakeEffects", () => {
     });
     // The undecodable stain is skipped; the frame is still there.
     expect(ops()).toContain("stroke");
-    globalThis.Image = RealImage;
   });
 
   it("gives up on a texture that never resolves, rather than hanging the queue", async () => {
     // An Image that neither loads nor errors. Awaited inside the concurrency-1 generation
     // queue, this would stop every prop on the scene from ever drawing.
-    const RealImage = globalThis.Image;
     globalThis.Image = class {
       onerror: (() => void) | null = null;
       onload: (() => void) | null = null;
@@ -159,8 +160,11 @@ describe("bakeEffects", () => {
         /* never settles */
       }
     } as never;
+    // The decode timeout, and the "hung" sentinel twice as late, on fake timers: each runs
+    // in order with every promise between them settled, so nothing is waited out.
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
 
-    const done = await Promise.race([
+    const done = Promise.race([
       bakeEffects(canvas(), {
         "--dp-i": "1",
         "--dp-surface-img": "url('data:image/svg+xml,hangs')",
@@ -168,10 +172,10 @@ describe("bakeEffects", () => {
       }).then(() => "returned"),
       new Promise((r) => setTimeout(() => r("hung"), 4000)),
     ]);
+    await vi.advanceTimersByTimeAsync(4000);
 
-    expect(done).toBe("returned");
-    globalThis.Image = RealImage;
-  }, 8000);
+    expect(await done).toBe("returned");
+  });
 });
 
 describe("copyCanvas", () => {

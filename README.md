@@ -164,6 +164,12 @@ they never reach a player's browser.
 
 If you need real secrecy, keep the document out of the world until you want it seen.
 
+Hiding or showing a pin with Foundry's own controls — the Tiles HUD, Tile Config, the
+Placeables list — works like the module's own eye on the HUD: showing it again reveals it to
+the players it was shown to before, or to everyone, with document access if *Grant document
+access on reveal* is on, and a reveal cannot be taken back — so a macro or a module that
+shows every tile reveals your hidden pins too.
+
 **Spotlight moves views only for a pin that is for everyone.** A Foundry ping reaches
 every connected player, whoever the pin is for, so pulling the table to a note meant for
 one player would walk everyone else to where it lies. *Reveal & spotlight* (the HUD,
@@ -220,6 +226,10 @@ map for any visible pin, as its label says.
 13. With Alt as the drag modifier — the default — Alt-dragging an actor still places
     Foundry's hidden token, and with no modifier set an actor drag still places a token.
     Set the modifier to Ctrl or Shift to pin actors by dragging them.
+14. **Scene Levels.** On a v14 scene with several levels, a pin shows on every level for
+    now, whichever one it was placed on: the module's layers do not know about levels yet,
+    and the Pinboard's level filter groups pins by elevation. Level support waits until it
+    has been checked in a live world.
 
 ## Development
 
@@ -421,6 +431,13 @@ n'est pas propriétaire : ils n'atteignent jamais le navigateur du joueur.
 Si vous avez besoin d'un vrai secret, gardez le document hors du monde jusqu'au moment
 voulu.
 
+Masquer ou montrer une épingle avec les commandes de Foundry lui-même — le HUD des tuiles, la
+configuration de la tuile, la liste des placeables — revient à utiliser l'œil du HUD du
+module : la montrer de nouveau la révèle aux joueurs à qui elle était montrée, ou à tous,
+avec l'accès au document si *Accorder l'accès au document à la révélation* est actif, et une
+révélation ne se reprend pas — une macro ou un module qui affiche toutes les tuiles révèle
+donc aussi vos épingles masquées.
+
 **La mise en lumière ne déplace les vues que pour une épingle destinée à tous.** Un ping
 de Foundry atteint chaque joueur connecté, quel que soit le public de l'épingle : amener
 toute la table sur une note destinée à un seul joueur montrerait aux autres où elle se
@@ -487,6 +504,11 @@ joueur pour toute épingle visible, comme son libellé l'indique.
     avec Alt pose toujours le jeton caché de Foundry, et sans touche réglée, glisser un
     acteur pose toujours un jeton. Réglez la touche sur Ctrl ou Maj pour épingler un
     acteur en le glissant.
+14. **Niveaux de scène.** Sur une scène v14 à plusieurs niveaux, une épingle s'affiche
+    pour l'instant à tous les niveaux, quel que soit celui où elle a été posée : les calques
+    du module ne connaissent pas encore les niveaux, et le filtre de niveau du tableau de
+    bord regroupe les épingles par élévation. Leur prise en charge attend d'avoir été vérifiée
+    dans un vrai monde.
 
 ## Développement
 

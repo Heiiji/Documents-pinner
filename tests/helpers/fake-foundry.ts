@@ -263,7 +263,18 @@ export function fakeDoc(options: FakeDocOptions = {}): any {
     return doc;
   };
   doc.getFlag = (scope: string, key: string) => doc.flags?.[scope]?.[key];
-  doc.testUserPermission = doc.testUserPermission ?? (() => true);
+  // `Document#testUserPermission` (TYPES common/abstract/document.d.mts:342-375; LIVE
+  // foundry.mjs 14.368, 14852 for a GM's OWNER, 14832 for the record): computed as core
+  // computes it — true for a GM, else `ownership[user.id] ?? ownership.default ?? NONE`
+  // against the level. Not modelled: a banned user (NONE) and an embedded document's
+  // INHERIT (its parent's level). A test that needs another answer passes its own.
+  doc.testUserPermission =
+    doc.testUserPermission ??
+    ((user: any, level: unknown) => {
+      if (user?.isGM) return true;
+      const own = doc.ownership?.[user?.id] ?? doc.ownership?.default ?? OWNERSHIP_LEVELS.NONE;
+      return own >= levelOf(level);
+    });
   return doc;
 }
 
@@ -809,6 +820,9 @@ export function installWorld(world: FakeWorld = {}): InstalledWorld {
     },
     app: { renderer: { resolution: 1, screen: { width: 1920, height: 1080 } }, ticker: null },
     stage: { worldTransform: { a: 1, b: 0, c: 0, d: 1, tx: 0, ty: 0 }, scale: { x: 1, y: 1 } },
+    // `CanvasVisibility#testVisibility` (TYPES canvas/groups/visibility.d.mts:175): every
+    // point in sight — what core answers while token vision is off, as on a GM's client with
+    // no token controlled (RECALLED). A test of line of sight replaces it with its own.
     visibility: { testVisibility: () => true },
     // `EnvironmentCanvasGroup#darknessLevel` (TYPES, groups/environment.d.mts:54-58): a
     // number once the environment has initialised, `undefined` before. Core's own
@@ -1058,17 +1072,11 @@ const levelOf = (level: unknown): number =>
     : ((OWNERSHIP_LEVELS as Record<string, number>)[String(level)] ?? Infinity);
 
 /**
- * A world document whose permission is COMPUTED, unlike `fakeDoc`'s permissive default:
- * `ownership[user.id] ?? ownership.default ?? NONE`, and OWNER for a GM. TYPES
- * (common/abstract/document.d.mts:342-375); the GM shortcut RECALLED.
+ * A world document with a sheet. Its permission is `fakeDoc`'s, computed as core computes
+ * it; the function is kept for the call sites that read as "a document someone owns".
  */
 export function ownedDoc(options: FakeDocOptions = {}): any {
   const doc = fakeDoc({ ownership: {}, ...options });
-  doc.testUserPermission = (user: any, level: unknown) => {
-    if (user?.isGM) return true;
-    const own = doc.ownership?.[user?.id] ?? doc.ownership?.default ?? OWNERSHIP_LEVELS.NONE;
-    return own >= levelOf(level);
-  };
   doc.sheet ??= {
     rendered: [] as unknown[],
     render: (...args: unknown[]) => doc.sheet.rendered.push(args),

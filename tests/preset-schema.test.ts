@@ -9,17 +9,13 @@ import {
   validatePreset,
   withComputedCost,
 } from "../src/effects/preset-schema";
-import {
-  CORE_PRESETS,
-  CORE_PRESET_IDS,
-  DEFAULT_PRESET_ID,
-  getCorePreset,
-} from "../src/effects/presets/core-presets";
+import { CORE_PRESETS, DEFAULT_PRESET_ID } from "../src/effects/presets/core-presets";
 import { PAPERS } from "../src/render/CardTemplate";
+import { getCorePreset } from "./helpers/presets";
 
 describe("the shipped library", () => {
   it("ships the documented presets", () => {
-    expect(CORE_PRESET_IDS).toEqual([
+    expect(CORE_PRESETS.map((p) => p.id)).toEqual([
       "none",
       "aged-parchment",
       "torn-edges",

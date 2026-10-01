@@ -107,15 +107,10 @@ export function rasterisationAvailable(): boolean | null {
   return canRasterise;
 }
 
-/** Force the answer. Used by the setting and by tests. */
+/** Force the answer. A test seam: nothing in the module forces it. */
 export function setRasterisationAvailable(value: boolean | null): void {
   canRasterise = value;
   consecutiveFailures = 0;
-}
-
-/** For the Pinboard's diagnostics and for tests. */
-export function rasterisationFailures(): number {
-  return consecutiveFailures;
 }
 
 /**

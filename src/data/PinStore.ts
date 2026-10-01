@@ -45,21 +45,28 @@ import {
 const queues = new Map<string, Promise<unknown>>();
 
 /**
+ * The queue a pin's writes wait in: its uuid, which names it on one scene. Not its id — a
+ * duplicated scene keeps every tile's id, so a write to one twin waited behind the other's.
+ * Exported for the migration, which waits on every pin of a scene.
+ */
+export const queueKey = (doc: any): string => String(doc?.uuid ?? doc?.id ?? "");
+
+/**
  * Chain `task` after any in-flight work for this anchor.
  *
  * The tracked chain swallows rejections — the caller handles the outcome of the
  * promise it is returned — because otherwise every failed task would also raise an
  * unhandled rejection.
  */
-export function enqueue<T>(anchorId: string, task: () => Promise<T>): Promise<T> {
-  const previous = queues.get(anchorId) ?? Promise.resolve();
+export function enqueue<T>(key: string, task: () => Promise<T>): Promise<T> {
+  const previous = queues.get(key) ?? Promise.resolve();
   const run = previous.catch(() => {}).then(task);
   const tracked = run
     .catch(() => {})
     .then(() => {
-      if (queues.get(anchorId) === tracked) queues.delete(anchorId);
+      if (queues.get(key) === tracked) queues.delete(key);
     });
-  queues.set(anchorId, tracked);
+  queues.set(key, tracked);
   return run;
 }
 
@@ -75,8 +82,8 @@ export function enqueue<T>(anchorId: string, task: () => Promise<T>): Promise<T>
  * Registering the same tracked promise on every anchor's queue also makes the ordering
  * work in the other direction: a chip click arriving mid-batch waits for the batch.
  */
-export function enqueueAll<T>(anchorIds: readonly string[], task: () => Promise<T>): Promise<T> {
-  const ids = [...new Set(anchorIds)].filter(Boolean);
+export function enqueueAll<T>(keys: readonly string[], task: () => Promise<T>): Promise<T> {
+  const ids = [...new Set(keys)].filter(Boolean);
   if (!ids.length) return task();
 
   const previous = Promise.allSettled(ids.map((id) => queues.get(id) ?? Promise.resolve()));
@@ -91,7 +98,7 @@ export function enqueueAll<T>(anchorIds: readonly string[], task: () => Promise<
   return run;
 }
 
-/** Resolves once every queued write has settled. Used by tests and the ready sweep. */
+/** Resolves once every queued write has settled. A test seam. */
 export async function settled(): Promise<void> {
   await Promise.allSettled([...queues.values()]);
 }
@@ -258,7 +265,7 @@ export function update(
   patch: PinPatch,
   fields: Record<string, unknown> = {}
 ): Promise<any> {
-  return enqueue(doc?.id ?? "", async () => {
+  return enqueue(queueKey(doc), async () => {
     const current = readPin(doc);
     if (!current) return null;
 
@@ -289,7 +296,7 @@ export function convertMode(
   mode: DpMode,
   fallback?: { width: number; height: number }
 ): Promise<any> {
-  return enqueue(doc?.id ?? "", async () => {
+  return enqueue(queueKey(doc), async () => {
     const current = readPin(doc);
     if (!current || current.mode === mode) return null;
 
@@ -330,7 +337,7 @@ export function convertMode(
  * could only ever disagree with the tile.
  */
 export function resize(doc: any, size: { width: number; height: number }): Promise<any> {
-  return enqueue(doc?.id ?? "", async () => {
+  return enqueue(queueKey(doc), async () => {
     if (!readPin(doc)) return null;
     const width = Math.max(1, Math.round(size.width));
     const height = Math.max(1, Math.round(size.height));
@@ -359,7 +366,7 @@ export function batchUpdate(scene: any, entries: { doc: any; patch: PinPatch }[]
   // bulk reveal landing on top of an in-flight chip toggle sees that toggle's result
   // rather than the payload as it was before.
   return enqueueAll(
-    entries.map(({ doc }) => doc?.id ?? ""),
+    entries.map(({ doc }) => queueKey(doc)),
     async () => {
       const updates = entries
         .map(({ doc, patch }) => {
@@ -384,7 +391,7 @@ export function batchUpdate(scene: any, entries: { doc: any; patch: PinPatch }[]
  * than a special case inside the patch path.
  */
 export function attach(doc: any, pin: DpPinFlags): Promise<any> {
-  return enqueue(doc?.id ?? "", async () => {
+  return enqueue(queueKey(doc), async () => {
     const validated = validatePin(pin).pin;
     return doc.update(
       {
@@ -398,12 +405,12 @@ export function attach(doc: any, pin: DpPinFlags): Promise<any> {
 
 /** Remove the pin payload but keep the tile, turning an anchor back into a plain tile. */
 export function unpin(doc: any): Promise<any> {
-  return enqueue(doc?.id ?? "", () =>
+  return enqueue(queueKey(doc), () =>
     doc.update(deletionUpdate(`flags.${MODULE_ID}`, FLAGS.PIN), internal())
   );
 }
 
 /** Delete the anchor entirely. The source document is never touched. */
 export function remove(doc: any): Promise<any> {
-  return enqueue(doc?.id ?? "", () => doc.delete(internal()));
+  return enqueue(queueKey(doc), () => doc.delete(internal()));
 }

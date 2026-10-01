@@ -258,8 +258,3 @@ function prefersReducedMotion(): boolean {
     return false;
   }
 }
-
-/** The matrix the overlay was last drawn with, for tests and for the ghost. */
-export function currentMatrix(): Mat {
-  return { ...lastMatrix };
-}

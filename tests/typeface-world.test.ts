@@ -14,7 +14,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FLAGS, MODULE_ID } from "../src/const";
 import { defaultPin } from "../src/data/pin-schema";
 import { validatePreset } from "../src/effects/preset-schema";
-import { getCorePreset } from "../src/effects/presets/core-presets";
 import { escapeAttr } from "../src/html";
 import type { DpPinFlags } from "../src/types/dp";
 import {
@@ -24,6 +23,7 @@ import {
   offerFonts,
   uninstallWorld,
 } from "./helpers/fake-foundry";
+import { getCorePreset } from "./helpers/presets";
 
 vi.mock("../src/data/ownership-sync", () => ({
   syncAnchor: vi.fn(async () => {}),

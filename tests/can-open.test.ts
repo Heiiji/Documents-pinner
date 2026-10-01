@@ -17,7 +17,6 @@ import { fakeTile, installWorld, uninstallWorld } from "./helpers/fake-foundry";
 vi.mock("../src/data/ownership-sync", () => ({
   syncAnchor: vi.fn(async () => {}),
   releaseAnchor: vi.fn(async () => {}),
-  grantTargets: vi.fn(() => []),
 }));
 
 let permitted: Set<string>;

@@ -21,6 +21,7 @@
 import { MODULE_ID } from "../const";
 import { cfg, cv, ns } from "../fvtt";
 import { rawPinFlag } from "../data/PinData";
+import { documentSource } from "../data/pin-schema";
 import type { DpSource } from "../types/dp";
 import { readField, shownField } from "./fields";
 import type { GrantTarget, Refusal, ShownFacts, SourceAdapter, SourceFacts } from "./index";
@@ -41,15 +42,7 @@ export interface PortraitKind {
 
 const REFUSED: Refusal = { refused: "DP.notice.embeddedRefused" };
 
-const sourceOf = (uuid: string): DpSource => ({
-  kind: "document",
-  uuid,
-  src: null,
-  pageId: null,
-  pdfPage: null,
-  followName: true,
-  field: null,
-});
+const sourceOf = (uuid: string): DpSource => documentSource(uuid);
 
 /**
  * Whether a uuid names a top-level document of this type — not an item an actor owns, not
@@ -145,6 +138,8 @@ export function portraitAdapter(kind: PortraitKind): SourceAdapter {
     // `Journal.show` resolves without showing anything for any other document (TYPES
     // `journal.d.mts:40-46`): claiming it was shown would be a lie.
     canShow: false,
+    // The directory's own hook, as for a journal (foundry.mjs 14.368, 131819).
+    contextHooks: [`get${documentName}ContextOptions`],
 
     fromDrop(data) {
       if (data?.type !== documentName || typeof data.uuid !== "string") return null;
@@ -160,10 +155,10 @@ export function portraitAdapter(kind: PortraitKind): SourceAdapter {
     isSource,
 
     /**
-     * P5. An actor's update hook fires on every hit-point change in combat, and each one
-     * that passed would re-enrich and re-rasterise a wanted poster. So: only for a pin on
-     * the scene being viewed, and only when the change reaches its name, its pictures, its
-     * ownership, this module's flags, or the very field the pin shows.
+     * DESIGN A28, P5. An actor's update hook fires on every hit-point change in combat, and
+     * each one that passed would re-enrich and re-rasterise a wanted poster. So: only for a
+     * pin on the scene being viewed, and only when the change reaches its name, its
+     * pictures, its ownership, this module's flags, or the very field the pin shows.
      */
     redrawsOn(doc, change) {
       if (!isSource(doc) || !change || typeof change !== "object") return false;

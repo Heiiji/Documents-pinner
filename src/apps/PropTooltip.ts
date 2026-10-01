@@ -125,13 +125,13 @@ export function hidePropTooltip(): void {
   write(node, () => node.classList.remove("dp-tooltip--in"));
 }
 
-/** For tests and diagnostics: the main line while shown, null while hidden. */
+/** A test seam: the main line while shown, null while hidden. */
 export function tooltipText(): string | null {
   if (!shownFor || !element) return null;
   return element.querySelector(".dp-tooltip__text")?.textContent ?? "";
 }
 
-/** For tests and diagnostics: the hint line while shown, null while hidden. */
+/** A test seam: the hint line while shown, null while hidden. */
 export function tooltipHint(): string | null {
   if (!shownFor || !element) return null;
   return element.querySelector(".dp-tooltip__hint")?.textContent ?? "";

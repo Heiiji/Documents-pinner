@@ -10,7 +10,7 @@
  * and does not want to remember which journal they filed it in — so a journal's pages are
  * listed beside it with the journal shown as context, an actor or an item with its type.
  * Only top-level documents are listed: an item an actor owns, a token's actor, belongs
- * to its owner and cannot be pinned on its own (D3).
+ * to its owner and cannot be pinned on its own (DESIGN A28, D3).
  */
 
 import { cfg, g, packs, worldCollection } from "../fvtt";
@@ -42,7 +42,7 @@ export interface PickerEntry {
  * Entries whose only page shares their name are listed once: a single-page journal is
  * one thing to a GM, and showing it twice makes the list look broken.
  */
-export function pickerEntries(): PickerEntry[] {
+export function journalEntries(): PickerEntry[] {
   const out: PickerEntry[] = [];
 
   for (const entry of g()?.journal?.contents ?? []) {
@@ -97,7 +97,7 @@ function worldDocuments(documentName: "Actor" | "Item"): PickerEntry[] {
 /** Every pinnable world document of these kinds, journals first, then actors, then items. */
 export function worldEntries(kinds: readonly Pinnable[] = PINNABLE): PickerEntry[] {
   return [
-    ...(kinds.includes("JournalEntry") ? pickerEntries() : []),
+    ...(kinds.includes("JournalEntry") ? journalEntries() : []),
     ...(kinds.includes("Actor") ? worldDocuments("Actor") : []),
     ...(kinds.includes("Item") ? worldDocuments("Item") : []),
   ];

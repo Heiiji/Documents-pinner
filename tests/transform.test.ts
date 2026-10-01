@@ -15,7 +15,6 @@ import {
   sameMat,
   scaleOf,
   stageMatrix,
-  screenPlacement,
   tileRect,
   toCssMatrix,
   type Mat,
@@ -147,16 +146,6 @@ describe("bounds and intersection", () => {
     expect(rectsIntersect(a, { x: 5, y: 5, width: 10, height: 10 })).toBe(true);
     expect(rectsIntersect(a, { x: 10, y: 0, width: 10, height: 10 })).toBe(false);
     expect(rectsIntersect(a, { x: 20, y: 20, width: 1, height: 1 })).toBe(false);
-  });
-});
-
-describe("screenPlacement", () => {
-  it("places the prop centre and adds the stage rotation to its own", () => {
-    const m = make(2, 0, 0, 10);
-    const p = screenPlacement(m, { x: 0, y: 0, width: 100, height: 200, rotation: 30 });
-    close(p.width, 200);
-    close(p.height, 400);
-    close(p.angle, 40);
   });
 });
 

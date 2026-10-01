@@ -204,6 +204,29 @@ export function rotatedBounds(rect: Rect & { rotation?: number }): Rect {
 }
 
 /**
+ * The four corners of a rotated top-left rect in scene space, clockwise from its own
+ * top-left, turned `rotation` degrees about its centre. For a document, pass
+ * `tileRect(doc)`.
+ */
+export function rotatedCorners(rect: Rect & { rotation?: number }): Point[] {
+  const cx = rect.x + rect.width / 2;
+  const cy = rect.y + rect.height / 2;
+  const rot = ((rect.rotation ?? 0) * Math.PI) / 180;
+  const cos = Math.cos(rot);
+  const sin = Math.sin(rot);
+  return [
+    [-1, -1],
+    [1, -1],
+    [1, 1],
+    [-1, 1],
+  ].map(([sx, sy]) => {
+    const dx = (sx * rect.width) / 2;
+    const dy = (sy * rect.height) / 2;
+    return { x: cx + dx * cos - dy * sin, y: cy + dx * sin + dy * cos };
+  });
+}
+
+/**
  * Whether a scene-space point lies inside a rotated top-left rect.
  *
  * Exact, not the axis-aligned bounds: the reader uses this to tell a press on the prop
@@ -219,22 +242,6 @@ export function containsPoint(rect: Rect & { rotation?: number }, p: Point): boo
   const lx = dx * Math.cos(rot) - dy * Math.sin(rot);
   const ly = dx * Math.sin(rot) + dy * Math.cos(rot);
   return Math.abs(lx) <= rect.width / 2 && Math.abs(ly) <= rect.height / 2;
-}
-
-/** Where a top-left rect lands on screen. For a document, pass `tileRect(doc)`. */
-export function screenPlacement(
-  m: Mat,
-  rect: Rect & { rotation?: number }
-): { cx: number; cy: number; width: number; height: number; angle: number } {
-  const centre = applyMat(m, { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 });
-  const k = scaleOf(m);
-  return {
-    cx: centre.x,
-    cy: centre.y,
-    width: rect.width * k,
-    height: rect.height * k,
-    angle: (rect.rotation ?? 0) + rotationOf(m),
-  };
 }
 
 /** Apparent on-screen width of a prop in CSS pixels — the input to the LOD ladder. */
@@ -269,10 +276,6 @@ export function stageMatrix(): Mat {
   }
   if (!t) return { ...IDENTITY };
   return { a: t.a, b: t.b, c: t.c, d: t.d, tx: t.tx, ty: t.ty };
-}
-
-export function sceneToScreen(p: Point): Point {
-  return applyMat(stageMatrix(), p);
 }
 
 export function screenToScene(p: Point): Point {

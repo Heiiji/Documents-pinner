@@ -126,7 +126,8 @@ export function playersCanRead(pack: any): boolean {
  *
  * What a refused load does on a player's client is unmeasured — a null, a throw, or an
  * error toast per attempt, and the card is resolved again at every level-of-detail pass
- * (probe C1). So the role is asked first, and the answer is a placeholder that says why.
+ * (DESIGN A27's probe C1). So the role is asked first, and the answer is a placeholder that
+ * says why.
  */
 export function packLockedHere(uuid: unknown): boolean {
   if (!isPackUuid(uuid)) return false;

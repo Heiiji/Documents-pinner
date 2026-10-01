@@ -126,7 +126,13 @@ export interface DpEffectRef {
   /** Stored, never derived, so every client glitches identically. */
   seed: number;
   motion: "loop" | "onReveal" | "none";
-  /** Per-pin parameter overrides on top of the preset. */
+  /**
+   * Reserved, and read by nothing. Per-pin overrides of the preset's parameters have been
+   * in the schema since the first version and were never wired: the card is dressed from
+   * the preset alone, and no UI writes them. Kept, bounded and nested as v14 stores them,
+   * so a payload that carries some — an API caller's `patch` — reads cleanly and the
+   * migration leaves it alone.
+   */
   params: Record<string, unknown>;
   /**
    * This prop's own reveal sound, a same-origin path (`normalise.soundPath`). `null`

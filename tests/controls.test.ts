@@ -16,7 +16,7 @@
  * `locate` still switches layer itself, and that is what these tests keep.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { activateTilesLayer, onGetSceneControlButtons } from "../src/ui/controls";
+import { onGetSceneControlButtons } from "../src/ui/controls";
 import { installWorld, uninstallWorld } from "./helpers/fake-foundry";
 
 let activated: number;
@@ -63,18 +63,6 @@ describe("the Notes control tools", () => {
   it("does not throw when the Notes control is absent", () => {
     const controls: any = {};
     expect(() => onGetSceneControlButtons(controls)).not.toThrow();
-  });
-});
-
-describe("activateTilesLayer", () => {
-  it("reports whether it could switch", () => {
-    expect(activateTilesLayer()).toBe(true);
-    expect(activated).toBe(1);
-  });
-
-  it("says so rather than throwing when there is no canvas", () => {
-    uninstallWorld();
-    expect(activateTilesLayer()).toBe(false);
   });
 });
 

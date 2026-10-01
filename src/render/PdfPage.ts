@@ -24,6 +24,7 @@
  *   once. Parsing a 32-page PDF is not cheap and the result is immutable.
  */
 
+import { ns } from "../fvtt";
 import { logger } from "../log";
 
 const log = logger("pdf");
@@ -49,7 +50,7 @@ const PAGE_LIMIT = 8;
 
 /** Foundry's own route helper, so a server under a subpath still resolves. */
 function route(path: string): string {
-  const helper = (globalThis as any).foundry?.utils?.getRoute;
+  const helper = ns("utils.getRoute");
   return typeof helper === "function" ? helper(path) : `/${path.replace(/^\/+/, "")}`;
 }
 
@@ -170,12 +171,8 @@ export async function pdfPageCount(src: string): Promise<number> {
   return doc?.numPages ?? 0;
 }
 
-/** Whether a resolved source is a PDF page this module can draw. */
-export function pdfSourceOf(source: any): string | null {
-  if (source?.type !== "pdf") return null;
-  const src = source?.src;
-  return typeof src === "string" && src ? src : null;
-}
+// Which journal page is a PDF is the journal adapter's question; its tests read it here.
+export { pdfSourceOf } from "../sources/journal";
 
 /**
  * Drop everything, and let pdf.js free what it holds. Called when the scene tears down.

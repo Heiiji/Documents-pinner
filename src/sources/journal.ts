@@ -14,8 +14,7 @@
 import { OWNERSHIP } from "../const";
 import { escapeHtml } from "../html";
 import { t } from "../i18n";
-import { pdfSourceOf } from "../render/PdfPage";
-import type { DpSource } from "../types/dp";
+import { documentSource } from "../data/pin-schema";
 import type { GrantTarget, PageChoice, ShownFacts, SourceAdapter, SourceFacts } from "./index";
 
 /** "Journal › Page" for a page, the shown document's own name otherwise. */
@@ -26,6 +25,16 @@ function journalCrumb(shown: ShownFacts): string {
     return `${parent} › ${name}`;
   }
   return name;
+}
+
+/**
+ * The file of a resolved journal page that is a PDF this module can draw, or null. Asked
+ * of the journal adapter only: an actor whose system names a type "pdf" is not one.
+ */
+export function pdfSourceOf(source: any): string | null {
+  if (source?.type !== "pdf") return null;
+  const src = source?.src;
+  return typeof src === "string" && src ? src : null;
 }
 
 /** What kind of journal document it is, as an icon. */
@@ -209,15 +218,6 @@ function openJournal(source: any): void {
   source.sheet.render({ force: true });
 }
 
-const documentSource = (uuid: string, pageId: string | null = null): DpSource => ({
-  kind: "document",
-  uuid,
-  src: null,
-  pageId,
-  pdfPage: null,
-  followName: true,
-});
-
 export const journalAdapter: SourceAdapter = {
   names: ["JournalEntry", "JournalEntryPage"],
   layout: "page",
@@ -226,6 +226,16 @@ export const journalAdapter: SourceAdapter = {
   maxGrant: 2,
   syncOnCreate: true,
   canShow: true,
+  // A v14 directory fires `get${documentName}ContextOptions` (foundry.mjs 14.368, 131819),
+  // and a sheet's pages `getJournalEntryPageContextOptions` (101133); the 14.366 types name
+  // the journal sidebar's `getJournalContextOptions`, so that one is registered too, and
+  // `addContextOption` adds its entry once however many of them fire. The AppV1 names
+  // (`get…DirectoryEntryContext`, `getJournalSheetPageContextOptions`) cannot fire on 14.
+  contextHooks: [
+    "getJournalEntryContextOptions",
+    "getJournalContextOptions",
+    "getJournalEntryPageContextOptions",
+  ],
 
   fromDrop(data) {
     if (!data?.uuid) return null;

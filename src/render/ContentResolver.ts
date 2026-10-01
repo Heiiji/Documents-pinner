@@ -19,8 +19,7 @@
 import { g, isGM } from "../fvtt";
 import { t } from "../i18n";
 import { escapeHtml } from "../html";
-import * as api from "../api";
-import { cardHtml } from "./CardTemplate";
+import { cardHtml, type CardOptions } from "./CardTemplate";
 import { dressing } from "../effects/EffectRegistry";
 import { currentLevel } from "../effects/level";
 import { findPreset } from "../effects/preset-library";
@@ -30,9 +29,11 @@ import { renderPdfPage } from "./PdfPage";
 import { hashContent } from "./TextureCache";
 import { measureCardHeight } from "./measure";
 import { cardMetrics } from "../data/pin-schema";
-import { adapterForDoc } from "../sources/index";
+import { adapterForDoc, canOpenShown } from "../sources/index";
+import { pdfPageOf } from "../sources/describe";
 import { packLockedHere } from "../sources/packs";
 import { isPackUuid, parseSourceUuid } from "../sources/uuid";
+import { labelFor, resolveSource } from "../sources/view";
 import type { DpPinFlags } from "../types/dp";
 
 export interface ResolvedCard {
@@ -71,10 +72,10 @@ export async function resolveCard(
   size: { width: number; height: number },
   options: ResolveOptions = {}
 ): Promise<ResolvedCard> {
-  // The library, not just the shipped ten. `getCorePreset` searches CORE_PRESETS only,
-  // so a pin assigned a user preset got no effect at all, a raw id where its label should
-  // be, and no reveal animation — the entire Preset Studio produced artefacts the module
-  // could not use, while the README promised "author, export and share your own".
+  // The library, not just the shipped ones. A lookup in CORE_PRESETS alone gave a pin
+  // assigned a user preset no effect at all, a raw id where its label should be, and no
+  // reveal animation — the entire Preset Studio produced artefacts the module could not
+  // use, while the README promised "author, export and share your own".
   const preset = findPreset(pin.effect.id);
   const dressed = preset
     ? dressing({
@@ -101,13 +102,13 @@ export async function resolveCard(
     effectStyle: dressed?.style,
     effectAttrs: dressed?.attrs,
     // The pin's own face wins, then the preset's. Read from the preset rather than from
-    // the dressing, which is empty at `off` and at the silhouette rung (K6).
+    // the dressing, which is empty at `off` and at the silhouette rung (DESIGN A26).
     font: pin.display.font ?? preset?.params.type.family ?? null,
   };
 
   if (pin.source.kind === "image") {
     const src = pin.source.src ?? "";
-    const title = api.labelFor(pin);
+    const title = labelFor(pin);
     return {
       html: cardHtml({
         ...common,
@@ -125,9 +126,9 @@ export async function resolveCard(
   }
 
   // Never a blank and never a request the server will refuse: a player whose role cannot
-  // read the pack gets a placeholder that says so, and no load is attempted (R2).
+  // read the pack gets a placeholder that says so, and no load is attempted (DESIGN A27).
   if (packLockedHere(pin.source.uuid)) return placeholder(common, "packLocked");
-  const source = await api.resolveSource(pin);
+  const source = await resolveSource(pin);
   if (!source) return placeholder(common, unresolved(pin));
 
   // Dispatched on the document's TYPE first. A journal page's `type` says text, image or
@@ -140,7 +141,7 @@ export async function resolveCard(
   const pdfSrc = adapter.pdf(source);
   if (pdfSrc) {
     const longEdge = Math.max(size.width, size.height) * (options.tier === "L2a" ? 1 : 2);
-    const rendered = await renderPdfPage(pdfSrc, pin.source.pdfPage ?? 1, Math.round(longEdge));
+    const rendered = await renderPdfPage(pdfSrc, pdfPageOf(pin), Math.round(longEdge));
     if (rendered) {
       const title = pin.display.label || source.name || "";
       return {
@@ -151,9 +152,9 @@ export async function resolveCard(
           showTitle: pin.display.showTitle && !!pin.display.label,
         }),
         title,
-        readable: source.testUserPermission?.(g()?.user, adapter.openLevel) === true,
+        readable: canOpenShown(source, g()?.user),
         contentHash: hashContent(
-          `pdf|${pdfSrc}|${pin.source.pdfPage ?? 1}|${rendered.width}x${rendered.height}`
+          `pdf|${pdfSrc}|${pdfPageOf(pin)}|${rendered.width}x${rendered.height}`
         ),
         missing: false,
         // The page's own aspect is the answer; it is contained, so it never overflows.
@@ -188,7 +189,7 @@ export async function resolveCard(
   return {
     html: build(overflow),
     title,
-    readable: source.testUserPermission?.(g()?.user, adapter.openLevel) === true,
+    readable: canOpenShown(source, g()?.user),
     // `isOwner` is in the hash because it changes what the HTML contains: a GM and a
     // player must never share a cache entry, and this is the second guard on that
     // after the user id already in the key.
@@ -203,7 +204,7 @@ export async function resolveCard(
  *
  * "No longer exists" is the truth for the GM, whose client holds every world document. A
  * player's client may not be sent a world actor or item it has no permission to see at all
- * (unmeasured, probe D1), and actor access starts off (A28): telling that player the
+ * (unmeasured, A28's probe D1), and actor access starts off (A28): telling that player the
  * wanted man was deleted, when he is in the GM's sidebar, is a lie. They are told it is not
  * available to them instead.
  */
@@ -219,7 +220,10 @@ const PLACEHOLDER_TITLE: Record<Reason, string> = {
   unavailable: "DP.card.unavailable",
 };
 
-function placeholder(common: any, reason: Reason): ResolvedCard {
+function placeholder(
+  common: Omit<CardOptions, "title" | "bodyHtml">,
+  reason: Reason
+): ResolvedCard {
   const title = t(PLACEHOLDER_TITLE[reason]);
   return {
     html: cardHtml({ ...common, title, bodyHtml: "", missing: true, showTitle: false }),

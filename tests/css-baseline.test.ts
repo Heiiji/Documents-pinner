@@ -17,6 +17,14 @@
  *
  * Nothing here is hard-coded to today's stylesheets. Every set is derived at test time
  * from the real emitter and the real files, so this keeps working as both change.
+ *
+ * **These read CSS text, deliberately.** The house rule tests behaviour, not source text;
+ * this file, `assets.test.ts`'s namespacing checks and the scene dim's placement below are
+ * the accepted exception. Each is a policy over the stylesheets AS A WHOLE — a baseline, a
+ * banned property, a namespace, where a rule may not be — that no rendered element can
+ * show: jsdom has no cascade, and a rule that is absent or never matches has no behaviour
+ * to observe. Where a fact CAN be observed on markup the module emits, it is tested there
+ * instead (the projection stock's dim, in `scene-dim.test.ts`).
  */
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
@@ -24,8 +32,7 @@ import { describe, expect, it } from "vitest";
 import { dressing } from "../src/effects/EffectRegistry";
 import { presetToCssVars, presetToDataAttrs } from "../src/effects/preset-css";
 import { CORE_PRESETS } from "../src/effects/presets/core-presets";
-
-const ROOT = join(import.meta.dirname, "..");
+import { ROOT, cssFiles, cssRules, decomment, readStyles } from "./helpers/styles";
 
 /**
  * The browsers this module supports, and why these numbers.
@@ -112,26 +119,9 @@ const FEATURES: { name: string; test: RegExp; chrome: number; firefox: number }[
   { name: "element()", test: /\belement\(/, chrome: 999, firefox: 4 },
 ];
 
-function cssFiles(dir: string, out: string[] = []): string[] {
-  for (const entry of readdirSync(dir)) {
-    const full = join(dir, entry);
-    if (statSync(full).isDirectory()) cssFiles(full, out);
-    else if (entry.endsWith(".css")) out.push(full);
-  }
-  return out;
-}
-
-/**
- * Comments stripped, always.
- *
- * Load-bearing: without it a property or an attribute passes this file's checks on the
- * strength of a comment saying it is dead, which is how `data-dp-fx` survived a rule
- * describing it as matched by nothing.
- */
-const decomment = (text: string) => text.replace(/\/\*[\s\S]*?\*\//g, "");
-
-const FILES = cssFiles(join(ROOT, "styles"));
-const CSS = decomment(FILES.map((f) => readFileSync(f, "utf8")).join("\n"));
+/** Comments stripped, always — see `helpers/styles.ts` for why that is load-bearing. */
+const FILES = cssFiles();
+const CSS = readStyles();
 
 function tsFiles(dir: string, out: string[] = []): string[] {
   for (const entry of readdirSync(dir)) {
@@ -308,31 +298,15 @@ describe("what the effect system emits", () => {
  * is animated by the arrival and set to `none` under reduced motion, so a brightness
  * there would be erased; the reader is for reading and must never be dimmed; and
  * `card.css` is inlined into the rasteriser, where core already lights the texture.
+ * Which cards the dim reaches — every paper but projected light — is tested on the
+ * emitted card markup, in `scene-dim.test.ts`.
  */
 describe("the scene dim", () => {
-  const rules = [...CSS.matchAll(/([^{};]+)\{([^{}]*)\}/g)].map((m) => ({
-    selector: m[1].trim(),
-    body: m[2],
-  }));
+  const rules = cssRules(CSS);
   const filterOf = (selector: string) =>
     rules
       .filter((rule) => rule.selector === selector && /(^|;)\s*filter\s*:/.test(rule.body))
       .map((rule) => /(?:^|;)\s*filter\s*:([^;]*)/.exec(rule.body)![1].replace(/\s+/g, " ").trim());
-
-  it("is handed to the card by a `.dp-prop` rule, and taken back only for projected light", () => {
-    const setters = rules
-      .filter((rule) => /--dp-card-dim\s*:/.test(rule.body))
-      .map((rule) => ({
-        selector: rule.selector,
-        value: /--dp-card-dim\s*:([^;]*)/.exec(rule.body)![1].replace(/\s+/g, " ").trim(),
-      }));
-    // Exactly these two. A third setter is a card dimmed, or spared, by something other
-    // than the scene — say where it is and why before adding it here.
-    expect(setters).toEqual([
-      { selector: ".dp-prop", value: "var(--dp-scene-dim, 1)" },
-      { selector: '.dp-prop .dp-card[data-dp-paper="projection"]', value: "1" },
-    ]);
-  });
 
   it("ends the card's own filter chain, and never the reader's", () => {
     const chains = filterOf(".dp-card");

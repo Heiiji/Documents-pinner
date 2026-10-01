@@ -58,9 +58,6 @@ export const OWNERSHIP = {
   OWNER: 3,
 } as const;
 
-/** The ownership record key meaning "every user without an explicit entry". */
-export const DEFAULT_KEY = "default";
-
 /**
  * Foundry's deletion operator for a record key.
  *

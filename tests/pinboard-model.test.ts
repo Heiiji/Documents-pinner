@@ -3,7 +3,6 @@ import {
   dropIndex,
   filterRows,
   focusIndex,
-  fold,
   levelsIn,
   nextToReveal,
   planReorder,
@@ -12,6 +11,7 @@ import {
   toggleSelection,
   type PinboardRow,
 } from "../src/apps/pinboard-model";
+import { fold } from "../src/normalise";
 
 function row(overrides: Partial<PinboardRow> = {}): PinboardRow {
   return {

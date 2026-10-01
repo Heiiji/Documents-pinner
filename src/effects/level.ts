@@ -158,8 +158,3 @@ export function currentLevel(): EffectsLevel {
     wasSlow,
   });
 }
-
-/** Whether motion is allowed at all. The stylesheet gates on `data-dp-level`. */
-export function motionAllowed(): boolean {
-  return currentLevel() === "full";
-}

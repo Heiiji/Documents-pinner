@@ -5,13 +5,14 @@ import {
   toStyle,
   type EffectContext,
 } from "../src/effects/EffectRegistry";
-import { CORE_PRESETS, getCorePreset } from "../src/effects/presets/core-presets";
+import { CORE_PRESETS } from "../src/effects/presets/core-presets";
 import {
   edgeMaskDataUri,
   grainDataUri,
   scanlineGradient,
   stainDataUri,
 } from "../src/effects/textures";
+import { getCorePreset } from "./helpers/presets";
 
 const context = (over: Partial<EffectContext> = {}): EffectContext => ({
   preset: getCorePreset("aged-parchment")!,

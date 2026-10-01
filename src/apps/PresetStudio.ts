@@ -15,7 +15,7 @@
  * would be worse than no meter at all.
  */
 
-import { notify, ns } from "../fvtt";
+import { browseFiles, confirmDialog, notify, ns } from "../fvtt";
 import { t } from "../i18n";
 import { escapeAttr, escapeHtml } from "../html";
 import * as api from "../api";
@@ -36,7 +36,7 @@ import { fontChoices, fontLabel, fontOptionsMarkup, fontStack } from "../effects
 import { registeredFontFamilies } from "../render/AssetInliner";
 import { logger } from "../log";
 import { soundPath } from "../normalise";
-import { playRevealSound } from "../canvas/PropManager";
+import { playRevealSound } from "../effects/reveal-sound";
 import type { DpNotice } from "../types/dp";
 import { restoreFocus, snapshotFocus } from "./focus-restore";
 
@@ -716,14 +716,7 @@ async function onDuplicate(this: any) {
 }
 
 async function onRemove(this: any) {
-  const DialogV2 = ns("applications.api.DialogV2");
-  const confirmed = DialogV2?.confirm
-    ? await DialogV2.confirm({
-        window: { title: t("DP.presets.delete") },
-        content: `<p>${escapeHtml(t("DP.presets.deleteBody"))}</p>`,
-      }).catch(() => false)
-    : false;
-  if (!confirmed) return;
+  if (!(await confirmDialog("DP.presets.delete", "DP.presets.deleteBody"))) return;
 
   await library.deletePreset(this.selectedId);
   this.selectedId = "aged-parchment";
@@ -757,7 +750,7 @@ async function onExport(this: any) {
   const json = library.exportPreset(this.selected);
   try {
     await navigator.clipboard.writeText(json);
-    (globalThis as any).ui?.notifications?.info?.(t("DP.presets.copied"));
+    notify({ key: "DP.presets.copied" }, "info");
   } catch {
     // Clipboard access can be refused; show the JSON so it can still be copied by hand.
     const DialogV2 = ns("applications.api.DialogV2");
@@ -803,21 +796,13 @@ async function setReveal(
 
 /** Choose a preset's reveal sound from the file browser, audio files only. */
 function onBrowseRevealSound(this: any) {
-  const FilePicker = ns("applications.apps.FilePicker.implementation");
-  if (!FilePicker || this.selected.author === "core") return;
+  if (this.selected.author === "core") return;
   const id = this.selectedId;
-  try {
-    const picker = new FilePicker({
-      type: "audio",
-      current: this.selected.reveal.sound ?? "",
-      callback: (path: string) => void setReveal(this, id, "sound", path),
-    });
-    void Promise.resolve(picker.render({ force: true })).catch((error: unknown) =>
-      log.warn(`the file browser could not open`, error)
-    );
-  } catch (error) {
-    log.warn(`the file browser could not open`, error);
-  }
+  browseFiles(
+    "audio",
+    (path) => void setReveal(this, id, "sound", path),
+    this.selected.reveal.sound ?? ""
+  );
 }
 
 /** Hear it: the GM's own client never sees a prop arrive, so this is how they know. */
@@ -847,6 +832,6 @@ export function openPresetStudio(id?: string, doc?: any): any {
   instance ??= new Studio();
   if (id && library.findPreset(id)) instance.selectedId = id;
   instance.forDoc = doc ?? null;
-  instance.render(true);
+  instance.render({ force: true });
   return instance;
 }

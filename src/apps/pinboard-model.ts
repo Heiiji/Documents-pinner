@@ -73,9 +73,6 @@ export interface PinboardQuery {
   level: number | null;
 }
 
-/** Case and diacritics folded, for search: shared with the picker's (`normalise.ts`). */
-export { fold };
-
 function matchesFilter(row: RowFacts, filter: PinboardFilter): boolean {
   switch (filter) {
     case "visible":

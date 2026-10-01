@@ -15,7 +15,7 @@
  */
 
 import { DEFAULTS, MODULE_ID } from "./const";
-import { g } from "./fvtt";
+import { g, ns } from "./fvtt";
 import { logger, setLogLevel, type LogLevel } from "./log";
 import { DEFAULT_PRESET_ID } from "./effects/presets/core-presets";
 import type { DpAudience } from "./types/dp";
@@ -360,7 +360,7 @@ export function register(): void {
  */
 export function registerPresetMenu(open: () => void): void {
   const settings = g()?.settings;
-  const ApplicationV2 = (globalThis as any).foundry?.applications?.api?.ApplicationV2;
+  const ApplicationV2 = ns("applications.api.ApplicationV2");
   if (!settings?.registerMenu || !ApplicationV2) return;
 
   // registerMenu wants a class it can construct; the smallest honest one opens the

@@ -38,6 +38,7 @@ import type {
   DpEffectRef,
   DpGeometry,
   DpInteraction,
+  DpMode,
   DpNotice,
   DpPinFlags,
   DpSource,
@@ -55,11 +56,29 @@ export interface PinValidationResult {
   warnings: DpNotice[];
 }
 
-const MODES = ["pin", "prop"] as const;
-const SOURCE_KINDS = ["document", "image"] as const;
-const MOTIONS = ["loop", "onReveal", "none"] as const;
-const AUDIENCE_KINDS = ["hidden", "everyone", "selected", "discovered"] as const;
-const OPEN_MODES = ["single", "double", "readInPlace", "never"] as const;
+/**
+ * Every value of a union in `dp.d.ts`, read off a record that must name each one and
+ * nothing else. A value added to the union and not here fails to compile, where a plain
+ * list would have the normaliser refuse it at runtime, with a warning, on every read.
+ */
+const valuesOf = <K extends string>(record: Record<K, true>): readonly K[] =>
+  Object.keys(record) as K[];
+
+const MODES = valuesOf<DpMode>({ pin: true, prop: true });
+const SOURCE_KINDS = valuesOf<DpSource["kind"]>({ document: true, image: true });
+const MOTIONS = valuesOf<DpEffectRef["motion"]>({ loop: true, onReveal: true, none: true });
+const AUDIENCE_KINDS = valuesOf<DpAudienceKind>({
+  hidden: true,
+  everyone: true,
+  selected: true,
+  discovered: true,
+});
+const OPEN_MODES = valuesOf<DpInteraction["open"]>({
+  single: true,
+  double: true,
+  readInPlace: true,
+  never: true,
+});
 
 const BAD_ENUM = "DP.pin.warn.badEnum";
 const UNKNOWN_KEY = "DP.pin.warn.unknownKey";
@@ -89,9 +108,10 @@ function withoutRetired(
 const EFFECT_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
 
 /**
- * A per-pin parameter override key: a `DpPresetParams` field, optionally inside its
- * group — `blur`, or `tint.amount`. An override is STORED nested, `{ tint: { amount } }`,
- * and `mergePin` merges it deeply, so a patch of one field keeps its sibling colour.
+ * A key of the reserved `effect.params` (`DpEffectRef.params`, read by nothing): a
+ * `DpPresetParams` field, optionally inside its group — `blur`, or `tint.amount`. STORED
+ * nested, `{ tint: { amount } }`, and `mergePin` merges it deeply, so a patch of one field
+ * keeps its sibling.
  */
 const PARAM_KEY = /^[a-z][a-zA-Z0-9]*(?:\.[a-z][a-zA-Z0-9]*)?$/;
 const MAX_PARAM_OVERRIDES = 64;
@@ -136,6 +156,20 @@ export function defaultSource(): DpSource {
     followName: true,
     field: null,
   };
+}
+
+/**
+ * A source naming a document — a journal, one of its pages, an actor, an item — and, for
+ * a journal, the page chosen in it. The one way a source is built, so every one has every
+ * key: `retarget` once had to patch `field` back onto sources built without it.
+ */
+export function documentSource(uuid: string, pageId: string | null = null): DpSource {
+  return { ...defaultSource(), uuid, pageId };
+}
+
+/** A source that is a bare image file. It has no name to follow. */
+export function imageSource(src: string): DpSource {
+  return { ...defaultSource(), kind: "image", src, followName: false };
 }
 
 export function defaultDisplay(): DpDisplay {
@@ -356,7 +390,8 @@ function normaliseGeometry(raw: unknown, warnings: DpNotice[]): DpGeometry {
 }
 
 /**
- * Per-pin overrides on top of the preset's parameters, nested by group.
+ * The reserved `effect.params`, nested by group: stored, and drawn by nothing
+ * (`DpEffectRef.params`).
  *
  * Nested because v14 stores them so whatever is written: a dotted key inside a flag is
  * expanded at every depth (foundry.mjs 14.368, `ObjectField#_cleanType`, 10554-10580). An
@@ -364,8 +399,8 @@ function normaliseGeometry(raw: unknown, warnings: DpNotice[]): DpGeometry {
  * here as not a scalar, and the migration — comparing it with the stored nesting — rewrote
  * the pin on every load. Both shapes are read; a later key wins over an earlier one.
  *
- * Bounded and shape-checked here, then re-validated by `validatePreset` once merged,
- * so a hand-edited flag cannot smuggle a value past the preset's own clamps.
+ * Bounded and shape-checked, so a hand-edited flag stays small. Were they ever drawn, the
+ * merged preset would go through `validatePreset` first: nothing here is a clamp.
  */
 function normaliseParams(raw: unknown, warnings: DpNotice[]): Record<string, unknown> {
   const flat: [string, unknown][] = [];
@@ -647,9 +682,4 @@ export function freezeMetrics(
   const margin =
     pin.display.margin ?? num(Number((padPx / typeSize).toFixed(4)), 0, 0, MARGIN_MAX_EM);
   return { ...pin, display: { ...pin.display, typeSize, margin } };
-}
-
-/** Whether a payload describes a pin that can actually resolve its source. */
-export function hasResolvableSource(pin: DpPinFlags): boolean {
-  return pin.source.kind === "document" ? !!pin.source.uuid : !!pin.source.src;
 }

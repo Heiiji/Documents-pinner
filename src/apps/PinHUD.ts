@@ -400,10 +400,10 @@ export function definePinHUD(): any {
         const chip = (event.target as HTMLElement)?.closest?.<HTMLElement>(".dp-chip");
         if (!chip) return;
         event.preventDefault();
-        const userId = chip.dataset.dpUser ?? "";
-        const doc = this.anchorDoc;
-        if (event.shiftKey) void api.soloUser(doc, userId);
-        else void api.setUserVisible(doc, userId, chip.getAttribute("aria-checked") !== "true");
+        void api.chipClick(this.anchorDoc, chip.dataset.dpUser ?? "", {
+          solo: event.shiftKey,
+          wasOn: chip.getAttribute("aria-checked") === "true",
+        });
       });
 
       // The slider previews as it moves: one custom-property write the compositor
@@ -477,7 +477,7 @@ export function showPinHUD(tile: any): void {
     shown = hudInstance.bind(tile);
   } else {
     hudInstance.object = tile;
-    shown = hudInstance.render(true);
+    shown = hudInstance.render({ force: true });
   }
 
   void Promise.resolve(shown)
@@ -546,9 +546,6 @@ function onTogglePalette(this: any, _event: Event, target: HTMLElement) {
     palette.querySelector<HTMLElement>("button, input")?.focus();
   }
 }
-
-// Re-exported: the helper moved to `focus-restore.ts` when the Studios needed it too.
-export { focusSelectorIn };
 
 /** Reveal & spotlight. Nothing to render on failure but the GM must hear of it. */
 function onSpotlight(this: any) {

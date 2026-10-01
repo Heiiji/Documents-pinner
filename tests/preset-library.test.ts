@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { GROUPS, presetStudioMarkup, readParam, writeParam } from "../src/apps/PresetStudio";
 import { exportPreset, isCorePreset } from "../src/effects/preset-library";
-import { CORE_PRESETS, getCorePreset } from "../src/effects/presets/core-presets";
+import { CORE_PRESETS } from "../src/effects/presets/core-presets";
 import { validatePreset } from "../src/effects/preset-schema";
+import { getCorePreset } from "./helpers/presets";
 
 const parchment = () => getCorePreset("aged-parchment")!;
 
