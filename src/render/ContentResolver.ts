@@ -19,7 +19,6 @@
 import { g, isGM } from "../fvtt";
 import { t } from "../i18n";
 import { escapeHtml } from "../html";
-import * as api from "../api";
 import { cardHtml } from "./CardTemplate";
 import { dressing } from "../effects/EffectRegistry";
 import { currentLevel } from "../effects/level";
@@ -33,6 +32,7 @@ import { cardMetrics } from "../data/pin-schema";
 import { adapterForDoc } from "../sources/index";
 import { packLockedHere } from "../sources/packs";
 import { isPackUuid, parseSourceUuid } from "../sources/uuid";
+import { labelFor, resolveSource } from "../sources/view";
 import type { DpPinFlags } from "../types/dp";
 
 export interface ResolvedCard {
@@ -107,7 +107,7 @@ export async function resolveCard(
 
   if (pin.source.kind === "image") {
     const src = pin.source.src ?? "";
-    const title = api.labelFor(pin);
+    const title = labelFor(pin);
     return {
       html: cardHtml({
         ...common,
@@ -127,7 +127,7 @@ export async function resolveCard(
   // Never a blank and never a request the server will refuse: a player whose role cannot
   // read the pack gets a placeholder that says so, and no load is attempted (DESIGN A27).
   if (packLockedHere(pin.source.uuid)) return placeholder(common, "packLocked");
-  const source = await api.resolveSource(pin);
+  const source = await resolveSource(pin);
   if (!source) return placeholder(common, unresolved(pin));
 
   // Dispatched on the document's TYPE first. A journal page's `type` says text, image or
