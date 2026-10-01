@@ -164,6 +164,12 @@ they never reach a player's browser.
 
 If you need real secrecy, keep the document out of the world until you want it seen.
 
+Hiding or showing a pin with Foundry's own controls — the Tiles HUD, Tile Config, the
+Placeables list — works like the module's own eye on the HUD: showing it again reveals it to
+the players it was shown to before, or to everyone, with document access if *Grant document
+access on reveal* is on, and a reveal cannot be taken back — so a macro or a module that
+shows every tile reveals your hidden pins too.
+
 **Spotlight moves views only for a pin that is for everyone.** A Foundry ping reaches
 every connected player, whoever the pin is for, so pulling the table to a note meant for
 one player would walk everyone else to where it lies. *Reveal & spotlight* (the HUD,
@@ -424,6 +430,13 @@ n'est pas propriétaire : ils n'atteignent jamais le navigateur du joueur.
 
 Si vous avez besoin d'un vrai secret, gardez le document hors du monde jusqu'au moment
 voulu.
+
+Masquer ou montrer une épingle avec les commandes de Foundry lui-même — le HUD des tuiles, la
+configuration de la tuile, la liste des placeables — revient à utiliser l'œil du HUD du
+module : la montrer de nouveau la révèle aux joueurs à qui elle était montrée, ou à tous,
+avec l'accès au document si *Accorder l'accès au document à la révélation* est actif, et une
+révélation ne se reprend pas — une macro ou un module qui affiche toutes les tuiles révèle
+donc aussi vos épingles masquées.
 
 **La mise en lumière ne déplace les vues que pour une épingle destinée à tous.** Un ping
 de Foundry atteint chaque joueur connecté, quel que soit le public de l'épingle : amener

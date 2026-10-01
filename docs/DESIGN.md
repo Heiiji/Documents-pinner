@@ -414,7 +414,7 @@ src/
   const.ts  i18n.ts  api.ts  settings.ts  motion*  fvtt  html*  log  normalise*
   data/       PinData  PinStore  audience*  ownership-plan*  ownership-sync  core-hidden
               migrations (planMigration*)  pin-schema*
-  canvas/     PinnedTile  PropManager  PropHitLayer  DomPropTier  tile-hooks  transform*
+  canvas/     PinnedTile  PropManager  PropHitLayer  DomPropTier  tile-hooks  transform
               lod*
   render/     ContentResolver  enrich  CardTemplate*  AssetInliner  Rasterizer  TextureCache
               BakeEffects  PdfPage  measure
@@ -434,9 +434,11 @@ tests/        one file per behaviour; helpers/ holds the fake world (fake-foundr
               stylesheets as the CSS-policy tests read them (styles), preset fixtures
 ```
 
-`*` marks a **pure** module: no Foundry globals, unit-tested under Node. Four are pure in
+`*` marks a **pure** module: no Foundry globals, unit-tested under Node. Five are pure in
 part, and say where:
 
+- `canvas/transform`'s matrix and rect functions are pure; `stageMatrix`, `screenToScene` and
+  `visibleSceneRect` read the canvas.
 - `data/migrations` writes documents and asks the GM; its planner, `planMigration`, is pure.
 - `sources/fields` has a pure core (the schema walk, the ranking, the field read) behind an
   impure cache.
