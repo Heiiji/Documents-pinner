@@ -528,5 +528,8 @@
   "DP.whatsnew.v0_2.reader": "Ouvrir un accessoire rapproche la vue quand le texte est trop petit pour être lu ; un clic sur l'accessoire en cours de lecture le referme.",
   "DP.whatsnew.v0_2.resize": "Un accessoire est une fenêtre sur son document : redimensionnez-le pour montrer plus ou moins de la page à la même taille de texte. Le texte qui ne tient pas s'estompe en bas.",
   "DP.whatsnew.v0_3.ar": "Trois effets de réalité augmentée — Relevé projeté, Balisé et Perte de signal — et le Studio d'effets sait désormais modifier les couleurs et les formes, plus seulement les nombres.",
-  "DP.whatsnew.v0_3.source": "Le Studio d'épingle peut changer le document affiché par une épingle, et la page choisie. L'épingle garde sa taille, son effet et son audience."
+  "DP.whatsnew.v0_3.source": "Le Studio d'épingle peut changer le document affiché par une épingle, et la page choisie. L'épingle garde sa taille, son effet et son audience.",
+  "DP.whatsnew.v0_4.look": "Un accessoire peut avoir sa propre police et un son de révélation, et s'assombrit avec la scène.",
+  "DP.whatsnew.v0_4.reveal": "Révéler la suivante suit l'ordre du Tableau des épingles, et Révéler et mettre en lumière amène la vue de chaque joueur sur l'épingle. Appuyez sur ? pour voir tous les raccourcis.",
+  "DP.whatsnew.v0_4.sources": "Épinglez les aides de jeu d'un compendium, ainsi que les acteurs et les objets : un avis de recherche montre le portrait, le nom et le texte choisi dans Texte affiché du Studio d'épingle. Épingler un document cherche dans les compendiums dès deux lettres, avec un filtre par type."
 }

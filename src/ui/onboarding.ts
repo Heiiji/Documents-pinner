@@ -22,6 +22,7 @@ import { openPicker } from "../apps/DocumentPicker";
  * Keyed by "major.minor" so a patch release says nothing.
  */
 export const WHATS_NEW: Record<string, string[]> = {
+  "0.4": ["DP.whatsnew.v0_4.sources", "DP.whatsnew.v0_4.look", "DP.whatsnew.v0_4.reveal"],
   "0.3": ["DP.whatsnew.v0_3.source", "DP.whatsnew.v0_3.ar"],
   "0.2": [
     "DP.whatsnew.v0_2.resize",

@@ -528,5 +528,8 @@
   "DP.whatsnew.v0_2.reader": "Opening a prop brings the view in when the text is too small to read; a click on the prop you are reading closes it.",
   "DP.whatsnew.v0_2.resize": "A prop is a window onto its document: resize it to show more or less of the page at the same text size. Text that does not fit fades out at the bottom.",
   "DP.whatsnew.v0_3.ar": "Three augmented-reality effects — Projected Readout, Tagged and Signal Loss — and the Preset Studio can now edit colours and shapes, not only numbers.",
-  "DP.whatsnew.v0_3.source": "Pin Studio can change which document a pin shows, and which page of it. The pin keeps its size, its effect and its audience."
+  "DP.whatsnew.v0_3.source": "Pin Studio can change which document a pin shows, and which page of it. The pin keeps its size, its effect and its audience.",
+  "DP.whatsnew.v0_4.look": "A prop can have its own typeface and a reveal sound, and darkens with the scene.",
+  "DP.whatsnew.v0_4.reveal": "Reveal next plays the Pinboard's order, and Reveal & spotlight brings every player's view to the pin. Press ? for every shortcut.",
+  "DP.whatsnew.v0_4.sources": "Pin a compendium's handouts, and actors and items: a wanted poster shows the portrait, the name and the text you choose in Pin Studio's Text shown. Pin a document searches compendiums from two letters, with chips for each kind."
 }
