@@ -29,7 +29,7 @@ import { renderPdfPage } from "./PdfPage";
 import { hashContent } from "./TextureCache";
 import { measureCardHeight } from "./measure";
 import { cardMetrics } from "../data/pin-schema";
-import { adapterForDoc } from "../sources/index";
+import { adapterForDoc, canOpenShown } from "../sources/index";
 import { packLockedHere } from "../sources/packs";
 import { isPackUuid, parseSourceUuid } from "../sources/uuid";
 import { labelFor, resolveSource } from "../sources/view";
@@ -151,7 +151,7 @@ export async function resolveCard(
           showTitle: pin.display.showTitle && !!pin.display.label,
         }),
         title,
-        readable: source.testUserPermission?.(g()?.user, adapter.openLevel) === true,
+        readable: canOpenShown(source, g()?.user),
         contentHash: hashContent(
           `pdf|${pdfSrc}|${pin.source.pdfPage ?? 1}|${rendered.width}x${rendered.height}`
         ),
@@ -188,7 +188,7 @@ export async function resolveCard(
   return {
     html: build(overflow),
     title,
-    readable: source.testUserPermission?.(g()?.user, adapter.openLevel) === true,
+    readable: canOpenShown(source, g()?.user),
     // `isOwner` is in the hash because it changes what the HTML contains: a GM and a
     // player must never share a cache entry, and this is the second guard on that
     // after the user id already in the key.

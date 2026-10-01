@@ -159,6 +159,15 @@ export function adapterForDoc(doc: any): SourceAdapter {
   return adapterOrJournal(doc?.documentName);
 }
 
+/**
+ * Whether this user may open the document a pin shows, at the level its own sheet asks
+ * (`openLevel`). The one answer the key glyph, the card's `readable` and an icon pin's
+ * open all read. A document that cannot say is not opened: false, never "probably".
+ */
+export function canOpenShown(shown: any, user: unknown): boolean {
+  return shown?.testUserPermission?.(user, adapterForDoc(shown).openLevel) === true;
+}
+
 /** Every `documentName` whose edits can change a pin: the update hooks `main.ts` wires. */
 export function hookedDocumentNames(): string[] {
   return [...adapters.keys()];

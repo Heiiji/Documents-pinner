@@ -76,6 +76,20 @@ describe("openLocally for a player", () => {
     expect(source.sheet.render).toHaveBeenCalled();
   });
 
+  // The four places that ask "can this player open it?" are one function now, and it
+  // fails closed: the sheet's own open used to read "can open" from a document that cannot
+  // say, where the key glyph and the card read "cannot".
+  it("tells a player not yet when the document cannot say who may open it", async () => {
+    delete source.testUserPermission;
+    tile = pinned("pin");
+    world = installWorld({ isGM: false, tiles: [tile] });
+    const { openLocally } = await import("../src/api");
+    await openLocally(tile);
+
+    expect(source.sheet.render).not.toHaveBeenCalled();
+    expect(world.notifications).toEqual([{ type: "info", message: "DP.notice.cannotOpenYet" }]);
+  });
+
   it("never gates the GM", async () => {
     tile = pinned("pin");
     world = installWorld({ isGM: true, tiles: [tile] });

@@ -34,7 +34,7 @@ import * as settings from "./settings";
 import { centreOf, docPositionFor } from "./canvas/transform";
 import { nextToReveal, type PinboardQuery, type RowFacts } from "./apps/pinboard-model";
 import { describeSource } from "./sources/describe";
-import { adapterFor, adapterForDoc, isRefusal } from "./sources/index";
+import { adapterFor, adapterForDoc, canOpenShown, isRefusal } from "./sources/index";
 import { packFacts, packLockedHere, packOf, packReadableBy } from "./sources/packs";
 import { isPackUuid, parseSourceUuid } from "./sources/uuid";
 import {
@@ -442,7 +442,7 @@ export function canUserOpen(anchorDoc: any, userId: string): boolean {
   if (!source) return false;
   // The level the document's own sheet asks for: for a journal, OBSERVER is the level at
   // which a text page actually opens, and LIMITED is the tease.
-  if (source.testUserPermission?.(user, adapterForDoc(source).openLevel) === true) return true;
+  if (canOpenShown(source, user)) return true;
   return readsInPlace(pin) && canUserSee(anchorDoc, userId);
 }
 
@@ -563,17 +563,13 @@ export async function openLocally(anchorDoc: any): Promise<void> {
   // The player-side half of the key glyph. A GM sees ⚿ on a chip whose player can see
   // the pin but not open the document; the player used to get core's generic refusal,
   // or nothing. Say what the state is — not a fault, a "not yet".
-  const adapter = adapterForDoc(source);
-  const canOpen = source.testUserPermission
-    ? source.testUserPermission(g()?.user, adapter.openLevel) === true
-    : true;
-  if (!isGM() && !canOpen) {
+  if (!isGM() && !canOpenShown(source, g()?.user)) {
     notify({ key: "DP.notice.cannotOpenYet" }, "info");
     return;
   }
 
   // Where it opens is the document's to say: a journal page inside its journal's sheet.
-  adapter.open(source);
+  adapterForDoc(source).open(source);
 }
 
 /**
