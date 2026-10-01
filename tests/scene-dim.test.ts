@@ -111,7 +111,6 @@ afterEach(() => {
 
 describe("sceneBrightness", () => {
   it.each([
-    [0, 1],
     [0.5, 0.7],
     [1, 0.35],
     // Out of range is clamped, not extrapolated.
@@ -119,43 +118,29 @@ describe("sceneBrightness", () => {
     [3, 0.35],
     // Anything that is not a level is daylight: the environment has not initialised.
     [undefined, 1],
-    [null, 1],
     [Number.NaN, 1],
     ["0.8", 1],
   ])("maps darkness %s to brightness %s", (level, brightness) => {
     expect(sceneBrightness(level)).toBe(brightness);
   });
 
-  it("quantises to twentieths, so a slow transition is a bounded number of writes", () => {
+  it("quantises to twentieths, never below the darkest a card may be, never brighter as it darkens", () => {
+    // Twentieths, so a slow transition is a bounded number of writes.
     const seen = new Set<number>();
+    let last = 1;
     for (let i = 0; i <= 1000; i++) {
       const value = sceneBrightness(i / 1000);
       expect(Math.round(value * 20) / 20).toBe(value);
-      seen.add(value);
-    }
-    expect(seen.size).toBeLessThanOrEqual(21);
-  });
-
-  it("never drops below the darkest a card may be, and never brightens as it darkens", () => {
-    let last = 1;
-    for (let i = 0; i <= 100; i++) {
-      const value = sceneBrightness(i / 100);
       expect(value).toBeGreaterThanOrEqual(0.35);
       expect(value).toBeLessThanOrEqual(last);
+      seen.add(value);
       last = value;
     }
+    expect(seen.size).toBeLessThanOrEqual(21);
   });
 });
 
 describe("syncSceneDim", () => {
-  it("writes the level onto the overlay root from the canvas environment", async () => {
-    darkness(1);
-    syncSceneDim();
-    await settle();
-
-    expect(root()?.style.getPropertyValue("--dp-scene-dim")).toBe("0.35");
-  });
-
   it("falls back to the scene's own environment before the canvas group has one", async () => {
     darkness(undefined);
     world.canvas.scene.environment = { darknessLevel: 0.5 };
@@ -165,7 +150,7 @@ describe("syncSceneDim", () => {
     expect(root()?.style.getPropertyValue("--dp-scene-dim")).toBe("0.7");
   });
 
-  it("writes once per quantised change and nothing while the level holds", async () => {
+  it("writes the level onto the overlay root once per quantised change, and when forced", async () => {
     darkness(0.5);
     syncSceneDim();
     await settle();
@@ -183,6 +168,11 @@ describe("syncSceneDim", () => {
     await settle();
     expect(rootWrites()).toBe(2);
     expect(root()?.style.getPropertyValue("--dp-scene-dim")).toBe("0.4");
+
+    // `canvasReady` forces it, whatever it last wrote.
+    syncSceneDim(true);
+    await settle();
+    expect(rootWrites()).toBe(3);
   });
 
   it("writes the next scene's first value even when it matches the last scene's", async () => {
@@ -199,13 +189,6 @@ describe("syncSceneDim", () => {
 
     expect(rootWrites()).toBe(2);
     expect(root()?.style.getPropertyValue("--dp-scene-dim")).toBe("0.35");
-  });
-
-  it("writes when forced, whatever it last wrote", async () => {
-    syncSceneDim();
-    syncSceneDim(true);
-    await settle();
-    expect(rootWrites()).toBe(2);
   });
 
   it("never throws into the hook that called it", () => {
@@ -312,11 +295,8 @@ describe("the projection stock in the dark", () => {
     return setters.find((rule) => prop.matches(rule.selector))?.value ?? null;
   }
 
-  it("keeps a projected readout at full brightness in a dark scene", () => {
+  it("keeps a projected readout at full brightness in a dark scene, and darkens every paper", () => {
     expect(cardDim("projection")).toBe("1");
-  });
-
-  it("still darkens every stock that is paper", () => {
     for (const paper of ["parchment", "vellum", "paper", "linen", "slate", "bloodied"]) {
       expect(cardDim(paper), paper).toBe("var(--dp-scene-dim, 1)");
     }

@@ -93,27 +93,23 @@ describe("the face a card is resolved in", () => {
     return resolveCard(p, { width: 400, height: 560 }, { tier });
   };
 
-  it("is the preset's when the pin has none of its own", async () => {
-    const card = await resolve(pin({ effect: "crt-scanlines" }));
-    expect(faceOf(card.html)).toBe(MONOSPACE);
+  it("is the pin's own, else the preset's, else the house face", async () => {
+    const own = await resolve(pin({ effect: "crt-scanlines", font: "Special Elite" }));
+    expect(faceOf(own.html)).toBe(`"Special Elite", ${HOUSE_STACK}`);
+    const preset = await resolve(pin({ effect: "crt-scanlines" }));
+    expect(faceOf(preset.html)).toBe(MONOSPACE);
+    const house = await resolve(pin());
+    expect(faceOf(house.html)).toBeNull();
   });
 
-  it("is the pin's own when it has one, whatever the preset says", async () => {
-    const card = await resolve(pin({ effect: "crt-scanlines", font: "Special Elite" }));
-    expect(faceOf(card.html)).toBe(`"Special Elite", ${HOUSE_STACK}`);
-  });
-
-  it("is the house face when neither chose one", async () => {
-    const card = await resolve(pin());
-    expect(faceOf(card.html)).toBeNull();
-  });
-
-  it("survives effects switched off and the silhouette rung", async () => {
-    const off = await resolve(pin({ effect: "crt-scanlines" }));
-    world.game.settings.set("", "effectsLevel", "off");
-    const offCard = await resolve(pin({ effect: "crt-scanlines" }));
-    expect(offCard.html).toContain('data-dp-level="off"');
-    expect(faceOf(offCard.html)).toBe(faceOf(off.html));
+  // It is no effect variable (K6): the dressing drops every one of those at these rungs.
+  it("survives effects switched off or reduced, and the silhouette rung", async () => {
+    for (const level of ["off", "reduced"]) {
+      world.game.settings.set("", "effectsLevel", level);
+      const card = await resolve(pin({ effect: "crt-scanlines" }));
+      expect(card.html).toContain(`data-dp-level="${level}"`);
+      expect(faceOf(card.html), level).toBe(MONOSPACE);
+    }
 
     world.game.settings.set("", "effectsLevel", "full");
     const l1 = await resolve(pin({ effect: "crt-scanlines" }), "L1");
@@ -147,14 +143,6 @@ describe("measuring in the chosen face", () => {
     expect(card.naturalHeight).toBe(640);
   });
 
-  it("loads the house face for a card with none of its own", async () => {
-    const load = vi.fn(async () => []);
-    (document as any).fonts = { load, ready: Promise.resolve() };
-    const { measureCardHeight } = await import("../src/render/measure");
-    await measureCardHeight('<div class="dp-card" style="font-size:12px"></div>', 300);
-    expect(load).toHaveBeenCalledWith(`12px ${HOUSE_STACK}`);
-  });
-
   it("measures anyway once a face that never arrives has had its time", async () => {
     vi.useFakeTimers();
     (document as any).fonts = { load: () => new Promise(() => {}), ready: new Promise(() => {}) };
@@ -176,16 +164,17 @@ describe("measuring in the chosen face", () => {
     expect(FONT_LOAD_TIMEOUT_MS).toBeLessThanOrEqual(1500);
   });
 
-  it("measures anyway when the face fails to load", async () => {
-    (document as any).fonts = {
-      load: () => Promise.reject(new DOMException("bad", "SyntaxError")),
-      ready: Promise.resolve(),
-    };
+  it("loads the house face for a card with none of its own, and measures anyway when it fails", async () => {
+    const load = vi.fn(() => Promise.reject(new DOMException("bad", "SyntaxError")));
+    (document as any).fonts = { load, ready: Promise.resolve() };
     vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({
       height: 300,
     } as DOMRect);
     const { measureCardHeight } = await import("../src/render/measure");
-    expect(await measureCardHeight('<div class="dp-card"></div>', 300)).toBe(300);
+    expect(await measureCardHeight('<div class="dp-card" style="font-size:12px"></div>', 300)).toBe(
+      300
+    );
+    expect(load).toHaveBeenCalledWith(`12px ${HOUSE_STACK}`);
   });
 });
 
@@ -202,17 +191,21 @@ describe("the faces the rasteriser carries", () => {
     return fetched;
   }
 
-  it("inlines the faces a GM added in Font Config, which CONFIG does not list", async () => {
+  it("inlines the faces a GM added in Font Config, which CONFIG does not list, CONFIG winning", async () => {
     uninstallWorld();
     world = installWorld({
       isGM: true,
       settings: {
         // Core's own `fonts` setting, where Font Config keeps what a GM adds.
-        fonts: { "Special Elite": { editor: true, fonts: [{ urls: ["fonts/elite.woff2"] }] } },
+        fonts: {
+          "Special Elite": { editor: true, fonts: [{ urls: ["fonts/elite.woff2"] }] },
+          Amiri: { editor: true, fonts: [{ urls: ["fonts/stale.woff2"] }] },
+        },
       },
     });
     (globalThis as any).CONFIG.fontDefinitions = {
       Signika: { editor: true, fonts: [{ urls: ["fonts/signika.woff2"] }] },
+      Amiri: { editor: true, fonts: [{ urls: ["fonts/amiri.woff2"] }] },
     };
     const fetched = stubFetch();
     const { clearInliner, inlineFonts, registeredFontFamilies } =
@@ -222,25 +215,14 @@ describe("the faces the rasteriser carries", () => {
     const css = await inlineFonts();
     expect(css).toContain('@font-face{font-family:"Special Elite"');
     expect(css).toContain('@font-face{font-family:"Signika"');
-    expect(fetched).toEqual(expect.arrayContaining(["fonts/elite.woff2", "fonts/signika.woff2"]));
+    // A face both define is CONFIG's.
+    expect([...fetched].sort()).toEqual([
+      "fonts/amiri.woff2",
+      "fonts/elite.woff2",
+      "fonts/signika.woff2",
+    ]);
     // And the picker offers exactly what can be drawn.
-    expect(registeredFontFamilies().sort()).toEqual(["Signika", "Special Elite"]);
-  });
-
-  it("takes CONFIG's definition of a face both define", async () => {
-    uninstallWorld();
-    world = installWorld({
-      isGM: true,
-      settings: { fonts: { Amiri: { editor: true, fonts: [{ urls: ["fonts/stale.woff2"] }] } } },
-    });
-    (globalThis as any).CONFIG.fontDefinitions = {
-      Amiri: { editor: true, fonts: [{ urls: ["fonts/amiri.woff2"] }] },
-    };
-    const fetched = stubFetch();
-    const { clearInliner, inlineFonts } = await import("../src/render/AssetInliner");
-    clearInliner();
-    await inlineFonts();
-    expect(fetched).toEqual(["fonts/amiri.woff2"]);
+    expect(registeredFontFamilies().sort()).toEqual(["Amiri", "Signika", "Special Elite"]);
   });
 
   it("offers Font Config's loaded faces too, and falls back to CONFIG when the setting throws", async () => {
@@ -278,7 +260,7 @@ describe("the Pin Studio's typeface", () => {
   /** The write queue the Studio actually used: modules are fresh per test. */
   const settled = async () => (await import("../src/data/PinStore")).settled();
 
-  it("offers the effect's, the generics and this world's faces, each in its own face", async () => {
+  it("offers the effect's, the generics and this world's faces, and writes the choice to the pin", async () => {
     const app = await studio();
     const options = [...select(app).options];
     expect(options.map((o) => o.value)).toEqual([
@@ -294,10 +276,7 @@ describe("the Pin Studio's typeface", () => {
     expect(options[0].selected).toBe(true);
     expect(options[5].style.fontFamily).toContain("Amiri");
     expect(select(app).disabled).toBe(false);
-  });
 
-  it("writes the choice to the pin, and 'the effect's' back to null", async () => {
-    const app = await studio();
     select(app).value = "Amiri";
     select(app).dispatchEvent(new Event("change", { bubbles: true }));
     await settled();
@@ -335,24 +314,18 @@ describe("the Preset Studio's typeface", () => {
   const control = (app: any) =>
     contentOf(app).querySelector<HTMLSelectElement>('select[name="type.family"]')!;
 
-  it("shows the preset's face in its preview, as a pin wearing it would", async () => {
+  it("shows a shipped preset's face in its preview, as a pin wearing it would, and locks it", async () => {
     const app = await studioOn("crt-scanlines");
     const preview = contentOf(app).querySelector<HTMLElement>(".dp-presets__preview .dp-card")!;
     expect(preview.style.getPropertyValue("--dp-font").trim()).toBe(MONOSPACE);
+    expect(control(app).disabled).toBe(true);
+    expect(control(app).value).toBe("monospace");
   });
 
-  it("locks a shipped preset's face and offers the world's own on a user preset", async () => {
-    const shipped = await studioOn("crt-scanlines");
-    expect(control(shipped).disabled).toBe(true);
-    expect(control(shipped).value).toBe("monospace");
-
-    const own = await studioOn("mine", [mine()]);
-    expect(control(own).disabled).toBe(false);
-    expect([...control(own).options].map((o) => o.value)).toContain("Amiri");
-  });
-
-  it("writes the face, and the empty choice as null", async () => {
+  it("offers the world's faces on a user preset, and writes the face, and the empty choice as null", async () => {
     const app = await studioOn("mine", [mine()]);
+    expect(control(app).disabled).toBe(false);
+    expect([...control(app).options].map((o) => o.value)).toContain("Amiri");
     const stored = () =>
       (world.game.settings.get("", "userPresets") as any[]).find((p) => p.id === "mine");
 
@@ -368,23 +341,22 @@ describe("the Preset Studio's typeface", () => {
 });
 
 describe("importing a stranger's preset", () => {
-  it.each(['Arial"; } .dp-card { color: red', "a,b"])(
-    "refuses the face %s, says so, and stores the preset without it",
-    async (family) => {
-      uninstallWorld();
-      world = installWorld({ isGM: true, settings: { userPresets: [] } });
-      const { importPreset } = await import("../src/effects/preset-library");
-      const imported = await importPreset(
-        JSON.stringify({ id: "gift", label: "Gift", params: { type: { family } } })
-      );
+  // One hostile name proves the path; every other is `typeface.test.ts`'s table.
+  it("refuses a face that would end its quote, says so, and stores the preset without it", async () => {
+    const family = 'Arial"; } .dp-card { color: red';
+    uninstallWorld();
+    world = installWorld({ isGM: true, settings: { userPresets: [] } });
+    const { importPreset } = await import("../src/effects/preset-library");
+    const imported = await importPreset(
+      JSON.stringify({ id: "gift", label: "Gift", params: { type: { family } } })
+    );
 
-      expect(imported!.params.type.family).toBeNull();
-      expect(world.notifications).toContainEqual({
-        type: "warn",
-        message: "DP.preset.warn.badFont",
-      });
-      const stored = (world.game.settings.get("", "userPresets") as any[])[0];
-      expect(JSON.stringify(stored)).not.toContain(family);
-    }
-  );
+    expect(imported!.params.type.family).toBeNull();
+    expect(world.notifications).toContainEqual({
+      type: "warn",
+      message: "DP.preset.warn.badFont",
+    });
+    const stored = (world.game.settings.get("", "userPresets") as any[])[0];
+    expect(JSON.stringify(stored)).not.toContain(family);
+  });
 });

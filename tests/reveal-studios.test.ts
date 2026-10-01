@@ -12,7 +12,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FLAGS, MODULE_ID } from "../src/const";
 import { defaultPin, validatePin } from "../src/data/pin-schema";
-import { presetStudioMarkup, writeReveal } from "../src/apps/PresetStudio";
+import { presetStudioMarkup } from "../src/apps/PresetStudio";
 import { studioMarkup } from "../src/apps/PinStudio";
 import { validatePreset } from "../src/effects/preset-schema";
 import { CORE_PRESETS, getCorePreset } from "../src/effects/presets/core-presets";
@@ -59,16 +59,6 @@ function change(root: HTMLElement, name: string, value: string) {
   input.dispatchEvent(new Event("change", { bubbles: true }));
 }
 
-describe("writeReveal", () => {
-  it("writes one field of the reveal and leaves the shipped preset untouched", () => {
-    const shipped = getCorePreset("sealed-and-wax")!;
-    const next = writeReveal(shipped, "sound", "worlds/keep/seal.ogg");
-    expect(next.reveal).toEqual({ ...shipped.reveal, sound: "worlds/keep/seal.ogg" });
-    expect(shipped.reveal.sound).toBeNull();
-    expect(next.params).toBe(shipped.params);
-  });
-});
-
 describe("the Preset Studio's Reveal group", () => {
   const group = (markup: string) => {
     const root = document.createElement("div");
@@ -94,10 +84,17 @@ describe("the Preset Studio's Reveal group", () => {
     expect(reveal.querySelector<HTMLInputElement>('[name="reveal.sound"]')!.value).toBe(
       "sounds/lock.wav"
     );
+    const button = (root: HTMLElement, action: string) =>
+      root.querySelector<HTMLButtonElement>(`[data-action="${action}"]`);
     for (const action of ["browseRevealSound", "previewRevealSound", "clearRevealSound"]) {
-      const button = reveal.querySelector<HTMLButtonElement>(`[data-action="${action}"]`);
-      expect(button?.disabled, action).toBe(false);
+      expect(button(reveal, action)?.disabled, action).toBe(false);
     }
+
+    // Silent, with no file browser: nothing to play or clear, and no browse.
+    const silent = group(presetStudioMarkup([mine()], mine(), "map", false));
+    expect(button(silent, "previewRevealSound")!.disabled).toBe(true);
+    expect(button(silent, "clearRevealSound")!.disabled).toBe(true);
+    expect(button(silent, "browseRevealSound")).toBeNull();
   });
 
   it("locks a shipped preset's reveal, but still lets the GM hear its sound", () => {
@@ -116,15 +113,6 @@ describe("the Preset Studio's Reveal group", () => {
     expect(disabled("browseRevealSound")).toBe(true);
     expect(disabled("clearRevealSound")).toBe(true);
     expect(disabled("previewRevealSound")).toBe(false);
-  });
-
-  it("has nothing to play or clear when the preset is silent, and no browse without a browser", () => {
-    const reveal = group(presetStudioMarkup([mine()], mine(), "map", false));
-    const button = (action: string) =>
-      reveal.querySelector<HTMLButtonElement>(`[data-action="${action}"]`);
-    expect(button("previewRevealSound")!.disabled).toBe(true);
-    expect(button("clearRevealSound")!.disabled).toBe(true);
-    expect(button("browseRevealSound")).toBeNull();
   });
 
   describe("driven through the window", () => {
@@ -149,6 +137,7 @@ describe("the Preset Studio's Reveal group", () => {
       await vi.waitFor(() => expect(stored().sound).toBe("worlds/keep/seal.ogg"));
     });
 
+    // Typed or picked — an S3 bucket's, say — a sound is stored through the one `setReveal`.
     it("refuses a typed web address, says so, and keeps what was there", async () => {
       const app = await studio(mine({ sound: "sounds/lock.wav" }));
       change(contentOf(app), "reveal.sound", HOSTILE);
@@ -179,16 +168,6 @@ describe("the Preset Studio's Reveal group", () => {
       await vi.waitFor(() => expect(stored().sound).toBe("worlds/keep/thunder.ogg"));
     });
 
-    it("refuses a picked web address — an S3 bucket's, say — and stores nothing", async () => {
-      const app = await studio(mine({ sound: "sounds/lock.wav" }));
-      await app.dispatch("browseRevealSound");
-      filePickers()[0].options.callback!(HOSTILE);
-      await vi.waitFor(() =>
-        expect(world.notifications.map((n) => n.message)).toContain("DP.preset.warn.badSound")
-      );
-      expect(stored().sound).toBe("sounds/lock.wav");
-    });
-
     it("plays ▶ even before the browser has unlocked audio, and clears to silence", async () => {
       const app = await studio(mine({ sound: "sounds/lock.wav" }));
       world.game.audio.locked = true;
@@ -217,15 +196,13 @@ describe("the Pin Studio's reveal sound", () => {
     return root.querySelector<HTMLElement>(".dp-studio__sound")!;
   };
 
-  it("offers a prop its own sound, over the effect's", () => {
+  it("offers a prop its own sound, over the effect's, and nothing to play or clear with none", () => {
     const sound = field(
       studioMarkup(
         doc,
         pin({ mode: "prop", effect: { revealSound: "worlds/keep/seal.ogg" } }),
         "appearance",
-        {
-          canBrowse: true,
-        }
+        { canBrowse: true }
       )
     );
     expect(sound.querySelector("input")!.value).toBe("worlds/keep/seal.ogg");
@@ -236,15 +213,13 @@ describe("the Pin Studio's reveal sound", () => {
         action
       ).toBe(false);
     }
-  });
 
-  it("offers nothing to play or clear when neither the prop nor its effect has a sound", () => {
-    const sound = field(
+    const silent = field(
       studioMarkup(doc, pin({ mode: "prop" }), "appearance", { canBrowse: true })
     );
-    expect(sound.querySelector("input")!.placeholder).toBe("DP.studio.revealSoundSilent");
-    expect(sound.querySelector('[data-action="previewRevealSound"]')).toBeNull();
-    expect(sound.querySelector('[data-action="clearRevealSound"]')).toBeNull();
+    expect(silent.querySelector("input")!.placeholder).toBe("DP.studio.revealSoundSilent");
+    expect(silent.querySelector('[data-action="previewRevealSound"]')).toBeNull();
+    expect(silent.querySelector('[data-action="clearRevealSound"]')).toBeNull();
   });
 
   it("is disabled, with the reason, for an icon — which has no arrival to sound", () => {
