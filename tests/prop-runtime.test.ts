@@ -172,12 +172,19 @@ describe("a change to a setting a prop is drawn from", () => {
     world.game.settings.register = (_scope: string, key: string, options: any) =>
       registered.set(key, options);
     (await import("../src/settings")).register();
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   });
 
-  afterEach(() => manager?.stop());
+  afterEach(() => {
+    manager?.stop();
+    vi.useRealTimers();
+  });
 
-  /** Let the LOD pass and the generation queue drain. */
-  const settle = () => new Promise((resolve) => setTimeout(resolve, 100));
+  /**
+   * Let the LOD pass and the generation queue drain: every pending timer run, on fake
+   * timers, so a redraw a debounce would have made late is still seen — or still absent.
+   */
+  const settle = () => vi.runAllTimersAsync();
 
   it.each([
     [

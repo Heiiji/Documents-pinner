@@ -62,7 +62,10 @@ beforeEach(() => {
   card.missing = false;
 });
 
-afterEach(() => uninstallWorld());
+afterEach(() => {
+  vi.useRealTimers();
+  uninstallWorld();
+});
 
 /** The OPEN reader: one on its way out is still in the document while it fades. */
 const reader = () => document.querySelector<HTMLElement>(".dp-reader:not(.dp-reader--out)");
@@ -119,12 +122,15 @@ describe("the focus reader", () => {
   it("leaves with its exit class, and is gone once the exit has run", async () => {
     const { openReader, closeReader } = await import("../src/apps/ReaderOverlay");
     await openReader(tile);
+    // jsdom fires no `transitionend`, so the exit ends on its timeout floor — run, not
+    // waited out.
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     closeReader();
 
     // The state is reset at once; the node dissolves.
     expect(reader()).toBeNull();
     expect(document.querySelector(".dp-reader--out")).not.toBeNull();
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    await vi.runAllTimersAsync();
     expect(document.querySelector(".dp-reader")).toBeNull();
   });
 

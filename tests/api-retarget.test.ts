@@ -150,7 +150,9 @@ describe("retarget, as the payload sees it", () => {
 
     const done = api.retarget(tile, source({ uuid: "JournalEntry.new" }));
     const raced = Promise.race([done, gate.then(() => "deadlocked" as const)]);
-    setTimeout(release, 50);
+    // A deadlock never resolves, so any bound catches it; a correct retarget wins the race
+    // at once and never waits for this. Generous, so a loaded runner is not a "deadlock".
+    setTimeout(release, 2000);
 
     expect(await raced).toBe(true);
     await queued;
