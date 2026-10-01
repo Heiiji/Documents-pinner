@@ -231,6 +231,8 @@ export function snap(point: { x: number; y: number }, gridSize: number, free: bo
 let state: GhostState | null = null;
 let element: HTMLElement | null = null;
 let listeners: (() => void)[] = [];
+/** Core's grid constants, looked up when the ghost is armed rather than on every move. */
+let gridConstants: { types: any; modes: any } = { types: undefined, modes: undefined };
 
 export function isArmed(): boolean {
   return state !== null;
@@ -253,12 +255,12 @@ function gridSize(): number {
 function snapToScene(point: { x: number; y: number }, free: boolean): { x: number; y: number } {
   if (free) return point;
   const grid = cv()?.grid;
-  const TYPES = ns("CONST.GRID_TYPES");
+  const TYPES = gridConstants.types;
   const type = grid?.type ?? cv()?.scene?.grid?.type;
   if (TYPES && type === TYPES.GRIDLESS) return point;
   if (!TYPES || type === undefined || type === TYPES.SQUARE) return snap(point, gridSize(), false);
 
-  const M = ns("CONST.GRID_SNAPPING_MODES");
+  const M = gridConstants.modes;
   if (typeof grid?.getSnappedPoint !== "function" || !M) return point;
   const snapped = grid.getSnappedPoint(
     { x: point.x, y: point.y },
@@ -492,6 +494,7 @@ export function arm(source: DpSource, mode?: DpMode): boolean {
   if (!isGM() || !cv()?.ready) return false;
   disarm();
 
+  gridConstants = { types: ns("CONST.GRID_TYPES"), modes: ns("CONST.GRID_SNAPPING_MODES") };
   state = initialState(source, mode ?? settings.get("defaultMode"), gridSize());
   element = document.createElement("div");
   element.className = "dp-ghost";
