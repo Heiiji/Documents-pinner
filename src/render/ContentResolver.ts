@@ -43,6 +43,7 @@ import {
   cachedHeight,
   measureKey,
   pdfKey,
+  referencedUuids,
   stringBytes,
   type CardBody,
 } from "./card-cache";
@@ -343,6 +344,7 @@ async function textBody(
       // The raw text, scrubbed, is safe to show once and wrong to keep.
       keep: !enriched.fellBack && !!uuid,
       bytes: stringBytes(key, html, figureHtml),
+      refs: referencedUuids(html),
     };
   });
   // A text body is never null; the type is the shelf's, which a PDF shares.

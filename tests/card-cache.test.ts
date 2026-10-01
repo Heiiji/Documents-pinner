@@ -303,6 +303,77 @@ describe("a PDF page", () => {
   });
 });
 
+describe("what a body names, and what never ends", () => {
+  const body = (html: string) => ({
+    html,
+    figureHtml: "",
+    kind: "text",
+    isOwner: false,
+    contentHash: "h",
+  });
+
+  // An embedded page's re-hidden secret stayed readable in the reader until the scene was
+  // redrawn: a body was forgotten only for its own document (A29).
+  it("forgets a body when a document its links or embeds name is edited", async () => {
+    const { cachedBody, forgetSource, referencedUuids, cardCacheStats } = await cache();
+    const EMBEDDED = "JournalEntry.lore.JournalEntryPage.crypt";
+    const html =
+      `<p>See <a class="content-link" data-link data-uuid="Actor.villain">him</a>.</p>` +
+      `<figure class="content-embed" data-content-embed data-uuid="${EMBEDDED}"></figure>`;
+    expect(referencedUuids(html)).toEqual(["Actor.villain", EMBEDDED]);
+
+    const keep = (refs: string[]) => async () => ({ value: body(html), keep: true, refs });
+    await cachedBody("k1", "JournalEntry.letters", keep(referencedUuids(html)));
+    await cachedBody("k2", "JournalEntry.other", keep([]));
+    expect(cardCacheStats().bodies).toBe(2);
+
+    forgetSource("JournalEntry.unrelated");
+    expect(cardCacheStats().bodies).toBe(2);
+    forgetSource(EMBEDDED);
+    expect(cardCacheStats().bodies).toBe(1);
+    // The whole journal of an embedded page counts too, as it does for the body's own.
+    await cachedBody("k1", "JournalEntry.letters", keep(referencedUuids(html)));
+    forgetSource("JournalEntry.lore");
+    expect(cardCacheStats().bodies).toBe(1);
+  });
+
+  it("records what a resolved card's enrichment links to", async () => {
+    boot();
+    enrichHTML.mockImplementation(
+      async (text: string) => `${text}<a class="content-link" data-uuid="Actor.villain">him</a>`
+    );
+    const { forgetSource } = await cache();
+    await resolve(pinOn(PAGE));
+    await resolve(pinOn(PAGE), "L3");
+    expect(enrichHTML).toHaveBeenCalledTimes(1);
+    forgetSource("Actor.villain");
+    await resolve(pinOn(PAGE));
+    expect(enrichHTML).toHaveBeenCalledTimes(2);
+  });
+
+  // An enrichment waiting on an embed that never answered was shared by every later
+  // resolve of that card, which stayed blank until the source was edited (A29).
+  it("stops sharing work in flight that has not ended in time, and starts again", async () => {
+    const { cachedBody, IN_FLIGHT_LIMIT_MS } = await cache();
+    let clock = 1000;
+    vi.spyOn(performance, "now").mockImplementation(() => clock);
+    const never = vi.fn(() => new Promise<never>(() => {}));
+    const fresh = vi.fn(async () => ({ value: body("ok"), keep: true }));
+
+    void cachedBody("stuck", "JournalEntry.a", never);
+    // Within the limit, a second caller joins the first.
+    clock += IN_FLIGHT_LIMIT_MS - 1;
+    void cachedBody("stuck", "JournalEntry.a", fresh);
+    expect(fresh).not.toHaveBeenCalled();
+    // Past it, the next caller does the work again, and that result is kept.
+    clock += 2;
+    expect((await cachedBody("stuck", "JournalEntry.a", fresh))?.html).toBe("ok");
+    expect(fresh).toHaveBeenCalledTimes(1);
+    await cachedBody("stuck", "JournalEntry.a", fresh);
+    expect(fresh).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("the byte budget", () => {
   const body = (html: string) => ({
     html,

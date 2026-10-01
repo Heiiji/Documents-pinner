@@ -57,14 +57,38 @@ export interface Computed<T> {
   keep: boolean;
   /** What keeping it costs, in bytes. */
   bytes?: number;
+  /**
+   * Other documents the value was drawn from — what its links and embeds name — which
+   * `forgetSource` matches on as well as the entry's own document.
+   */
+  refs?: readonly string[];
 }
 
 interface Slot<T> {
   /** The document the entry was drawn from, which `forgetSource` matches on. */
   uuid: string;
+  /** The other documents its value names (`Computed.refs`); empty until it has one. */
+  refs: readonly string[];
   promise: Promise<T>;
   bytes: number;
+  /** When its work began, so a share of work that never ends can be refused. */
+  startedAt: number;
+  /** Whether its work has ended, kept or not. */
+  settled: boolean;
 }
+
+/**
+ * How long work in flight is shared before the next caller starts its own.
+ *
+ * An enrichment waits on whatever its content links and embeds load — a compendium behind
+ * an `@Embed`, a fetch — and none of them promise to end. Every caller joins the slot's
+ * promise, so one that never settled held that card blank on every rung, in the reader and
+ * for "fit to content", until the source was edited or the scene redrawn; 0.4.0, which kept
+ * nothing, simply tried again on the next resolve. Past this, it does again.
+ */
+export const IN_FLIGHT_LIMIT_MS = 15_000;
+
+const now = (): number => globalThis.performance?.now?.() ?? Date.now();
 
 /**
  * A bounded, least-recently-used map of promises.
@@ -87,7 +111,10 @@ class Shelf<T> {
 
   take(key: string, uuid: string, compute: () => Promise<Computed<T>>): Promise<T> {
     const hit = this.#slots.get(key);
-    if (hit) {
+    if (hit && !hit.settled && now() - hit.startedAt > IN_FLIGHT_LIMIT_MS) {
+      // Its callers keep waiting on it; nothing new joins, and it can no longer fill.
+      this.#remove(key, hit);
+    } else if (hit) {
       // Most recently used goes last, so eviction takes the oldest.
       this.#slots.delete(key);
       this.#slots.set(key, hit);
@@ -96,7 +123,9 @@ class Shelf<T> {
 
     // In the map BEFORE the work starts, so a computation that throws synchronously
     // still finds its own slot to remove — rather than leaving a rejection cached.
-    const slot = { uuid, bytes: 0 } as Slot<T>;
+    const slot = { uuid, refs: [], bytes: 0, startedAt: now(), settled: false } as Partial<
+      Slot<T>
+    > as Slot<T>;
     this.#slots.set(key, slot);
     slot.promise = this.#fill(key, slot, compute);
     this.#trim();
@@ -108,9 +137,11 @@ class Shelf<T> {
     try {
       result = await compute();
     } catch (error) {
+      slot.settled = true;
       this.#remove(key, slot);
       throw error;
     }
+    slot.settled = true;
     if (this.#slots.get(key) !== slot) return result.value;
     const bytes = Math.max(0, result.bytes ?? 0);
     // One entry larger than the whole budget would evict everything else and then itself.
@@ -119,15 +150,16 @@ class Shelf<T> {
       return result.value;
     }
     slot.bytes = bytes;
+    slot.refs = result.refs ?? [];
     this.#bytes += bytes;
     this.#trim();
     return result.value;
   }
 
-  /** Drop every entry drawn from a document `matches` names. */
+  /** Drop every entry drawn from, or naming, a document `matches` names. */
   forget(matches: (uuid: string) => boolean): void {
     for (const [key, slot] of [...this.#slots]) {
-      if (matches(slot.uuid)) this.#remove(key, slot);
+      if (matches(slot.uuid) || slot.refs.some(matches)) this.#remove(key, slot);
     }
   }
 
@@ -276,10 +308,26 @@ export function concerns(kept: string, edited: string): boolean {
 }
 
 /**
+ * The documents an enriched body names: every `data-uuid` its links and embeds carry
+ * (core writes one on both, foundry.mjs 14.368 44914-44935, 58763-58793).
+ *
+ * A body depends on more than its own document. An embedded page's text is drawn into it,
+ * a secret in that page is there or not for this viewer, and a link carries its target's
+ * name. Forgotten only for its own document, a body kept an embedded page's re-hidden
+ * secret readable in the reader until the scene was redrawn; 0.4.0 re-enriched on every
+ * open (A29).
+ */
+export function referencedUuids(html: string): string[] {
+  const found = new Set<string>();
+  for (const match of html.matchAll(/\bdata-uuid="([^"]+)"/g)) found.add(match[1]);
+  return [...found];
+}
+
+/**
  * Forget every body and measurement drawn from this document, its parts, or the document
- * it is part of. The source hooks call it for every edit, before they decide whether the
- * edit redraws anything: an actor's hit points draw nothing today, but its inline rolls
- * read them on the next resolve.
+ * it is part of — or naming one of them in a link or an embed. The source hooks call it for
+ * every edit, before they decide whether the edit redraws anything: an actor's hit points
+ * draw nothing today, but its inline rolls read them on the next resolve.
  */
 export function forgetSource(uuid: string): void {
   if (typeof uuid !== "string" || !uuid) return;
