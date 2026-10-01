@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { GROUPS, presetStudioMarkup, readParam, writeParam } from "../src/apps/PresetStudio";
 import { exportPreset, isCorePreset } from "../src/effects/preset-library";
 import { CORE_PRESETS } from "../src/effects/presets/core-presets";
@@ -91,7 +91,11 @@ describe("presetStudioMarkup", () => {
 
   // The preview built its card by hand, so when the rolling scanlines moved to a layer of
   // their own it showed them still, and it never had the HUD overlay at all (A29).
-  it("draws the layers a pin's card draws: the rolling scanlines and the HUD overlay", () => {
+  it("draws the layers a pin's card draws: the rolling scanlines and the HUD overlay", async () => {
+    // At the full level: left to itself the level is measured from this machine, and a
+    // four-core CI runner reads as reduced, where nothing rolls.
+    const level = await import("../src/effects/level");
+    vi.spyOn(level, "currentLevel").mockReturnValue("full");
     // The preview pane alone: from the card to the backdrop swatches after it.
     const preview = (id: string, frozen: boolean) => {
       const markup = presetStudioMarkup(presets, getCorePreset(id)!, "map", frozen);
@@ -103,6 +107,7 @@ describe("presetStudioMarkup", () => {
     expect(preview("crt-scanlines", true)).not.toContain("dp-card__scan");
     expect(preview("projected-readout", false)).toContain('<div class="dp-card__hud"');
     expect(preview("aged-parchment", false)).not.toMatch(/dp-card__(scan|hud)/);
+    vi.restoreAllMocks();
   });
 
   it("marks the chosen backdrop, which is how an effect is judged against a real map", () => {
