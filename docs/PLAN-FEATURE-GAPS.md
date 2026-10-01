@@ -1,5 +1,10 @@
 # Plan — the table's experience (0.3.4 → 0.6)
 
+**Status (2026-10-01):** Phase 1 and Phase 2 are built, reviewed and unreleased — S3, S4,
+E4, P4, P2a, P2b, P6, E1, E2, E3, E8. Decisions taken for them: no socket, no bundled fonts or
+sounds, Pinboard `N` with the global binding unbound, "Reveal all" moved to the bulk bar. Phase
+0's measurements are the live verification checklist at the end of `DESIGN.md`. Next: Phase 3.
+
 **Written:** 2026-09-30, after `e71bc0c` (the audit, the README fix, page-level grants, the
 prop key glyph). **Source:** [`AUDIT-UX-PRODUCT.md`](AUDIT-UX-PRODUCT.md) — the item ids
 (S3, P1, E4…) are that document's.

@@ -2,7 +2,7 @@
 
 **Status:** Beta. §11 criteria 2, 3 and 4 are UNREACHABLE — see amendment A10
 **Target:** Foundry VTT v14, `compatibility: { minimum: "14", verified: "14.365" }`
-**Last updated:** 2026-09-02
+**Last updated:** 2026-10-01
 
 ---
 
@@ -1260,3 +1260,431 @@ can open that page from the sidebar and from a pin; and whether an IMAGE page in
 LIMITED is shown to them. §4 measured text pages only. If image pages show at LIMITED, the
 journal's listing leaks its images and the entry needs NONE plus a different route to the
 sidebar.
+
+### A25 — A reveal cannot be taken back (2026-09-30)
+
+§5.3 and the Pinboard's own header treated reveal and hide as "one keystroke to undo", so
+neither asked. The audit's S3 shows where that led. Every bulk path wrote `everyone`, so a note
+narrowed to the rogue, hidden for a beat and caught by "Reveal all", appeared to the whole
+table. Hiding it again took the pin off the map. It did not take the letter out of the players'
+heads.
+
+**One reveal rule.** `audience.revealed` returns the audience the pin remembers, or everyone
+when it remembers nobody usable. It is idempotent: an audience that is not hidden comes back
+equal. The eye's toggle now calls it, and so does every other reveal: the bulk bar,
+"Reveal all", Reveal next, spotlight and the Studio's resume. Each used to decide for itself,
+and one of them decided wrong. The bulk paths still land as one scene write, and they now skip
+the pins the gesture does not change.
+
+**§5.3 is amended.** A row's reveal and hide still ask nothing, because a dialog in the middle
+of a scene is worse than the slip it prevents. "Reveal all" has left the footer, where it sat
+one button from "Hide all". It is now in the bulk bar and asks first when it would show more
+than one pin to at least one player (`audience.wouldReveal`). It acts only on `=== true`. A
+dialog closed with its ✕ resolves `null`, and a build with no DialogV2 refuses rather than act
+unasked. It is greyed out when no row is hidden, the same fact Reveal next reads; the count that
+decides whether it asks is still taken on the click. A write that fails is said
+(`DP.board.revealAllFailed`) rather than left in the console while the table watches.
+
+**The script plays.** The Pinboard has always called its order the reveal order, and nothing
+read it. `pinboard-model.nextToReveal` picks the first **hidden** row under the board's filter,
+search and level. That means hidden, not "not visible": a selection naming nobody is not visible
+and not hidden either, so it is stepped past. Revealing it would reveal it to the same nobody,
+and `N` would stop on it forever. The verb reveals with `revealed`, never with the eye's toggle,
+because a toggle on a row that is already showing hides it, and pressing `N` twice would take
+back the clue it had just given.
+
+- `N` ignores a held key's repeats and any Ctrl, ⌘ or Alt, and stops the event there.
+- The `revealNext` keybinding is registered restricted and **unbound**. It runs the open
+  board's own path when the board is open, so the status line, the focus and the filter follow.
+  With the board closed it runs over the whole scene.
+- While one Reveal next is in flight, a second press joins it rather than racing it. Two presses
+  can therefore reveal one clue and never two by accident. For an action that cannot be taken
+  back, that is the right way to fail.
+
+**A ping reaches every client, and the keyboard used to decide what it did.** Core's
+`canvas.ping` merges the caller's options over a base it builds from the keyboard: a held Shift
+means "pull every view here", a held Alt means "alert". The Pinboard's `Shift+Space` is exactly
+a Shift held while pinging.
+
+Every ping now goes through one door, `pingAt` in `api.ts`, and it always states `pull` and
+`style`. It pings nothing for a pin on another scene, because those coordinates on the viewed
+map point at nothing. It also applies core's scene-rect check.
+
+The local path, `ControlsLayer#handlePing`, now passes the viewed scene's id. The 14.366 types
+say core draws nothing without it. So the flash of a hidden pin, which passed `{}`, was very
+likely a silent no-op on every v14 world.
+
+What each verb does with a ping:
+
+- **Spotlight** reveals, then pulls every view only for an audience of everyone.
+- **A narrower audience** gets a pulse on the GM's screen and a notice saying why nobody moved:
+  a pull reaches every player, and would walk the rest of the table to where the private clue
+  lies.
+- **Reveal next** never pulls, and pulses on the players' maps only for an everyone pin.
+- **Flash** keeps its documented reach: a visible pin pulses on every client, as its label
+  says, until a socket can narrow it. §8's "no sockets" still stands.
+
+The test double's first `handlePing` checked the scene id loosely. With no id on either side it
+drew anyway, which is precisely the bug it was there to catch; the tests caught it only because
+they set an id by hand. It now refuses a missing id outright. This is A11's lesson again: a fake
+more permissive than the real thing tests nothing at the point where it differs.
+
+**The HUD keeps to the verbs of the moment.** The left column holds the eye, the audience and
+spotlight. The right column holds effect, shape, open for me, flash and Pin Studio. Lock and Fit
+were prep and layout verbs and have gone to the Studio's strip, where both already were; Fit is
+still `Alt+Shift+F`. E2 added a ninth button, `?`, last in the right column and in the roving
+order. It is the only extension of K10.
+
+**The Studio says when the table is watching.** Every Studio control saves as it moves, so on a
+revealed prop the players watched each paper and effect the GM tried. A banner above the tabs
+now says "Visible to N player(s) — changes are live" and offers *Hide while I edit*.
+
+The hold is `{anchor, world, restore}` in the client setting `editHolds`. It is written
+**before** the hide. A reload between the two writes finds the pin still showing and drops the
+hold. The other order could have left the pin hidden with nothing to bring it back.
+
+The hold ends in three places — on close, on *Reveal again*, and in a `ready` sweep after a
+reload — and each reveals the pin again through `audience.resumeAfterEdit`. A GM who never comes
+back leaves the pin hidden with its `restore` intact: one `Space` from where it was.
+
+**The resume rule was right about state and blind to history, and review found it.**
+`resumeAfterEdit` reveals again only while the pin is hidden and still remembers the audience the
+hold remembered. That is the right test for a pin the GM changed since. It misses a pin the GM
+revealed and then hid again: hiding restores the same memory, so the state is identical to the
+one the hold left. Closing the Studio then showed the letter to the players the GM had just
+hidden it from.
+
+The rule is now stronger. **Once the pin has been visible again since the hold, the hold is
+dropped everywhere.** The Studio ends the hold on the first render that sees the pin showing, and
+every audience change reaches an open Studio as a render. The setting's entry goes with it, so
+neither the close nor the `ready` sweep can replay it. The general lesson: **a rule that compares
+two states cannot see what happened between them.** When the history matters, something has to
+be watching while it happens.
+
+Accepted, and said here so nobody rediscovers them:
+
+- A resumed pin replays its reveal moment on the players' screens — the arrival, and the sound
+  if it has one. A quiet resume needs a channel to the players.
+- "Hide all" over a pin that a Studio holds writes nothing, because the pin is already hidden,
+  and closing that Studio still reveals it. The banner says *Hidden while you edit — Reveal
+  again* for as long as that is true.
+
+**E2 — the keys say themselves.** The three live surfaces had about twenty-five shortcuts between
+them. The ghost's E, V, R and F and the board's L, O, M and F have no Configure Controls entry to
+find them by. The only surface that taught itself was the ghost's legend, which a GM can switch
+off, and R was not even on it.
+
+`?` now puts up one popover for whichever surface asked: the ghost, the Pinboard or the HUD.
+
+- **Where it lives.** It is a labelled dialog in `body`, so a Pinboard re-render cannot take it
+  away. It sits one step below core's tooltip layer (`--z-index-tooltip`, falling back to
+  10000), which puts it above every window while its ✕ can still show a tooltip.
+- **Focus.** It takes the focus when it opens and gives it back when it closes.
+- **Closing.** It closes on `?`, on its ✕, on a click anywhere else and on Escape. Escape takes
+  the sheet down before the surface's own Escape runs, so the placement, the selection and the
+  pin all survive the dismissal. That Escape is stopped as well as prevented — inside the sheet
+  and on the board and the HUD that took it down — so core's window-level dismiss does not also
+  see it. That core's listener sits where stopping it works is on the live list. The sheet also
+  goes with its surface: the ghost's disarm, the Pinboard's close and the HUD's hide each take
+  it down.
+- **How it is opened.** The ghost's legend gains one entry, "? all keys", and the sheet answers
+  `?` with the legend switched off too. The Pinboard's header and the HUD each gain a `?` button.
+  Any `?` button is the toggle, not the one that opened it: both surfaces rebuild their markup on
+  every render, and a sheet opened from the keyboard has no opener, so matching by identity made
+  the press close the sheet and the click open it again.
+
+**What a sheet lists is data.** Each surface has one pure table in `ui/cheatsheet.ts`, built
+into markup by one pure builder. The handlers do not read the tables. `tests/cheatsheet.test.ts`
+is what holds the two together. On all three surfaces it presses every key a table lists, and
+every key a keyboard has with and without each modifier: the ghost through `stepKey`, the board
+and the HUD through their real listeners. It fails when a table and its handler disagree in
+either direction.
+
+That was chosen over one source driving both. Each handler has its own conditions: the typing
+guard, the repeat guard, a modifier the handler ignores. A shared source would have to turn all
+of them into a dispatch language inside the table. A test that presses keys checks the behaviour
+itself. The pointer rows (wheel, click, right-drag, the chips) are beyond its reach and are kept
+by hand.
+
+**How keys are named.** A surface's own keys go through `modifierGlyphs(platform())`, so a Mac
+shows ⌘.
+
+A Configure Controls action is listed by its action name only. Its keys are read from
+`game.keybindings.get` as the sheet opens and named by `bindingName`.
+
+- `bindingName` now lives beside the sheet in `apps/CheatSheet.ts` and is re-exported from
+  `keybindings.ts`. Without the move there would be an import cycle: `keybindings.ts` imports
+  the surfaces, and the surfaces import the sheet.
+- A rebound key shows as rebound, and *Reveal next* shows as not set.
+- A binding that cannot be read says "see Configure Controls". The sheet never prints a default
+  the binding may no longer have. The read is guarded because core throws for an action it does
+  not know.
+
+Each action sits on the sheet of the surface it serves:
+
+- the ghost: *Pin the last document used*;
+- the Pinboard: *Open the Pinboard* and *Reveal next*;
+- the HUD: the audience cycle, the shape, *Fit* and *Peek*.
+
+`cancel` is the one action left off. It is the ghost's own Escape, and the ghost's sheet lists it
+there as a key. A GM who also binds `cancel` to a second key will not see that key on the sheet.
+
+**Text fields keep `?`.** A `?` typed into the chat box or the board's search stays text: the
+ghost and the HUD now use the board's text-entry test, `isTextEntry`.
+
+**The HUD's own Escape is unchanged.** With no sheet and no palette open, it releases the pin and
+prevents nothing, as it did before E2.
+
+**The fake follows core.** The test double's `game.keybindings` gains `get` and `set`, modelled
+on core. `get` returns the registered `editable` until a rebind, and throws for an action nobody
+registered. It throws because core is recalled to throw there, and a fake that answered
+`undefined` would hide the guard's whole reason for existing.
+
+**Follow-ups, not done:**
+
+- A quiet resume, once a socket exists.
+- The bulk path computes its audience patch before taking the write queue. This is
+  pre-existing. `batchUpdate` should take a function of the current payload.
+- `readPin` validates on every `canUserSee`, and the banner and chips call it per player.
+- The armed ghost still takes E, V, R, F and Space from a focused text field. This is
+  pre-existing: E2 guards only `?`. Every key but Escape should pass the `isTextEntry` test.
+- The sheet does not show an extra key bound to `cancel`.
+
+**Unverified, and on the live list below:**
+
+- That `canvas.ping` honours `{ pull, style }` (the merge is recalled core, not typed).
+- That a pull moves a player on the same scene and nobody on another.
+- That `handlePing` draws with `scene` and not without it.
+- That an unbound binding shows in Configure Controls with an empty slot.
+- That DialogV2's ✕ resolves `null`.
+- That v14 client settings are one store per browser across worlds, which the hold's `world`
+  field assumes.
+- That `ClientKeybindings#get` throws for an action it does not know. Core is recalled here; the
+  types give only the return value.
+- How `KeyboardManager.getKeycodeDisplayString` names a binding, modifiers included, on a Mac and
+  elsewhere.
+- That the sheet stays above every window, and that `--z-index-tooltip` exists in v14 (the
+  fallback is 10000).
+- That stopping Escape inside the sheet keeps core's dismiss from closing windows, releasing the
+  pin or opening the main menu.
+
+### A26 — The look reaches the table (2026-09-30)
+
+§6 said a DOM card is not lit, not fogged and not occluded. A10 made the DOM tier the only one
+HTML reaches, and it is still true of per-light illumination and fog, which are fragment-shader
+work over the primary group. But the scene's **global** darkness is one number, and leaving it
+out meant a sheet of bright paper floating over every night scene.
+
+**A text prop darkens with the room.** `DomPropTier.syncSceneDim` reads
+`canvas.environment.darknessLevel` on `canvasReady` and on `initializeCanvasEnvironment`. That
+hook fires at the end of the environment's own initialisation, which is where core applies a
+darkness change. The code never reads `canvas.darknessLevel`, which throws before
+initialisation. `lightingRefresh` is not the signal: it fires on every light-carrying token step.
+
+`sceneBrightness` maps the level to `1 − 0.65·d`, quantised to twentieths, with a floor of
+`DARKEST_CARD` (0.35). A full transition therefore costs at most 21 property writes, whatever
+the hook cadence. The value is written once per step as `--dp-scene-dim` on the overlay root,
+with the memo reset whenever the overlay goes with its scene.
+
+`.dp-prop` hands the value to its card as `--dp-card-dim`, and it is the last step of the card's
+existing filter chain. It is deliberately kept off these places:
+
+- **Not on `.dp-prop` itself.** The arrival animates that element's `filter`, and reduced motion
+  clears it; either would erase the dimming.
+- **Not on the reader, the ghost or the gallery swatches.** Those are interface.
+- **Not in `card.css`.** The rasteriser inlines that file, and the canvas tier is lit by core.
+
+**One stock opts out: `projection`.** It is emitted light, not paper, and a projected readout
+does not dim with the room. Darkness is in no content key and no texture key: a darkness change
+is one property on one element and re-resolves nothing.
+
+The Audience tab now says, on every prop that is not a PDF and whatever its audience, that it
+shows through unexplored fog: *reveal it when they reach it.* It says so before the reveal,
+because that is when the advice can be used. It asks nothing of `drawsAsDom`, which answers for
+the GM's client rather than the players'.
+
+**A typeface and a reveal sound are strangers' strings.** §7 kept one place where a preset string
+reaches CSS, `safeUrl`. These are two more, and each gets the same treatment: one way in, one way
+out.
+
+- **Typeface.** `typeface.fontFamily` validates the name in both normalisers. It accepts a
+  generic family, or letters, digits, spaces and `_ . ' -`: nothing that can end a quoted CSS
+  string. `fontStack` is the only formatter. It re-checks the name, quotes it and puts it in
+  front of the house stack, so a face missing on one client falls back to Signika rather than to
+  the browser's default serif.
+- **Sound.** `normalise.soundPath` refuses any scheme, `https:` included: a shared preset must
+  not be a beacon reporting the table's reveals to its author. It also refuses a leading `//` or
+  `\\` (after stripping the control characters a URL parser would) and over-long paths. It runs
+  in the preset normaliser, in the pin normaliser, and again at the moment of play.
+
+**The typeface is not an effect.** The dressing drops every effect variable at effects level
+`off` and at the silhouette rung. A face carried there would change a ransom note's lettering
+when a player switched effects off, and re-flow the card as the GM zoomed out. So the card
+carries the face on its own style, resolved as the pin's own, else the preset's, else the house
+face. It joins both cache keys.
+
+*Fit to content* now loads the face before it measures. `document.fonts.ready` waits only for
+loads already in flight, and nothing starts one for a face nothing has used yet. The load is
+bounded at 1.5 s — A16's decode lesson, since this runs inside `resolveCard`.
+
+The six shipped presets that call for a face use **generic families only**: CRT Scanlines,
+Projected Readout, Tagged and Signal Loss are monospace; Aged Parchment and Sealed & Wax are
+serif. No world needs a font installed, and the harness draws them at `file://`.
+
+**The audit was wrong about Font Config, and the types said so.** A GM's own faces live in core's
+`fonts` setting, not in `CONFIG.fontDefinitions`, which `FontConfig._collectDefinitions` merges
+with it. The inliner now reads both, and the picker lists from the same source, so the canvas
+tier can draw whatever the picker offers. Every defined face is inlined once per session. A world
+that added fonts pays for them in every canvas-tier SVG, and inlining only the faces in use is
+the follow-up.
+
+**The reveal sound plays on each player's own screen, when the prop arrives there.** It is
+played:
+
+- on the `environment` channel, with no volume of its own, so it follows each player's slider;
+- not while the browser has yet to unlock audio, where core would queue it to burst out at the
+  first click;
+- once per distinct sound per LOD pass, so seven sealed letters revealed together crack one seal;
+- for props only, because only a prop has an arrival.
+
+The GM's client never sees a prop "appear", so the GM hears it through ▶ in either Studio. A
+pin's own sound lives in `effect.revealSound`, not in `effect.params`. That map caps strings at
+128 characters, and v14 expands a dotted key inside a flag into an object the normaliser then
+drops as non-scalar.
+
+**Schema.** The pin payload goes from 4 to 5 (`display.font`, `effect.revealSound`) and presets
+from 2 to 3 (`params.type`). In both, the normaliser supplies the null defaults, so an unmigrated
+payload on a player's client already draws and sounds as a migrated one (A18, A22).
+
+The rule behind the bump, written down because it was argued: `planMigration` rewrites every pin
+whose stored form differs from its validated form. Any new default-bearing field therefore
+rewrites the world whether or not the number moves. So adding a field is what bumps the version,
+exactly once per release, and nothing else does.
+
+Two costs are accepted. After a downgrade, an older primary GM's sweep strips both pin fields,
+and pins fall back to their preset's face and sound. A version 3 preset imported into an older
+install warns that it is newer and loses its face.
+
+**The pattern.** A15 said not to offer what cannot be honoured, and A16 said to find out first
+what can be. This amendment is the third turn of the same idea. The DOM tier gave up everything
+the canvas gives for free, and that was treated as all-or-nothing when one of those things was a
+single number. Worth asking of every limitation this document lists: is it one mechanism, or
+several that were lost together?
+
+**Follow-ups:**
+
+- A face added in Font Config mid-session reaches the canvas tier only after a reload (the DOM
+  tier draws it at once).
+- Inline only the fonts in use.
+- Editing a user preset does not invalidate the props already drawn with it. This is
+  pre-existing, and now covers its face too.
+
+**Unverified, and on the live list below:**
+
+- How often `initializeCanvasEnvironment` fires during an animated darkness transition. If it
+  fires only at the end, add `lightingRefresh` behind the same O(1) check.
+- The right value of `DARKEST_CARD`.
+- That the `environment` channel follows the Environment slider, and what happens while locked.
+- That a Font Config face appears in `getAvailableFonts()` and not in CONFIG.
+- That FilePicker `type: "audio"` lists only audio, and that an S3 pick returns an `https://` URL
+  (which is then refused, by design).
+- That each `<option>` is drawn in its own face in the select's popup.
+
+---
+
+### Live verification checklist for 14.365 — one sitting (A23, A25, A26)
+
+Run this in Chromium as GM, with two players: Ali in Chromium and Ben in Firefox, each in their
+own browser profile. Use a fresh world that has pins from 0.3.3, so the format-5 migration runs.
+Record each answer as observed and fold the results into A24.
+
+**Setup** (about ten minutes):
+
+- A scene with a darkness slider, a token for each player, one light, and unexplored fog.
+- On that scene:
+  - a text prop for everyone, hidden;
+  - a text prop for Ali only, hidden;
+  - a revealed text prop on the `projection` paper (Projected Readout);
+  - a revealed PDF prop.
+- A second scene with one pin.
+- An `.ogg` file in the world's data folder.
+- A face added in Font Config.
+- A second world available in the same browser.
+
+0. **Page grants (A23).** Make a journal with three pages — text, text, image — every page at
+   its default ownership, and the journal at None. Pin page 2 with access granted, and reveal it
+   to Ali. As Ali: the journal is in the sidebar; page 2 opens from the sidebar and from the
+   pin; page 1 is not listed; and note whether the image page (page 3) is shown. If it is, A23's
+   LIMITED listing leaks images, and the entry needs another route to the sidebar.
+1. **Migration.** Open the scene. Its pins update silently. The other scene is offered once, and a
+   reload offers nothing more.
+2. **Where pings land** (GM on scene 1; Ali on scene 1; Ben on scene 2, then back to scene 1):
+   - **Spotlight the everyone prop** from the HUD. Ali's view glides to it and Ben's (on scene 2)
+     does not move. With Ben back on scene 1, spotlight again: his view moves too.
+   - **Spotlight the prop for Ali** with `Shift+Space` in the Pinboard. It is revealed to Ali, and
+     nobody's view moves. The pulse shows on the GM's screen only; ask Ben whether he saw any ring.
+   - **Hold Shift and flash** a revealed pin. Nobody is pulled.
+   - **Hide a pin and flash it.** A ring appears on the GM's screen only. (Before this cycle,
+     expected: nothing at all.)
+3. **Reveal next.**
+   - Hide three pins in a known order and press `N` three times. They reveal in order, each to
+     its remembered audience. The footer names the next one, and the fourth press says there is
+     nothing left.
+   - Hold `N`: one reveal only.
+   - Open Configure Controls. *Reveal the next hidden pin* is listed with an empty slot. Bind it
+     and press it with the board closed, then open: the board's status line updates.
+4. **Reveal all.** With two or more pins hidden, the dialog names the count. Close it with ✕:
+   nothing is revealed. Answer yes: each pin goes to its own audience.
+5. **Hide while I edit.**
+   - Open the Studio on a revealed prop. The banner counts the players; click *Hide while I edit*.
+   - Reload the GM's browser. After `ready`, the pin is back, to the same players, with a notice.
+   - Hold again, reveal the pin with the eye, hide it with the eye, then close the Studio. It
+     **stays hidden**.
+   - Hold again and close: it comes back.
+   - Place a hold, then open the second world in the same browser. Its sweep does nothing, and the
+     first world's hold is still there on return.
+6. **Darkness.** Watch `--dp-scene-dim` on `#documents-pinner-overlay` in devtools.
+   - Load the scene: a value is set.
+   - Move the darkness slider: it follows.
+   - Trigger an animated transition. Count the writes: expect up to 21 if the hook fires per tick,
+     1 if only at the end. With 1, add `lightingRefresh`.
+   - The reader, the ghost and the projection prop do not dim. The PDF prop dims through core, not
+     twice.
+   - At darkness 1, judge whether 0.35 still reads as "a letter in the dark", and tune
+     `DARKEST_CARD`.
+7. **Typeface.**
+   - In the console, `getAvailableFonts()` lists the Font Config face and
+     `CONFIG.fontDefinitions` does not.
+   - The Studio's picker lists it, each option in its own face (check the popup in Chromium and
+     Firefox).
+   - Set a prop to that face: both players see it.
+   - Set a prop to monospace and use *Fit to content* at once: the last line is not clipped.
+   - Switch a player's effects level to off: the face stays.
+8. **Reveal sound.**
+   - Browse in the Preset Studio: the picker lists audio only. If an S3 source exists, pick from
+     it: expect a warning and nothing stored.
+   - Give a user preset the `.ogg` and put it on two hidden props. Reveal both with Reveal all:
+     each player hears it **once**, at their Environment slider's volume (lower Ali's and compare).
+   - Reload Ben, reveal without him clicking anywhere, then click: no late burst.
+   - The GM hears it only through ▶.
+9. **Keys** (GM, with the Pinboard and one Pin Studio open):
+   - In the console, `game.keybindings.get("documents-pinner", "nope")` throws, and
+     `game.keybindings.get("documents-pinner", "revealNext")` returns `[]`.
+   - In Configure Controls, rebind *Open the Pinboard* to `Shift+B`. Press `?` on the board: the
+     row reads as core names the key (expect `Shift+B`; on a Mac, note how Control and Alt are
+     named). *Reveal next* reads "not set".
+   - Click the Studio, then the Pinboard, then the Studio again, so each takes a turn on top.
+     Then press `?` on the board. The sheet is above both windows.
+   - With the sheet up and the focus inside it, press Escape. Only the sheet goes: the Pinboard
+     and the Studio stay open, and the main menu does not open. Repeat on the HUD of a
+     controlled pin: the sheet goes and the pin stays controlled. Repeat while placing: the
+     sheet goes and the ghost stays armed.
+   - Arm a pin, click into the chat box and type `?`: it is typed, and no sheet opens.
+   - Two questions about behaviour that predates E2, which decide whether the surfaces' own
+     Escape paths need `stopPropagation`:
+     - In the Pinboard's search, type a word and press Escape. Does the search clear while the
+       Pinboard stays open?
+     - On a focused HUD button with no palette open, press Escape. Is the pin released, with no
+       window closing and the main menu staying shut?
+10. **Browser second opinion.** Repeat steps 2, 6, 8 and 9 from Ben's Firefox for anything that
+    differed. Step 9 needs a GM, so promote Ben, or run it as GM in Firefox.
