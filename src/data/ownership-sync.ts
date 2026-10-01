@@ -43,8 +43,8 @@ import {
   type OwnershipPlan,
 } from "./ownership-plan";
 import { enqueue } from "./PinStore";
-import { isPackUuid } from "../sources/uuid";
 import { readPin } from "./PinData";
+import { isPackUuid } from "../sources/uuid";
 
 const log = logger("grants");
 
