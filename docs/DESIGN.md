@@ -86,7 +86,7 @@ Two costs, both cheap to pay:
 | Pin hidden from all players | core `TileDocument#hidden` | client (core parity) |
 | Pin visible to a subset | our `audience.canSee` via `PinnedTile#isVisible` | client (core parity) |
 | Prop content reaching a player | each client enriches from its own copy | client |
-| GM secrets inside a page | `enrichHTML({ secrets: page.isOwner })` + post-filter | **content removed** |
+| GM secrets inside a page, or an actor's or item's text | `enrichHTML({ secrets: doc.isOwner })` + post-filter | **content removed** |
 | Document appears in the sidebar | ownership ledger (§4) | **server** |
 | Writing a pin's configuration | GM only; players never write | **server** |
 
@@ -96,7 +96,8 @@ client too. A determined player with a browser console can see a hidden pin's ex
 in exactly the same way they can today for any hidden tile.
 
 The one thing that is genuinely removed rather than hidden is a page's `secret`
-sections, because `enrichHTML` strips them for non-owners before the HTML exists.
+sections — or an actor's or an item's, in the text its card shows (A28) — because
+`enrichHTML` strips them for non-owners before the HTML exists.
 
 ### 3.1 Why reveal does not require ownership
 
@@ -141,6 +142,10 @@ deleted scenes, and any crash mid-write.
 
 Required level is **OBSERVER (2)** for both modes: at LIMITED a text page will not open
 and is not even listed in the journal sheet. LIMITED is exposed as a deliberate "tease".
+Where the grant lands, and how high it may go, is the source's adapter's to say: a page
+and LIMITED on its journal (A23), an Item at the level asked, an Actor at **LIMITED at
+most** (A28). A compendium document grants nothing: its permissions are per role and
+pack-wide (A27).
 
 ---
 
@@ -149,15 +154,18 @@ and is not even listed in the journal sheet. LIMITED is exposed as a deliberate 
 ### 5.1 Entry points
 
 Native drag-to-canvas is **not** hijacked — it is the most established journal gesture
-in Foundry and other modules build on it. `dropCanvasData` acts only with a modifier.
+in Foundry and other modules build on it. `dropCanvasData` acts only with a modifier, and
+an Actor's drag is left to core while that modifier is Alt or none: core's Alt-drop of an
+actor places a hidden token (A28, D8).
 
 | Rank | Entry point | Hook |
 |---|---|---|
-| 1 | **Alt-drag** journal/page from the sidebar | `dropCanvasData` + `isModifierActive("Alt")` |
-| 2 | Journal sheet header button | `getHeaderControlsApplicationV2` |
+| 1 | **Alt-drag** a journal, page or item from the sidebar or a compendium; an actor only with Ctrl or Shift | `dropCanvasData` + `isModifierActive` |
+| 2 | Header button on journal, actor and item sheets | `getHeaderControlsApplicationV2` |
 | 3 | Two tools in `controls.notes.tools` | `getSceneControlButtons` |
-| 4 | Sidebar and page context menus | `get*ContextOptions` |
-| 5 | Keybindings | `game.keybindings.register` |
+| 4 | Context menus: the journal, actor and item sidebars, compendium windows, a journal sheet's pages | `get*ContextOptions` |
+| 5 | *Pin a document* (journals, actors, items; world, then compendiums) and `/pin` | the picker; `chatMessage` |
+| 6 | Keybindings | `game.keybindings.register` |
 
 No new top-level scene-control group: the rail is contested, and pins belong with Notes.
 
@@ -297,6 +305,15 @@ collapses to a blank card under `reduced`.
 3. `dropCanvasData` returning `false` suppressing core's default Note creation.
 4. `Tile#isVisible` overrides propagating to `mesh.visible`.
 
+**Unverified — resolved by `docs/spike-2-sources-probe.js` (A27, A28):** what
+`fromUuidSync` returns for a compendium document and page; whether a player can load a
+document from a pack their role cannot read; pack permission for another user asked on the
+GM's client; the drag payloads of actors and items, and core's Alt-drop of an actor; the
+context-menu and header hook names for the actor and item directories and compendium
+windows; what a LIMITED actor sheet shows; the `HTMLField` paths a system declares;
+`_stats.compendiumSource` on an import. Each is feature-detected in code and listed, with
+its guard and its probe section, in A27 and A28.
+
 Derived at runtime, never hardcoded: the Tile placeable context hook name, the font
 definitions API shape, whether `pixi-filters` is bundled, `_stats.compendiumSource`, and
 whether a public HTML sanitiser exists (assume not — strip explicitly).
@@ -320,18 +337,38 @@ whether a public HTML sanitiser exists (assume not — strip explicitly).
 8. Anchors are real Tiles and appear in `scene.tiles` to other modules.
 9. Deleting the source leaves the anchor showing a placeholder. It is never auto-deleted;
    that would be destructive and unrecoverable.
-10. Compendium pack ownership is role-based and pack-wide, so there is no per-user grant.
+10. A compendium document shows only to the players whose role can open its pack
+    (Observer). Pack permissions are per role and pack-wide, so a reveal grants nothing and
+    adds nothing to anyone's sidebar. A player whose role cannot open the pack sees a
+    placeholder that says so, and the GM is warned at placement; *Import & pin* makes a
+    world copy instead. A pack a player's client was never sent reads as locked there and
+    as missing on the GM's screen (A27).
 11. Scene padding changes do not move props — core does not reposition placeables either.
 12. A future PIXI 8 migration requires rewriting no GLSL: there is none. Every effect is
     CSS applied at rasterisation time or a Canvas2D paint — see A3, where that decision
     was actually taken, and A21, which found three comments still describing shaders that
     were never written.
 13. A pin on a whole journal whose FIRST page is a PDF shows a placeholder card rather
-    than the page. `pdfSourceOf` asks the resolved source's type and that is the entry;
-    making the null default fall through would desync four call sites that agree by
-    construction today — `isPdfPin`, `PropManager.drawsAsDom`, `migrations.drawnAsCard`
-    and `resolveCard` all read `resolveSourceSync`. Choosing the page explicitly is one
-    click and produces exactly the right result.
+    than the page. The journal adapter's `pdf` asks the resolved source's type and that is
+    the entry; making the null default fall through would desync four call sites that
+    agree by construction today — `PropManager`'s draw, `drawsAsDom`, `migrations`'
+    `drawnAsCard` and the Studio's Appearance tab all read `pdfSourceForPin`. Choosing the
+    page explicitly is one click and produces exactly the right result.
+14. A PDF page from a compendium is always drawn as a card, never into the scene: its
+    document arrives asynchronously, and the four paths above must agree before it does.
+15. A hidden pin on a compendium the players can open shows the key glyph on every chip
+    and counts under the Pinboard's mismatch filter. That is true — they can read it in the
+    compendium already — and with core's default pack ownership it is the common case.
+16. An Actor is shared at LIMITED at most, and what a LIMITED sheet shows is the game
+    system's choice. A new actor pin, or one pointed at an actor, starts with access off.
+17. An item an actor owns and a token's own actor cannot be pinned: their ownership is
+    their parent's. They are refused with a notice.
+18. While the drag modifier is Alt (the default) or none, an actor dragged onto the map
+    is core's token, not a pin.
+19. A portrait hosted on another origin is dropped wherever a prop is drawn into the scene,
+    like any image the inliner cannot fetch; the HTML tier shows it.
+20. An actor's or an item's icon pin wears the shared book on the map until the GM gives
+    it an icon in the Studio; the Pinboard row and the card show its picture.
 
 ---
 
@@ -380,11 +417,15 @@ src/
               PresetStudio  ReaderOverlay  PropTooltip  OverlayRoot  pinboard-model*
               chips
   ui/         controls  keybindings  onboarding  entry-points
+  sources/    index (the adapter registry)  journal  actor  item  portrait  fields
+              describe  packs  uuid*  search  import  hooks
 styles/       documents-pinner.css (entry) + base, card, theme, fx/*, ui/* (focus.css last)
 lang/  tests/  scripts/  docs/  .github/workflows/
 ```
 
-`*` marks a **pure** module: no Foundry globals, unit-tested under Node.
+`*` marks a **pure** module: no Foundry globals, unit-tested under Node. `sources/fields`
+has a pure core (the schema walk, the ranking, the field read) behind an impure cache.
+`sources/*` imports nothing the suite mocks with a partial factory (A28).
 
 `styles/card.css` is both loaded normally (for the focus reader) and fetched and inlined
 into the SVG by the rasteriser, so the two rendering tiers cannot drift.
@@ -1605,6 +1646,323 @@ several that were lost together?
 - That FilePicker `type: "audio"` lists only audio, and that an S3 pick returns an `https://` URL
   (which is then refused, by design).
 - That each `<option>` is drawn in its own face in the select's popup.
+
+### A27 — A compendium document is read from its pack, not from core's cache (2026-09-30)
+
+§10 limitation 10 said a compendium grants nothing per player, and stopped there. That was
+true, and it was the least of it. A pin on a compendium document could always be made — an
+Alt-drop from a compendium window made one — and almost nothing about it was right afterwards.
+
+**`fromUuidSync` has three answers for one uuid.** `fvtt.ts` said "compendia return null".
+The 14.366 types say otherwise, and the code has to assume the worst of them:
+
+- For a compendium document, core returns the pack's **index entry**: a plain object with an
+  `_id`, a `uuid` and a `name`, and nothing else — no `id`, no `documentName`, no `pages`, no
+  methods.
+- For the five minutes after anything loaded the document, it returns the **Document**. Drawing
+  a card loads it.
+- For a page of a compendium journal, it **throws** unless the journal is cached, and
+  `resolveUuidSync` turns the throw into null.
+
+Sixteen call sites read whatever came back. On the GM's client a pin on a compendium page was
+labelled "Pin", with an icon that read as missing, until its card was drawn; then it had its own
+name for five minutes, and "Pin" again after that. The chips raised no key on a prop the
+players could not open and a false key on a pin they could. The Audience tab said a reveal
+"shares the whole journal", which a compendium cannot do, and then said nothing. A compendium
+PDF page was a card, then a texture, then a card. Pin Studio said "No source" for a valid
+compendium page and listed no pages for a compendium journal. "Pin to scene" in a compendium
+window did nothing, and nor did it on a page inside a compendium journal's sheet: the window
+fires the journal sidebar's hook, and the row's id was looked up in `game.journal`. That is
+A9's unwired entry again. Both now ask the application that fired the hook — the window's
+collection, the sheet's journal — before the world.
+
+**One interpreter.** `sources/describe.ts` is the only reader of that seam, and it never asks
+`fromUuidSync` about a compendium uuid. A compendium source is described from its uuid
+(`sources/uuid.ts`, pure) and its pack's index alone, so no cache can flip an answer.
+
+- A page, which the index does not list, is named by its journal until `api.resolveSource` has
+  actually loaded it, and by its own name from then on. The memo goes one way, from unknown to
+  known, and never reads core's cache.
+- The summary carries the name, the crumb ("Handouts › Letters"), the icon, the thumbnail and
+  the PDF answer, and every former call site reads it.
+- `pdfSourceForPin` is the one PDF answer behind `PropManager`'s draw, `drawsAsDom`, the
+  Studio's Appearance tab and the migration's `drawnAsCard`. It is null for every compendium
+  source: a compendium PDF page is always drawn as a card, on every client, and its PDF page
+  can still be chosen. Limitation 13 still holds for world journals.
+- The grep audit after the change: `resolveUuidSync` is called by `describe.ts` for world uuids,
+  by `reconcile` (correct for every shape, since an index entry has no `update`) and by the edit
+  hold's anchor lookup, which is not a source.
+
+**Who can read a pack is a role question, and the GM's client can answer it.** "Compendium
+content ignores the ownership field in favor of User role-based ownership" (TYPES,
+`document.d.mts:342-358`), and roles are user data, so `sources/packs.ts` asks the pack about
+any user from any client: `testUserPermission(user, "OBSERVER")`, else `getUserLevel(user)`,
+else the ownership record read by hand. An answer that cannot be had is "cannot read": that
+mistake costs a warning, the other one a blank. A GM always reads — the pack schema fixes the
+GAMEMASTER role at OWNER. "The players can read it" means **every** current player: a pack
+open to trusted players only is not one the table reads. That answer drives:
+
+- **the key glyph**, for an icon and a prop alike, because a player who cannot load the document
+  sees a placeholder wherever a world journal would read in place. The other half holds too,
+  deliberately: a HIDDEN pin on a pack the players can read shows "can open it but cannot see
+  it" on every chip and counts under the mismatch filter, as a world journal the player holds
+  does. With core's default pack ownership (Player: Observer) that is the common case, and a GM
+  staging hidden handouts from a compendium will see the filter fill. The index entry's shape
+  used to hide it by accident; a test pins it now (limitation 15);
+- **a warning to the GM**, naming the pack, after placing, retargeting or adopting a tile onto a
+  pack that leaves a player out;
+- ***Show to players now***, which reaches only the players who can read the pack and says when
+  that leaves someone out;
+- **the picker's greyed rows**, below.
+
+**A player is never sent a request their role will be refused.** `packLockedHere` asks the role
+first, on the player's own client. A locked pack is not loaded: the card is a placeholder titled
+for what it is (`ResolvedCard.reason: "packLocked"`), and the reader and an icon's open say "in
+a compendium your GM has not opened to you", never "no longer exists". What core does with a
+refused load is unmeasured, and a card is resolved again at every LOD pass, so the module does
+not find out. Revealing or deleting a compendium pin no longer loads the document from the
+server only to learn that a pack grants nothing.
+
+**The picker searches compendiums, and imports what the table cannot open.** From two folded
+letters, *Pin a document* and `/pin` search every pack after the world (A28 widens this to
+every kind of document): packs in title order, at most fifty rows, the rest counted. They read
+the index core already holds and never ask the server per keystroke; an empty index is asked for
+once per session, and the open picker searches again when it arrives. Folded names are cached
+per entry with the name they were folded from, because core may merge a rename into the existing
+entry rather than replace it. Entries only: a compendium journal's page is chosen afterwards in
+Pin Studio, which loads the journal to list its pages and count a PDF's.
+
+A row from a pack some player cannot read is greyed, and its primary action is **Import & pin**:
+
+- The import is `WorldCollection#importFromCompendium`. `CompendiumCollection#importDocument`
+  goes the other way, into a pack — and the chapter's prompt had named it.
+- The copy goes into a "Documents Pinner" folder of its type, found by a flag so the GM may
+  rename it, and the copy is what is armed, adopted or retargeted to.
+- The copy starts with core's cleared ownership, so importing widens nothing; the pin's own
+  audience shares it, like any world document.
+- It is found again by `_stats.compendiumSource`, or by the module's own `importedFrom` flag — a
+  uuid VALUE, never a key — so the same letter chosen twice pins the first copy.
+- While the copy is being made the row is busy and a second Enter does nothing. An import that
+  fails says so and arms nothing.
+
+`/pin` arms a readable pack's match, and opens the picker on the query when only a locked pack
+matches. The Alt-drop and the compendium window's menu still reference a locked pack directly:
+that is the expert route, and it carries the placement warning.
+
+**What the owner decided.** D1: a pack is referenced when every current player can read it,
+decided on the GM's client; otherwise the picker's primary action is *Import & pin*, and a
+player's client never asks the server for a pack its role cannot read. D5: compendiums are
+searched from two characters, and the kind chips arrived with A28.
+
+**What did not change.** Packs grant nothing, and pack ownership is never written. The ledger,
+`grantTargets` and `reconcile` behave exactly as before for every compendium shape.
+
+**Accepted, and said here so nobody rediscovers them:**
+
+- A pack a player's client was never sent counts as LOCKED there — the placeholder, no request —
+  and as MISSING on the GM's screen, which is sent every pack. When a pack's module is disabled,
+  one pin reads "locked" on one screen and "missing" on the other. For a player, "not sent to
+  me" and "not mine to read" cannot be told apart without asking the server, which is the one
+  thing the rule forbids.
+- A renamed compendium page keeps its old name in labels until it next loads.
+- There is no fallback when `importFromCompendium` is absent: the import fails closed, with a
+  notice, rather than referencing what the table cannot open.
+- The source summary has no `embedded` field: refusing owned and token documents is the
+  adapters' job (A28).
+
+**Unverified, and how each is guarded.** Nothing above about core's runtime is measured. The
+probe is `docs/spike-2-sources-probe.js`; its sections are named in the last column.
+
+| Assumption | Guard in code | Probe |
+|---|---|---|
+| `fromUuidSync` returns the index entry for a pack document, the Document while cached (300 s), and throws for an uncached page | `describeSource` never calls it for a pack, so its shape does not matter | A3, B1, B2, B4, B5 |
+| The pack index is precomputed and sent to every client | an empty index is asked for once, then searched again | A1, A3 |
+| A player cannot load from a pack below OBSERVER (null? a throw? an error toast?) and can at OBSERVER | the role is asked first; null and a throw are both handled | C1 |
+| A player's client holds a pack hidden from them in `game.packs` at all | a pack this client does not hold counts as locked for a player | C2 |
+| `getUserLevel` / `testUserPermission` for another user on the GM's client equal that player's own answer | the key glyph, the warning and the greyed row rest on it | A2 against each player's A1 |
+| `getIndex({fields: ["pages.*"]})` returns page stubs | not relied on: a page is named once loaded | B8 |
+| A renamed compendium document's index entry is merged in place | the folded-name cache checks the name on every read | live, step 13 |
+| `importFromCompendium` honours `folder` in its update data and sets `_stats.compendiumSource` | the module's own `importedFrom` flag finds the copy too | `importOne` |
+| `Journal.show` of a compendium document opens for a player who can read the pack | the recipients are narrowed to readers | `showPack` |
+| A compendium window fires `getJournalEntryContextOptions` with `app.collection` the pack, and its rows carry `data-entry-id` | every candidate hook is registered; `data-uuid`, then the collection, then the sheet's journal, then the world | `recordHooks` |
+
+### A28 — The source adapter, and the actor and the item it lets in (2026-10-01)
+
+Every question the module asked of a pin's source was answered for a journal, in place,
+wherever it was asked. `ContentResolver` switched on a page's `type`; `ownership-sync` knew that
+a page has a journal; `api` knew that a page opens inside its journal's sheet. An Actor's `type`
+is a system subtype — `npc`, `weapon` — so the switch would have drawn a wanted poster as an
+unknown page, blank; a reveal would have granted OBSERVER on an NPC's whole sheet; and the key
+glyph would have asked for a level no actor sheet needs.
+
+**One adapter per kind of document.** `src/sources/index.ts` is a registry keyed by
+`documentName`. Each adapter answers what the rest of the module used to answer for a journal:
+how a drop or a document becomes a source, or is refused; what the card shows of the named
+document; its name, crumb, icon and thumbnail; its PDF, if it is one; the markup the card is
+enriched from, and a figure above it; the parts a GM may choose between; where a reveal's grant
+lands and how high it may go; the family a grant can sit in; the sheet that opens it and the
+level that sheet asks for; whether core's `Journal.show` can put it on a screen; whether a new
+pin on it starts with access on; whether it can be a source at all; and whether an edit to it
+redraws a card. `resolveCard` asks the adapter **before** anything reads `type`.
+
+- The journal adapter is the old behaviour moved, not rewritten, in a commit of its own
+  (`da9c2f8`) with the whole suite passing unchanged and nothing under `tests/` touched.
+- A document of no registered type is read as a journal, which is what every source was
+  before: a pin an API caller pointed at a Scene draws exactly as it did.
+- `ownership-sync` keeps `grantTargets` as a one-line delegate; tests import it and mock it.
+- **The import rule.** `sources/*` imports nothing a test mocks with a partial factory (`api`,
+  `data/ownership-sync`, `render/ContentResolver`, `apps/*`, `canvas/*`): every arrow points
+  into `sources/`. So the update handler (`sources/hooks.ts`) is handed its four effects by
+  `main.ts`; `fold` moved to `normalise.ts`; `sources/portrait.ts` reads the viewed scene's pins
+  through `data/PinData.rawPinFlag`, a leaf no test mocks.
+
+**The portrait card (D6).** An actor's or an item's card is the shell every card uses, with a
+figure above the title: the picture, the name, the chosen text. The layout is derived from the
+source and exposed as `data-dp-layout="portrait"`; nothing is stored, so papers, effects,
+typefaces and Fit to content are untouched.
+
+- **The picture** is the document's `img` unless that is a default; else, for an actor, the
+  prototype token's texture unless that is a default too; else none. The defaults are the
+  class's `DEFAULT_ICON`, `CONST.DEFAULT_TOKEN` and whatever `getDefaultArtwork({type})`
+  returns, cached per type — asked with the type alone, since `toObject()` would copy an actor's
+  data on every label read.
+- **Its markup** is built from the path with `escapeHtml` and passed through `sanitise`, the
+  treatment an image page's `<img>` gets: a `javascript:` path comes out with no `src`.
+- **Its box is sized by the stylesheet**, 9em square, so Fit to content measures the card right
+  before the picture decodes (A16, A26). It goes through the inliner like any `<img>`, so a
+  portrait on another origin is dropped wherever a prop is drawn into the scene (limitation 19).
+
+**Which text (D4).** `src/sources/fields.ts` walks the type's data model —
+`CONFIG[doc].dataModels[type].schema`, else the instance's — into schema fields, embedded data
+models included, and records HTML fields; it skips arrays, typed schemas and free objects, and
+stops at eight levels. A template.json system with no data model offers the string leaves of
+`game.model` whose path ranks. Labels are the model's own, localised, else the path made
+readable ("Details › Biography › Public"). Discovery is cached per `documentName:type`; a pack
+document needs no load, since its `type` is in the index. The probe's section E is the same walk
+and the same ranking, and the two must stay in agreement.
+
+- **The automatic choice** is public, then biograph, then description, then notes — and never a
+  path with a segment that STARTS with `gm`, `private` or `secret` (`gm`, `gmNotes`,
+  `privateNotes`, `secretNotes`). pf2e's `description.gm` is a whole field of GM text that no
+  `.secret` section marks, which is why the name rule exists. It is a prefix rather than a list
+  of names because a name the rule misses reaches the table, while a player-facing field that
+  happens to start so is only left out of the automatic choice, and can still be chosen.
+- **The GM's choice is `source.field`**, a dotted path under `system`, null meaning the automatic
+  choice. It joins schema 5, which is unreleased, and the normaliser supplies the null.
+- **The path is validated twice:** for its shape when the pin is read (eight identifiers, 128
+  characters, no `__proto__`, `prototype` or `constructor`; anything else becomes null with a
+  warning), and for membership in what the type declares when the card is drawn. The read walks
+  `system` by hand and refuses those segments a third time.
+- **Both cache keys carry the field**, beside the page and the PDF page.
+- **A retarget names the field outright.** `retarget` writes the new source as a patch that
+  `mergePin` deep-merges, and the picker, the menus, `/pin` and *Import & pin* build sources
+  that do not name `field`. The old choice survived: a path chosen for one NPC read the next
+  NPC's private biography, past the never-automatic rule, because a stored choice is taken as
+  explicit. The write is now `{ ...source, field: source.field ?? null }`. This is A22's lesson a
+  second time: a verb that REDIRECTS must reset what belonged to the old document.
+
+**What a reveal grants (D2).**
+
+- **The cap.** `grantTargets` grants an Actor **LIMITED at most**, for `default` and per-player
+  keys alike, whatever the pin's level. OBSERVER would open an NPC's whole sheet, stat block
+  included, and very likely share its tokens' sight.
+- **Access starts off.** A new actor pin, from `pinAt` or `adoptTile`, starts with ownership sync
+  off whatever the world setting says. The poster reads in place without any grant (§3.1), so a
+  grant only lists the actor in sidebars, and the GM opts in pin by pin. A pin retargeted onto an
+  actor from a kind that starts with access on has it switched off in the same write, and the GM
+  is told once: switching off never widens anything. A pin already on an actor keeps the GM's
+  choice.
+- **The Audience tab** offers Limited alone for an actor and says that what a Limited sheet shows
+  is the game system's choice. An Item takes the level asked, like a journal.
+- **The key glyph** asks the level the sheet needs, the adapter's `openLevel`: LIMITED for an
+  actor or an item (core's sheets' `viewPermission`), OBSERVER for a journal as before. The
+  player's "not yet" uses the same level. An icon opens the sheet.
+
+**What is refused (D3).** An item an actor owns, and a token's own actor. The uuid parse decides
+— any embedded pair, or a root type that is not the document's — and `parent`/`isToken` are a
+second check on loaded documents. A drop of one says so and returns `false`, since the gesture
+was ours; the sheet header is not offered; their grants are empty, and their update hooks are
+nothing to a pin.
+
+**The drop (D8).** Core's Alt-drop of an actor places a hidden token, and Alt is this module's
+default modifier, so an actor drop is taken only when the modifier is **Ctrl or Shift**. Under
+"no modifier" it is left to core too: taking it would turn every token drag into a pin for the
+GMs who chose "none" before actors were pinnable. Items take the modifier drop as journals do.
+The setting's hint says all of it.
+
+***Show to players*.** `Journal.show` resolves without showing anything for a document that is
+not a journal. On an actor's or an item's row the Pinboard no longer offers it; `Shift+S` and
+the API, which cannot hide a choice, say it opens journals only. Nothing is claimed as shown.
+
+**Roll data.** An actor's or an item's text is enriched with the document's own
+`getRollData()`, as its sheet would be. A system's derived data can throw on a player's client,
+so the call is guarded and a throw reads as no roll data: the card still draws.
+
+**Edits (P5).** `update<Document>` is wired from `hookedDocumentNames()` to one handler. An
+embedded document returns at once; the ledger is rebased only when `ownership` is in the change,
+and a label follows only when `name` is. A card is redrawn only when the adapter says the change
+reaches it: for a journal, any change, as before; for an actor or an item, its name, its
+pictures, its ownership, this module's flags, or the very field a pin on the viewed scene shows.
+A hit point lost in combat no longer re-enriches and re-rasterises a wanted poster.
+
+**Entry points.** "Pin to scene" is in the actor and item directories' context menus, the
+sidebar's and a compendium window's alike, and in an actor's or an item's sheet header for the
+GM. *Pin a document* has chips — All · Journals · Actors · Items; images stay the footer's
+Browse button — and lists the world's actors and items after its journals, then every kind of
+compendium. *Import & pin* copies an actor or an item into a "Documents Pinner" folder of its own
+type. `/pin` takes the first match: journals, then actors, then items, then compendiums.
+
+**What the owner decided.** D2: actors capped at LIMITED, and their pins start with access off;
+items may take OBSERVER. D3: owned and token documents refused, with a notice. D4: system-agnostic
+discovery with the ranked default above, null meaning automatic, and a template.json fallback.
+D5: the four chips, with images left on the Browse button. D6: the portrait card, derived, in the
+same shell. D7: RollTables, Scenes and Macros stay out (§1.1). D8: no actor drop while the
+modifier is Alt.
+
+**Accepted, and said here so nobody rediscovers them:**
+
+- `DpSource.field` is optional in the type, so a source built for the ghost need not name one.
+  Every stored payload has it, and the one writer that merges a source, `retarget`, names it.
+- The adapter interface is not the brief's: the page and field choices are synchronous (a pack's
+  index carries the `type` that decides the fields), and `maxGrant`, `syncOnCreate`, `isSource`,
+  `redrawsOn`, `shown` and `pdf` were added.
+- The ledger rebase and the rename follow every update without the scene filter, behind their
+  own `ownership` and `name` guards, so a hit-point change costs two key reads.
+- `DP.notice.showJournalsOnly` is a new key: `showUnavailable` is about a build with no
+  `Journal.show`.
+- No header button on AppV1 sheets: `getApplicationV1HeaderButtons` is not registered. A system
+  whose actor sheets are AppV1 still reaches its actors through the menus, the picker and `/pin`.
+- An actor's or an item's icon pin wears the shared book on the map (limitation 20).
+
+**Follow-ups, not done:**
+
+- Register `getApplicationV1HeaderButtons` if the probe shows the world's system uses AppV1
+  sheets.
+- Create an actor's or an item's anchor with its portrait as the tile's texture, same-origin only.
+- `uuidFromContextTarget`'s last fallback searches world journals only: a context target with no
+  collection behind it — the legacy `…DirectoryEntryContext` shape, which v14 does not fire —
+  resolves no actor or item.
+
+**Unverified, and how each is guarded.** Probe sections as in A27.
+
+| Assumption | Guard in code | Probe |
+|---|---|---|
+| Actor and Item drags carry `{type, uuid}` from the sidebar and from a compendium, and an owned item's uuid is embedded (`Actor.a.Item.i`) | an unknown type falls through to core; an embedded uuid is refused | `armDrop` |
+| Core's Alt-drop of an actor places a hidden token | D8: actors are taken only with Ctrl or Shift | the probe's manual step |
+| `dropCanvasData` returning `false` suppresses core for an Item or Actor drop (§9 item 3) | unchanged | `armDrop` |
+| `getActorContextOptions` and `getItemContextOptions` fire in the sidebar and in compendium windows, with `app.collection` the pack | every candidate name is registered; a name that never fires costs nothing | `recordHooks` |
+| The system's actor and item sheets are AppV2 and fire `getHeaderControlsApplicationV2` | the guard is on `app.document`; an AppV1 sheet gets no button | `recordHooks`, G1, G2 |
+| The world's actor and item sheet classes ask LIMITED (`viewPermission`) | the adapters' `openLevel` | G1, G2 |
+| What a LIMITED actor sheet shows, and whether a LIMITED actor is listed in a player's sidebar | access starts off for an actor; the Audience tab says it is the system's choice | `limitedSheet`, D2 |
+| OBSERVER on an actor shares its tokens' sight | the cap: never above LIMITED | live, step 14 |
+| A player's client holds world actors at NONE, so a poster reads in place without a grant | premise of the access-off default; otherwise the GM switches access on, capped | D1 |
+| The HTML field paths and labels discovered for the world's types, and that the automatic one is player-safe | the ranked default and the never-automatic segments; the Studio names what "Automatic" reads | E |
+| A system's rich-text fields are `instanceof foundry.data.fields.HTMLField`, and `system` values are readable by property path on a live model | no field found → the card is the portrait and the name; `readField` returns "" for anything not a string | E, E.instance |
+| `updateActor`'s change is a nested diff for a hit-point change, a rename and a biography edit; owned items fire `updateItem` with a `parent` | the filter reads nested and dotted keys and treats an operator as a whole-subtree change; a `parent` returns at once | `watchUpdates` |
+| Default artwork: `DEFAULT_ICON`, `getDefaultArtwork({type})`, the prototype token's texture | core's literal defaults as well; an override that throws on a bare type is caught | F1, F2 |
+| `isOwner` on a client is OWNER for that user, so an actor's secrets reach its owners and the GM alone | `enrichFor` strips for anyone else, and the content hash carries `isOwner` | live, step 14 |
+| `enrichHTML` with the actor's roll data evaluates a biography's inline rolls as its sheet would | none needed | live, step 14 |
+| A cross-origin portrait is dropped on the canvas tier and shown on the HTML tier | limitation 19 | live, on a world with an asset host |
 
 ---
 
