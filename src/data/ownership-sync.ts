@@ -273,6 +273,22 @@ export function onPreDeleteTile(doc: any, options: any): void {
 }
 
 /**
+ * Grant a pin's access when core brings it back: Ctrl+Z of its deletion, a paste.
+ *
+ * `onPreDeleteTile` gave the grant back when the tile went. The undo restored the pin with
+ * its audience revealed and nothing in the ledger, and the `ready` sweep walks the ledger's
+ * holders, so it never noticed: a player the pin was for saw it, and its sheet refused them,
+ * until its audience next changed. Synced on the primary GM alone, since every client sees
+ * the hook; the module's own creations sync themselves.
+ */
+export function onCreateTile(doc: any, options: any): void {
+  if (isOurs(options) || !isPrimaryGM()) return;
+  const pin = readPin(doc);
+  if (!pin || doc?.hidden === true || pin.audience.kind === "hidden") return;
+  void syncAnchor(doc).catch((error) => log.warn(`could not grant ${doc?.uuid}`, error));
+}
+
+/**
  * Fold a GM's manual permission edit into the ledger.
  *
  * Wired to `updateJournalEntry` and friends. Only the acting GM rebases: every client

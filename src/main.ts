@@ -16,7 +16,12 @@ import { cv, g } from "./fvtt";
 import { publicApi } from "./api";
 import * as settings from "./settings";
 import { concernsPins, definePinData } from "./data/PinData";
-import { onPreDeleteTile, onSourceOwnershipEdited, reconcile } from "./data/ownership-sync";
+import {
+  onCreateTile,
+  onPreDeleteTile,
+  onSourceOwnershipEdited,
+  reconcile,
+} from "./data/ownership-sync";
 import { onCanvasReady as migrateOnCanvasReady } from "./data/migrations";
 import { onPreCreateTile, onPreUpdateTile, syncAfterCoreHidden } from "./data/core-hidden";
 import {
@@ -216,6 +221,8 @@ Hooks.on(`${MODULE_ID}.peek`, (active: boolean) => propManager().setPeeking(acti
 // A pin can be deleted by any core gesture — the Tiles layer, Ctrl+Z, the Placeables
 // sidebar — and every one of those must give back the ownership it granted.
 Hooks.on("preDeleteTile", onPreDeleteTile);
+// And brought back by one, revealed, with nothing in the ledger.
+Hooks.on("createTile", onCreateTile);
 
 // And hidden or shown by one — the Tiles layer's HUD, TileConfig, the Placeables sidebar, a
 // paste — which completes the audience in the same update, and moves the grant after it.

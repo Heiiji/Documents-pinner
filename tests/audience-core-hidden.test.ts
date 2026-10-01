@@ -104,3 +104,20 @@ describe("a pin hidden or shown with core's own controls", () => {
     });
   });
 });
+
+/**
+ * Deleting a revealed pin on the Tiles layer gave its grant back; Ctrl+Z brought the pin back
+ * revealed with nothing in the ledger, and the ready sweep, which walks the ledger, never saw
+ * it. A player it was for saw a pin whose sheet refused them.
+ */
+describe("a revealed pin core brings back", () => {
+  it("has its access granted again", async () => {
+    const tile = pin({ kind: "everyone" });
+    const letter = fakeJournal({ id: "letter", name: "Letter" });
+    await boot([tile], [letter]);
+
+    fire("createTile", tile, {}, "gm");
+
+    await vi.waitFor(() => expect(letter.ownership).toEqual({ default: 2 }));
+  });
+});

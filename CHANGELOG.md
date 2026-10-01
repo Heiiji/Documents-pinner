@@ -179,6 +179,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   on the whole table's screen. Those controls now hide a pin as the eye does, remembering
   who it was for, and show it again to the same players, access and all; a pin pasted
   hidden is hidden from its players too.
+- **A revealed pin brought back with Ctrl+Z would not open for its players.** Deleting it
+  gave back the access it had granted, and the undo restored the pin without it; nothing
+  noticed until its audience next changed. A pin Foundry brings back revealed — an undo, a
+  paste — is granted again.
 
 ## [0.3.3] — 2026-09-30
 
