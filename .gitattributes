@@ -1,4 +1,5 @@
 * text=auto eol=lf
+*.ts text diff
 *.png binary
 *.webp binary
 *.jpg binary
