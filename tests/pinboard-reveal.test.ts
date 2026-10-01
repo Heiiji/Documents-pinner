@@ -127,11 +127,18 @@ describe("the bulk bar's Reveal", () => {
  * says it once for the batch, as the eye does for one.
  */
 describe("the bulk bar's Reveal, of an icon pin with access off", () => {
-  /** A hidden pin of this mode, with access sync on or off. */
-  const shaped = (id: string, mode: "pin" | "prop", sync: boolean, sort: number) => {
+  /** A hidden pin of this mode, with access sync on or off, opening as it says. */
+  const shaped = (
+    id: string,
+    mode: "pin" | "prop",
+    sync: boolean,
+    sort: number,
+    open: "double" | "readInPlace" | "never" = "double"
+  ) => {
     const tile = pinnedTile(id, { kind: "hidden" }, sort);
     const pin = tile.flags[MODULE_ID][FLAGS.PIN];
     pin.mode = mode;
+    pin.interaction = { ...pin.interaction, open };
     pin.audience.ownershipSync = { ...pin.audience.ownershipSync, enabled: sync };
     return tile;
   };
@@ -151,6 +158,11 @@ describe("the bulk bar's Reveal, of an icon pin with access off", () => {
     [
       "says nothing when every icon pin grants access, and a prop reads in place",
       [shaped("t1", "pin", true, 0), shaped("t2", "prop", false, 10)],
+      [],
+    ],
+    [
+      "says nothing for an icon pin that reads in place, or opens nothing at all",
+      [shaped("t1", "pin", false, 0, "readInPlace"), shaped("t2", "pin", false, 10, "never")],
       [],
     ],
   ])("%s", async (_what, list, expected) => {

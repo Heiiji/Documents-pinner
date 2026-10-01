@@ -229,18 +229,27 @@ export async function setAudience(anchorDoc: any, next: DpAudience): Promise<voi
   const before = readPin(anchorDoc);
   await store.update(anchorDoc, { audience: next });
   await syncAnchor(anchorDoc);
+  if (revealsUnopenable(before, next)) notify({ key: "DP.notice.revealedNoAccess" }, "info");
+}
 
-  // A prop reads in place whatever the ownership says; a PIN opens the sheet, and the
-  // sheet refuses without access. Revealing one with sync off is the exact moment a GM
-  // ships "I can see it but it won't open" to the table, so say so once, here.
-  if (
+/**
+ * Whether this audience change shows the players a pin whose sheet will refuse them: an
+ * icon pin that opens its document's sheet, revealed with access off.
+ *
+ * A prop reads in place whatever the ownership says, and so does an icon pin set to *Read
+ * in place*; a *Not interactive* pin opens nothing. Only a pin that opens the sheet — which
+ * refuses without access — ships "I can see it but it won't open" to the table, so only
+ * its reveal is the moment to say so.
+ */
+function revealsUnopenable(before: DpPinFlags | null, next: DpAudience): boolean {
+  return (
     before?.mode === "pin" &&
+    !readsInPlace(before) &&
+    before.interaction.open !== "never" &&
     before.audience.kind === "hidden" &&
     next.kind !== "hidden" &&
     !next.ownershipSync.enabled
-  ) {
-    notify({ key: "DP.notice.revealedNoAccess" }, "info");
-  }
+  );
 }
 
 /**
@@ -253,9 +262,9 @@ export async function setAudience(anchorDoc: any, next: DpAudience): Promise<voi
  * follows one source at a time, the queue in `ownership-sync` keeping two pins of the same
  * journal from racing.
  *
- * And it says what `setAudience` says, once for the batch: revealing an icon pin with
- * access off shows a pin whose sheet refuses to open. A bulk reveal used to say nothing,
- * though it is the same "I can see it but it won't open", for as many pins as it touched.
+ * And it says what `setAudience` says, once for the batch (`revealsUnopenable`): revealing
+ * an icon pin that opens its sheet, with access off, shows a pin whose sheet refuses to
+ * open. A bulk reveal used to say nothing, for as many such pins as it touched.
  */
 export async function setVisibilityMany(scene: any, docs: any[], reveal: boolean): Promise<number> {
   if (!isGM()) return 0;
@@ -276,14 +285,9 @@ export async function setVisibilityMany(scene: any, docs: any[], reveal: boolean
   );
   for (const { doc } of changes) await syncAnchor(doc);
 
-  const unopenable = changes.some(
-    ({ before, patch }) =>
-      before.mode === "pin" &&
-      before.audience.kind === "hidden" &&
-      patch.audience.kind !== "hidden" &&
-      !patch.audience.ownershipSync.enabled
-  );
-  if (unopenable) notify({ key: "DP.notice.revealedNoAccess" }, "info");
+  if (changes.some(({ before, patch }) => revealsUnopenable(before, patch.audience))) {
+    notify({ key: "DP.notice.revealedNoAccess" }, "info");
+  }
   return changes.length;
 }
 
