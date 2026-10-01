@@ -213,6 +213,7 @@
   "DP.notice.fitUnavailable": "Impossible de mesurer le contenu de ce document ; sa hauteur n'a pas été modifiée.",
   "DP.notice.flashHidden": "Les épingles masquées ne clignotent pas : un ping montrerait à tous les joueurs où elle est.",
   "DP.notice.grantsNarrowed": "{count} épingle(s) partageaient un journal entier pour n'en montrer qu'une page. Chacune ne partage plus que sa propre page.",
+  "DP.notice.grantsRevoked": "{count} épingle(s) accordaient encore un accès qu'elles ne donnent plus : masquées, montrées à moins de joueurs, ou avec l'accès désactivé. Cet accès a été retiré.",
   "DP.notice.importFailed": "« {name} » n'a pas pu être importé depuis son compendium : rien n'a été épinglé.",
   "DP.notice.imported": "« {name} » a été importé dans le dossier « {folder} ». L'épingle montre cette copie, que vous pouvez partager avec vos joueurs comme tout autre document de votre monde.",
   "DP.notice.ledgerRepaired": "{count} autorisation(s) résiduelle(s) réparée(s), issues d'épingles qui n'existent plus.",

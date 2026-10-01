@@ -213,6 +213,7 @@
   "DP.notice.fitUnavailable": "Could not measure this document's content, so its height was left alone.",
   "DP.notice.flashHidden": "Hidden pins are not flashed: a ping would show every player where it is.",
   "DP.notice.grantsNarrowed": "{count} pin(s) were sharing a whole journal to show one page. Each now shares only its own page.",
+  "DP.notice.grantsRevoked": "{count} pin(s) were still granting access they no longer give: hidden, shown to fewer players, or with access switched off. That access has been taken back.",
   "DP.notice.importFailed": "“{name}” could not be imported from its compendium, so nothing was pinned.",
   "DP.notice.imported": "“{name}” was imported into the “{folder}” folder. The pin shows this copy, which you can share with your players like anything else in your world.",
   "DP.notice.ledgerRepaired": "Repaired {count} leftover permission grant(s) from pins that no longer exist.",

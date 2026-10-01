@@ -194,6 +194,89 @@ describe("a manual GM edit landing between a grant and its release", () => {
 });
 
 /**
+ * One anchor's syncs, one at a time (DESIGN A29).
+ *
+ * A sync read the pin, then awaited its document, then queued its grant. Two syncs of one
+ * anchor — two quick chip clicks, or the `ready` sweep beside a resumed edit hold — reached
+ * the ledger in whatever order those reads resolved, and the first audience could be
+ * written last.
+ */
+describe("syncs of one anchor", () => {
+  /** `fromUuid` whose FIRST answer waits for `release`; every later one is immediate. */
+  function slowFirstRead() {
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    let reads = 0;
+    (globalThis as any).foundry.utils.fromUuid = async (uuid: string) => {
+      if (reads++ === 0) await gate;
+      return uuid === "JournalEntry.j" ? journal : null;
+    };
+    return release;
+  }
+  const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+  it("end on the audience the pin was given last, however their reads resolve", async () => {
+    const { syncAnchor } = await import("../src/data/ownership-sync");
+    const release = slowFirstRead();
+
+    const first = syncAnchor(anchorA);
+    await tick();
+    setAudience(anchorA, "selected", ["ali", "ben"]);
+    const second = syncAnchor(anchorA);
+    await tick();
+    release();
+    await Promise.all([first, second]);
+
+    expect(Object.keys(ledger().holders).sort()).toEqual(["ali", "ben"]);
+    expect(journal.ownership).toEqual({ default: 0, ali: 2, ben: 2 });
+  });
+
+  it("release after the sync in flight, rather than finding nothing and letting it land", async () => {
+    const { releaseAnchor, syncAnchor } = await import("../src/data/ownership-sync");
+    const release = slowFirstRead();
+
+    const granting = syncAnchor(anchorA);
+    await tick();
+    const releasing = releaseAnchor(anchorA);
+    await tick();
+    release();
+    await Promise.all([granting, releasing]);
+
+    expect(ledger()).toBeUndefined();
+    expect(journal.ownership).toEqual({ default: 0 });
+  });
+
+  it("grant nothing once the anchor is deleted, and give back what it held", async () => {
+    const { syncAnchor } = await import("../src/data/ownership-sync");
+    const scene = (globalThis as any).game.scenes.contents[0];
+    anchorA.parent = scene;
+    await syncAnchor(anchorA);
+    expect(journal.ownership.ali).toBe(2);
+
+    // Core's delete: off the scene's collection, the document object left as it was.
+    scene.tiles.contents.splice(scene.tiles.contents.indexOf(anchorA), 1);
+    setAudience(anchorA, "selected", ["ali", "ben"]);
+    await syncAnchor(anchorA);
+
+    expect(ledger()).toBeUndefined();
+    expect(journal.ownership).toEqual({ default: 0 });
+  });
+
+  it("do not hold up another anchor's: two pins of one journal synced at once keep both", async () => {
+    const { syncAnchor } = await import("../src/data/ownership-sync");
+    setAudience(anchorB, "selected", ["ben"]);
+
+    await Promise.all([syncAnchor(anchorA), syncAnchor(anchorB)]);
+
+    expect(ledger().holders).toEqual({
+      ali: { "Scene.s1.Tile.a": 2 },
+      ben: { "Scene.s1.Tile.b": 2 },
+    });
+    expect(journal.ownership).toEqual({ default: 0, ali: 2, ben: 2 });
+  });
+});
+
+/**
  * DESIGN §10.8 keeps anchors as ordinary Tiles so other tooling can act on them, which
  * makes deleting one from the Tiles layer — or with Ctrl+Z, or from the v14 Placeables
  * sidebar — a mainline path rather than an edge case.
@@ -295,6 +378,147 @@ describe("reconcile", () => {
 
     expect(await sync.reconcile()).toBe(1);
     expect(journal.flags["documents-pinner"]?.grants ?? null).toBeNull();
+  });
+
+  it("releases an orphan after a grant still landing on the same journal, not over it", async () => {
+    const sync = await import("../src/data/ownership-sync");
+    anchorA.flags["documents-pinner"].pin.source.uuid = "JournalEntry.other";
+    setAudience(anchorB, "selected", ["ben"]);
+    // Anchor B's grant — an edit hold resumed at `ready` — is slow to land.
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const write = journal.update;
+    let held = false;
+    journal.update = async (...args: [any, any]) => {
+      if (!held) {
+        held = true;
+        await gate;
+      }
+      return write(...args);
+    };
+
+    const granting = sync.syncAnchor(anchorB);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const sweeping = sync.reconcile();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    release();
+    await Promise.all([granting, sweeping]);
+
+    expect(ledger().holders).toEqual({ ben: { "Scene.s1.Tile.b": 2 } });
+    expect(journal.ownership).toEqual({ default: 0, ben: 2 });
+  });
+});
+
+/**
+ * The sweep asked whether a holder's anchor still pointed at the document, never whether it
+ * still WANTED the key (DESIGN A29). A reload in the middle of "Hide all" — the tiles written
+ * hidden, their releases not yet landed — left the players holding OBSERVER on documents
+ * behind hidden pins, and every sweep after kept the grants, their anchors being alive and
+ * pointing here. Each case below is a pin written without the sync that should follow it.
+ */
+describe("reconcile, for a pin that no longer asks for its grant", () => {
+  let world: ReturnType<typeof installWorld>;
+  const said = (key: string) => world.notifications.filter((n) => n.message === key).length;
+
+  beforeEach(async () => {
+    world = installWorld({ isGM: true, tiles: [anchorA, anchorB] });
+    (globalThis as any).foundry.utils.fromUuid = async (uuid: string) =>
+      uuid === "JournalEntry.j" ? journal : null;
+    (globalThis as any).game.journal.contents = [journal];
+  });
+
+  it("takes back the grant of a pin hidden while its release was interrupted", async () => {
+    const sync = await import("../src/data/ownership-sync");
+    await sync.syncAnchor(anchorA);
+    setAudience(anchorA, "hidden", []);
+    anchorA.hidden = true;
+
+    expect(await sync.reconcile()).toBe(0);
+
+    expect(ledger()).toBeUndefined();
+    expect(journal.ownership).toEqual({ default: 0 });
+    expect(said("DP.notice.grantsRevoked")).toBe(1);
+    expect(said("DP.notice.ledgerRepaired")).toBe(0);
+  });
+
+  it("releases every grant of a pin whose access was switched off", async () => {
+    const sync = await import("../src/data/ownership-sync");
+    await sync.syncAnchor(anchorA);
+    anchorA.flags["documents-pinner"].pin.audience.ownershipSync.enabled = false;
+
+    await sync.reconcile();
+
+    expect(ledger()).toBeUndefined();
+    expect(journal.ownership).toEqual({ default: 0 });
+  });
+
+  it("moves an everyone grant to the one player a narrowed pin is now for", async () => {
+    const sync = await import("../src/data/ownership-sync");
+    setAudience(anchorA, "everyone", []);
+    await sync.syncAnchor(anchorA);
+    expect(journal.ownership.default).toBe(2);
+    setAudience(anchorA, "selected", ["ali"]);
+
+    await sync.reconcile();
+
+    expect(ledger().holders).toEqual({ ali: { "Scene.s1.Tile.a": 2 } });
+    expect(journal.ownership).toEqual({ default: 0, ali: 2 });
+  });
+
+  it("restores the baseline and leaves a GM's own edit where it is", async () => {
+    const sync = await import("../src/data/ownership-sync");
+    // Ben could already see the journal before any pin; the GM then raised Ali by hand.
+    journal.ownership = { default: 0, ben: 1 };
+    setAudience(anchorA, "selected", ["ali", "ben"]);
+    await sync.syncAnchor(anchorA);
+    journal.ownership.ali = 3;
+    await sync.onSourceOwnershipEdited(journal, { ownership: { ali: 3 } }, {}, "gm");
+    setAudience(anchorA, "hidden", []);
+
+    await sync.reconcile();
+
+    expect(journal.ownership).toEqual({ default: 0, ali: 3, ben: 1 });
+    expect(ledger()).toBeUndefined();
+  });
+
+  it("takes back the grant of a player who has left the world", async () => {
+    const sync = await import("../src/data/ownership-sync");
+    setAudience(anchorA, "selected", ["ali", "ben"]);
+    await sync.syncAnchor(anchorA);
+    const users = world.game.users.contents;
+    users.splice(
+      users.findIndex((u: any) => u.id === "ben"),
+      1
+    );
+
+    await sync.reconcile();
+
+    expect(ledger().holders).toEqual({ ali: { "Scene.s1.Tile.a": 2 } });
+    expect(journal.ownership).toEqual({ default: 0, ali: 2 });
+  });
+
+  it("leaves alone a pin that still wants what it holds", async () => {
+    const sync = await import("../src/data/ownership-sync");
+    await sync.syncAnchor(anchorA);
+    const writes = journal.updates.length;
+
+    expect(await sync.reconcile()).toBe(0);
+
+    expect(journal.updates.length).toBe(writes);
+    expect(world.notifications).toEqual([]);
+  });
+
+  it("finds nothing to fight for a compendium pin, whose access is the pack's", async () => {
+    const sync = await import("../src/data/ownership-sync");
+    const packPin = pinned("c", "everyone", []);
+    packPin.flags["documents-pinner"].pin.source.uuid = "Compendium.world.lore.JournalEntry.x";
+    (globalThis as any).game.scenes.contents[0].tiles.contents = [packPin];
+    await sync.syncAnchor(packPin);
+
+    expect(await sync.reconcile()).toBe(0);
+
+    expect(journal.updates).toEqual([]);
+    expect(world.notifications).toEqual([]);
   });
 });
 

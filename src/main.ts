@@ -15,7 +15,6 @@ import { logger } from "./log";
 import { cv, g } from "./fvtt";
 import { publicApi } from "./api";
 import * as settings from "./settings";
-import { definePinData } from "./data/PinData";
 import {
   onCreateTile,
   onPreDeleteTile,
@@ -67,7 +66,6 @@ declare const Hooks: any;
 Hooks.once("init", () => {
   settings.register();
   settings.registerPresetMenu(() => openPresetStudio());
-  definePinData();
   definePinnedTile();
   registerPropHitLayer();
   definePinHUD();

@@ -13,6 +13,10 @@
  * Writes are serialised per SOURCE document, not per anchor: two pins of the same
  * journal being revealed in the same gesture would otherwise each read the ledger,
  * add their own holder and write back, and the slower would erase the faster's claim.
+ * Above them, one anchor's syncs and releases run one at a time (`syncQueue`), so the
+ * audience a sync grants is the last one the pin was given, whatever order its reads
+ * resolve in. Two queues, each waiting only on the one below it; neither is the pin's own
+ * write queue, which waits on them.
  */
 
 import { DELETE_PREFIX, FLAGS, MODULE_ID } from "../const";
@@ -30,7 +34,7 @@ import {
   playerIds,
   resolveUuid,
 } from "../fvtt";
-import type { DpGrantLedger } from "../types/dp";
+import type { DpGrantLedger, DpPinFlags } from "../types/dp";
 import { grantKeysFor } from "./audience";
 import {
   keysHeldBy,
@@ -195,6 +199,41 @@ async function releaseOn(doc: any, anchor: string): Promise<void> {
 }
 
 /**
+ * The ownership keys a pin asks to hold: its audience's, or none while access is off.
+ *
+ * One answer for the two places that need it — what `syncAnchor` grants, and what the
+ * `ready` sweep checks every holder against — so the sweep can never keep a grant a sync
+ * would have taken back.
+ */
+function wantedKeys(pin: DpPinFlags): string[] {
+  return pin.audience.ownershipSync.enabled ? grantKeysFor(pin.audience, playerIds()) : [];
+}
+
+/**
+ * The queue one anchor's syncs and releases wait in.
+ *
+ * Its own, NOT the anchor's write queue (`PinStore.queueKey`): the verbs await a sync after
+ * their write, and the bulk delete releases inside its turn in the write queue, so a sync
+ * queued on the write queue would wait for the very task waiting for it — A22's deadlock,
+ * which reports nothing and never ends. A sync only ever waits on the `grants:` queues
+ * below it, and nothing in those waits on a sync.
+ */
+const syncQueue = (anchorDoc: any): string => `sync:${anchorDoc?.uuid ?? ""}`;
+
+/**
+ * Whether the anchor has been deleted since its sync was asked for.
+ *
+ * Core takes a deleted tile off its scene's collection and leaves the document object as
+ * it was, flags and all (foundry.mjs 14.368, `#handleDeleteDocuments` 81362-81375), so the
+ * payload cannot say; the scene can. A tile with no scene to ask is taken to be there.
+ */
+function anchorGone(anchorDoc: any): boolean {
+  const tiles = anchorDoc?.parent?.tiles;
+  if (typeof tiles?.get !== "function" || !anchorDoc?.id) return false;
+  return !tiles.get(anchorDoc.id, { invalid: true });
+}
+
+/**
  * Bring a source document's ownership in line with one anchor's audience.
  *
  * Retarget rather than release-then-grant, so a user present in both the old and the
@@ -205,13 +244,24 @@ async function releaseOn(doc: any, anchor: string): Promise<void> {
  *
  * `previousUuid` is the document the pin named before a retarget. Its family is swept
  * too, since the payload no longer names it and nothing else could find it.
+ *
+ * One at a time per anchor, reading the pin when its turn comes (A29). A sync read the pin
+ * and then awaited its document, so two syncs of one anchor — two quick chip clicks, or the
+ * `ready` sweep beside a resumed edit hold — reached the `grants:` queues in whatever order
+ * those reads resolved, and the first one's audience could be written last: Ali's grant
+ * landing after Ali-and-Ben's took Ben's back. A sync whose anchor was deleted before its
+ * turn grants nothing and releases what the anchor held: granting on behalf of a pin that no
+ * longer exists is a grant nothing will ever take back.
  */
 export async function syncAnchor(
   anchorDoc: any,
   previousUuid: string | null = null
 ): Promise<void> {
   if (!isGM()) return;
+  return enqueue(syncQueue(anchorDoc), () => syncNow(anchorDoc, previousUuid));
+}
 
+async function syncNow(anchorDoc: any, previousUuid: string | null): Promise<void> {
   const pin = readPin(anchorDoc);
   if (!pin) return;
 
@@ -219,7 +269,7 @@ export async function syncAnchor(
   const named = pin.source.kind === "document" ? await worldDocument(pin.source.uuid) : null;
   const own = grantable(named) ? named : null;
 
-  const keys = pin.audience.ownershipSync.enabled ? grantKeysFor(pin.audience, playerIds()) : [];
+  const keys = anchorGone(anchorDoc) ? [] : wantedKeys(pin);
   const targets = keys.length
     ? grantTargets(own, pin.source.pageId, pin.audience.ownershipSync.level)
     : [];
@@ -236,7 +286,12 @@ export async function syncAnchor(
   }
 }
 
-/** Drop every claim an anchor holds. Called when a pin is deleted or unpinned. */
+/**
+ * Drop every claim an anchor holds. Called when a pin is deleted or unpinned.
+ *
+ * In the anchor's sync queue, after any sync already in it: a release that overtook a sync
+ * still reading its document found nothing to release, and the grant landed after it.
+ */
 export async function releaseAnchor(anchorDoc: any, sourceUuid?: string | null): Promise<void> {
   if (!isGM()) return;
 
@@ -246,7 +301,9 @@ export async function releaseAnchor(anchorDoc: any, sourceUuid?: string | null):
   const uuid = sourceUuid ?? readPin(anchorDoc)?.source.uuid ?? null;
   const anchor = anchorDoc?.uuid ?? "";
 
-  for (const doc of familyOf(await worldDocument(uuid))) await releaseOn(doc, anchor);
+  return enqueue(syncQueue(anchorDoc), async () => {
+    for (const doc of familyOf(await worldDocument(uuid))) await releaseOn(doc, anchor);
+  });
 }
 
 /**
@@ -392,17 +449,28 @@ export function ownershipChange(
  * holds grants made the old way, and a pin whose audience is never touched again would
  * keep handing out the whole journal forever — so a holder recorded above the level its
  * anchor's target asks for is re-synced, which moves the grant where it belongs.
+ *
+ * And it REVOKES (A29). It used to ask only whether a holder's anchor still pointed here,
+ * never whether the anchor still wanted that key. A reload in the middle of "Hide all" —
+ * the tiles written hidden, their releases not yet landed — left players holding OBSERVER
+ * on documents behind hidden pins, and every sweep after found the holders' anchors alive
+ * and pointing here, and kept them. A holder whose key its anchor no longer asks for
+ * (`wantedKeys`: hidden, access off, a narrower list, a user deleted or made a GM) is now
+ * re-synced too, which releases it with the ledger's own rules: the baseline comes back,
+ * and a GM's hand edit stands (A25: hiding was always meant to release). A compendium pin
+ * holds no ledger, so there is nothing of its to find.
  */
 export async function reconcile(): Promise<number> {
   if (!isPrimaryGM()) return 0;
 
-  // Anchor uuid -> the tile, and the level it may hold on each document it targets. A
-  // live anchor is not enough; what matters is whether it still points at the document
-  // holding the grant. Resolved synchronously: a grant never sits in a compendium, and
-  // loading packs to learn that at `ready` would cost more than the sweep.
+  // Anchor uuid -> the tile, the level it may hold on each document it targets, and the
+  // keys it asks to hold. A live anchor is not enough; what matters is whether it still
+  // points at the document holding the grant, and still wants it. Resolved synchronously:
+  // a grant never sits in a compendium, and loading packs to learn that at `ready` would
+  // cost more than the sweep.
   const anchors = new Map<
     string,
-    { tile: any; source: string | null; levels: Map<string, number> }
+    { tile: any; source: string | null; levels: Map<string, number>; keys: Set<string> }
   >();
   for (const scene of g()?.scenes?.contents ?? []) {
     for (const tile of scene.tiles?.contents ?? []) {
@@ -420,18 +488,20 @@ export async function reconcile(): Promise<number> {
         tile,
         source: pin.source.uuid,
         levels: new Map(targets.map((target) => [target.doc.uuid, target.level])),
+        keys: new Set(wantedKeys(pin)),
       });
     }
   }
 
   let repaired = 0;
   const narrow = new Set<string>();
+  const revoke = new Set<string>();
   for (const source of sourcesWithLedger()) {
     const stored = ledgerOf(source);
     if (!stored) continue;
 
     const orphans = new Set<string>();
-    for (const holders of Object.values(stored.holders ?? {})) {
+    for (const [key, holders] of Object.entries(stored.holders ?? {})) {
       for (const [anchorUuid, level] of Object.entries(holders)) {
         const anchor = anchors.get(anchorUuid);
         // The document the pin names is always its own, as it always was; a page or a
@@ -439,6 +509,8 @@ export async function reconcile(): Promise<number> {
         const target = anchor?.levels.get(source.uuid);
         if (!anchor || (target === undefined && anchor.source !== source.uuid)) {
           orphans.add(anchorUuid);
+        } else if (!anchor.keys.has(key)) {
+          revoke.add(anchorUuid);
         } else if (target !== undefined && level > target) {
           narrow.add(anchorUuid);
         }
@@ -446,15 +518,12 @@ export async function reconcile(): Promise<number> {
     }
     if (!orphans.size) continue;
 
-    // Release one orphan at a time so each sees the state the previous one left.
+    // Release one orphan at a time so each sees the state the previous one left — in the
+    // document's own queue, read inside it, like every other ledger write. The sweep runs
+    // at `ready` beside the edit holds' resume, whose syncs write these same ledgers, and a
+    // release planned from a ledger read before one of their grants landed wrote over it.
     for (const anchorUuid of orphans) {
-      const plan = planRelease(
-        { ...(source.ownership ?? {}) },
-        ledgerOf(source),
-        anchorUuid,
-        keysHeldBy(ledgerOf(source), anchorUuid)
-      );
-      await applyPlan(source, plan);
+      await releaseOn(source, anchorUuid);
       repaired++;
     }
   }
@@ -463,12 +532,17 @@ export async function reconcile(): Promise<number> {
     notify({ key: "DP.notice.ledgerRepaired", data: { count: repaired } }, "warn");
   }
 
-  for (const anchorUuid of narrow) {
+  // One sync per anchor, whichever of the two brought it here: a sync grants what the pin
+  // asks for, where it asks for it, and releases the rest.
+  for (const anchorUuid of new Set([...revoke, ...narrow])) {
     const tile = anchors.get(anchorUuid)?.tile;
     if (tile) await syncAnchor(tile);
   }
   if (narrow.size) {
     notify({ key: "DP.notice.grantsNarrowed", data: { count: narrow.size } }, "info");
+  }
+  if (revoke.size) {
+    notify({ key: "DP.notice.grantsRevoked", data: { count: revoke.size } }, "warn");
   }
   return repaired;
 }
