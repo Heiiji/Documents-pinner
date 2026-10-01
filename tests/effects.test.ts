@@ -303,3 +303,47 @@ describe("the pin's own motion settings", () => {
     expect(explicit).toEqual(implicit);
   });
 });
+
+/**
+ * The scanlines roll on a layer of their own, and `data-dp-scan` is how the card learns it
+ * needs one. Everywhere they do not roll, the card must carry exactly what it did before —
+ * the still scanlines on `::before` — which is why the decision is made here, with the rung,
+ * the level, the freeze and the pin's own motion all in hand.
+ */
+describe("the scanlines' roll", () => {
+  const crt = () => getCorePreset("crt-scanlines")!;
+  const scan = (over: Partial<EffectContext> = {}) =>
+    dressing(context({ preset: crt(), ...over })).attrs["data-dp-scan"];
+
+  it("rolls on a live full-size card of a looping preset, and in the reader's rung", () => {
+    expect(scan()).toBe("roll");
+    expect(scan({ tier: "L3" })).toBe("roll");
+  });
+
+  it("stays still at the coarse rung, at reduced, in a texture, and for a pin set still", () => {
+    expect(scan({ tier: "L2a" })).toBe("still");
+    expect(scan({ level: "reduced" })).toBe("still");
+    expect(scan({ baked: true })).toBe("still");
+    expect(scan({ motion: "none" })).toBe("still");
+    expect(scan({ speed: 0 })).toBe("still");
+  });
+
+  it("stays still on a preset that does not loop, or whose scanlines do not move", () => {
+    expect(scan({ preset: { ...crt(), motion: "none" } })).toBe("still");
+    const parked = { ...crt().params, scanlines: { ...crt().params.scanlines, speedPxPerSec: 0 } };
+    expect(scan({ preset: { ...crt(), params: parked } })).toBe("still");
+  });
+
+  it("says nothing where there are no scanlines to draw", () => {
+    expect(scan({ level: "off" })).toBeUndefined();
+    expect(scan({ tier: "L1" })).toBeUndefined();
+    expect(dressing(context()).attrs).not.toHaveProperty("data-dp-scan");
+  });
+
+  it("rolls every shipped preset that loops with moving scanlines, and no other", () => {
+    const rolling = CORE_PRESETS.filter(
+      (preset) => dressing(context({ preset })).attrs["data-dp-scan"] === "roll"
+    ).map((preset) => preset.id);
+    expect(rolling.sort()).toEqual(["crt-scanlines", "glitch", "holographic-frame", "signal-loss"]);
+  });
+});

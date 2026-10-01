@@ -292,6 +292,70 @@ describe("what the effect system emits", () => {
 });
 
 /**
+ * The effect loops run on every full-size DOM card for as long as a scene is open, so each
+ * has to be work the compositor does alone. `dp-scan` animated `background-position-y` on
+ * the card's texture stack — the scanlines, the stain and the grain repainted under a blend
+ * mode, inside a filter and a mask, every frame, on every card wearing one of four presets
+ * (A29). It now moves a layer of its own with `translate`.
+ */
+describe("the effects' motion", () => {
+  const FX = decomment(readFileSync(join(ROOT, "styles", "fx", "effects.css"), "utf8"));
+
+  /** Every `@keyframes` block, with the properties its frames set. */
+  const keyframes = (css: string) =>
+    [...css.matchAll(/@keyframes\s+([\w-]+)\s*\{((?:[^{}]*\{[^{}]*\})*)\s*\}/g)].map((m) => ({
+      name: m[1],
+      props: [...m[2].matchAll(/([a-z-]+)\s*:/g)].map((p) => p[1]),
+    }));
+
+  it("never animates a background position, anywhere", () => {
+    const found = keyframes(CSS);
+    expect(found.length).toBeGreaterThan(0);
+    for (const frames of found) {
+      expect(
+        frames.props.filter((p) => p.startsWith("background")),
+        frames.name
+      ).toEqual([]);
+    }
+  });
+
+  it("moves the effect layers with opacity and translate alone", () => {
+    const found = keyframes(FX);
+    expect(found.map((frames) => frames.name)).toContain("dp-scan");
+    for (const frames of found) {
+      for (const prop of frames.props) {
+        expect(["opacity", "translate"], `${frames.name} animates ${prop}`).toContain(prop);
+      }
+    }
+  });
+
+  it("rolls the scanlines through one gate that refuses every place motion stops", () => {
+    // The roll starts in exactly one rule, and that rule is inside the no-preference query,
+    // so a stated preference never starts it at all.
+    const starts = cssRules(FX).filter((rule) => /animation\s*:\s*dp-scan\b/.test(rule.body));
+    expect(starts).toHaveLength(1);
+    const media = /@media\s*\(prefers-reduced-motion:\s*no-preference\)\s*\{([\s\S]*?)\n\}/.exec(
+      FX
+    );
+    expect(media?.[1]).toContain(starts[0].body);
+
+    // ...and that rule refuses the coarse rung, both levels that stop motion — on the card
+    // and on the overlay — and the reader. `::before` keeps the still scanlines there.
+    const refused = /:not\(([\s\S]*)\)\s*>\s*\.dp-card__scan$/.exec(starts[0].selector)?.[1] ?? "";
+    for (const stop of [
+      '[data-dp-tier="L2a"]',
+      '[data-dp-level="reduced"]',
+      '[data-dp-level="off"]',
+      '[data-dp-level="reduced"] *',
+      '[data-dp-level="off"] *',
+      ".dp-reader *",
+    ]) {
+      expect(refused, stop).toContain(stop);
+    }
+  });
+});
+
+/**
  * The scene's darkness on a DOM prop, and on nothing else.
  *
  * Where the dim is applied decides whether it survives at all. `.dp-prop`'s own `filter`

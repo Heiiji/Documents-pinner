@@ -1,11 +1,13 @@
 /*
  * The effect layers.
  *
- * Applied live to every DOM card — a prop, the reader, the ghost, the gallery swatches.
- * Only `card.css` is inlined into the SVG the rasteriser draws; a baked effect reaches a
- * texture through the custom properties the resolver writes on the card, not through
- * this file. Everything here is either a paint-only property or a compositor-only
- * animation; nothing triggers layout.
+ * Applied live to every DOM card — a prop, the reader, the ghost, the gallery swatches —
+ * and inlined with `_props.css` and `card.css` into the SVG the rasteriser draws
+ * (`Rasterizer.loadCardCss`), where a baked card is always still: the dressing freezes every
+ * duration and emits no rolling layer. Everything here is a paint-only property or an
+ * animation the compositor runs on its own — `opacity` or `translate`, never a property
+ * that repaints, which `tests/css-baseline.test.ts` holds every keyframe to. Nothing
+ * triggers layout.
  *
  * Two prohibitions, both from DESIGN.md §6.2, both frame-rate bugs if broken:
  *
@@ -15,8 +17,7 @@
  *     use feTurbulence exactly once, when the data URI is decoded.
  *
  * `--dp-i` is the intensity multiplier and is applied here in calc(), never
- * pre-multiplied by the emitter, so dragging the slider is one custom-property write
- * that the compositor interpolates on its own.
+ * pre-multiplied by the emitter, so dragging the slider is one custom-property write.
  */
 
 .dp-card {
@@ -46,8 +47,9 @@
     brightness(var(--dp-card-dim, 1));
 }
 
-/* Tint, grain, stain and scanlines all stack in one pseudo-element: four paint layers
-   on one composited surface rather than four elements the browser has to lay out. */
+/* Scanlines, stain and grain stack in one pseudo-element: three paint layers on one
+   surface rather than three elements the browser has to lay out. The scanlines are drawn
+   here still; where they roll, `.dp-card__scan` below takes them over. */
 .dp-card::before {
   content: "";
   position: absolute;
@@ -126,25 +128,19 @@
  * Everything animated, stopped.
  *
  * The pseudo-element selectors are the point. `.dp-card[data-dp-tier="L2a"]` matched the
- * card and not `::before` or `::after`, where the scan roll and the glow pulse actually
- * live — so coarse props kept animating in exactly the size band where a scene has the
- * most of them. The `.dp-card *` net in `fx/_props.css` has the same hole, because `*`
- * does not match a pseudo-element either.
+ * card and not `::after`, where the glow pulse actually lives — so coarse props kept
+ * animating in exactly the size band where a scene has the most of them. The `.dp-card *`
+ * net in `fx/_props.css` has the same hole, because `*` does not match a pseudo-element
+ * either. The scanline roll is not in this list: it has one gate of its own, below.
  */
 .dp-card[data-dp-tier="L2a"],
-.dp-card[data-dp-tier="L2a"]::before,
 .dp-card[data-dp-tier="L2a"]::after,
 .dp-card[data-dp-tier="L2a"] .dp-card__hud-sweep,
 .dp-card[data-dp-motion="loop"]:where([data-dp-level="reduced"], [data-dp-level="off"]),
-.dp-card[data-dp-motion="loop"]:where([data-dp-level="reduced"], [data-dp-level="off"])::before,
 .dp-card[data-dp-motion="loop"]:where([data-dp-level="reduced"], [data-dp-level="off"])::after,
 .dp-card[data-dp-motion="loop"]:where([data-dp-level="reduced"], [data-dp-level="off"])
   .dp-card__hud-sweep {
   animation: none;
-}
-
-.dp-card[data-dp-motion="loop"]::before {
-  animation: dp-scan var(--dp-scan-dur, 0s) linear infinite;
 }
 
 .dp-card[data-dp-motion="loop"]::after {
@@ -175,21 +171,83 @@
   }
 }
 
-@keyframes dp-scan {
-  from {
-    background-position-y: 0;
-  }
-  to {
-    background-position-y: var(--dp-scan-gap, 3px);
-  }
-}
-
 @keyframes dp-glow {
   from {
     opacity: calc(var(--dp-tint-amt, 0) * var(--dp-i, 1));
   }
   to {
     opacity: calc(var(--dp-tint-amt, 0) * var(--dp-i, 1) * 0.45);
+  }
+}
+
+/*
+ * The rolling scanlines, on a layer of their own.
+ *
+ * They used to roll on `::before` by animating `background-position-y`, which repaints:
+ * every frame, the scanlines and the stain and grain under them were redrawn, under a blend
+ * mode, inside a card with a filter and a mask — on every full-size card wearing
+ * crt-scanlines, glitch, holographic-frame or signal-loss. A card whose scanlines roll
+ * (`data-dp-scan="roll"`, decided by the dressing) now carries this element instead: the
+ * same gradient at the same blend and strength, one gap taller than the card, moved one gap
+ * by `translate` — as the sweep below is — so a frame of the roll is a composite, not a
+ * paint. The pattern repeats every gap, so the loop has no seam, and the card's own
+ * `overflow: hidden` clips the spare gap. At rest the element is not drawn at all.
+ *
+ * The roll's gate is one rule, not a start here and a stop in every list: stopping it has to
+ * hand the scanlines back to `::before`, and a stop that lost the cascade to its start would
+ * leave a card with no scanlines or with two sets. So it rolls only where every condition
+ * holds — a looping card, motion not refused, past the coarse rung, at the full level on the
+ * card and on the overlay, and not in the reader — and everywhere else `::before` draws the
+ * still scanlines exactly as it always did, at half strength in the reader as before.
+ * `:has()` keeps `::before`'s own layer for a card that was given no roller at all.
+ */
+.dp-card__scan {
+  display: none;
+  inset-inline: 0;
+  inset-block: calc(var(--dp-scan-gap, 3px) * -1) 0;
+  z-index: 1;
+  pointer-events: none;
+  background-image: var(--dp-scan-img);
+  mix-blend-mode: var(--dp-surface-blend, multiply);
+  opacity: var(--dp-i, 1);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .dp-card[data-dp-motion="loop"]:not(
+      :where(
+        [data-dp-tier="L2a"],
+        [data-dp-level="reduced"],
+        [data-dp-level="off"],
+        [data-dp-level="reduced"] *,
+        [data-dp-level="off"] *,
+        .dp-reader *
+      )
+    )
+    > .dp-card__scan {
+    display: block;
+    animation: dp-scan var(--dp-scan-dur, 0s) linear infinite;
+  }
+
+  .dp-card[data-dp-motion="loop"]:not(
+      :where(
+        [data-dp-tier="L2a"],
+        [data-dp-level="reduced"],
+        [data-dp-level="off"],
+        [data-dp-level="reduced"] *,
+        [data-dp-level="off"] *,
+        .dp-reader *
+      )
+    ):has(> .dp-card__scan)::before {
+    background-image: none, var(--dp-surface-img), var(--dp-grain-img);
+  }
+}
+
+@keyframes dp-scan {
+  from {
+    translate: 0 0;
+  }
+  to {
+    translate: 0 var(--dp-scan-gap, 3px);
   }
 }
 
@@ -226,10 +284,10 @@
  * across the line being read — all at full strength, on the one surface someone is
  * looking at closely. Each keeps its look on the prop; in the reader the motion stops,
  * the fringe goes, and the textures and the projected overlay sit at half strength. The
- * glow pulse stays: it moves light around the sheet, not across the words.
+ * glow pulse stays: it moves light around the sheet, not across the words. The scanlines
+ * stop at the roll's own gate, above, which leaves them still on `::before`.
  */
 .dp-reader .dp-card[data-dp-motion="loop"],
-.dp-reader .dp-card[data-dp-motion="loop"]::before,
 .dp-reader .dp-card[data-dp-motion="loop"] .dp-card__hud-sweep {
   animation: none;
 }
@@ -459,8 +517,10 @@
  * `fx/_props.css` claimed `--dp-motion` provided; that property was read by no rule in
  * the module, so the claim was describing a mechanism that did not exist.
  *
- * Everything here is a fade, a translate or a paint: stopping it leaves each preset
- * exactly at its static identity, which is the whole point of the accessibility setting.
+ * Everything here is a fade or a translate: stopping it leaves each preset exactly at its
+ * static identity, which is the whole point of the accessibility setting. The scanline
+ * roll is not listed because it never starts under this preference: its gate is inside
+ * `prefers-reduced-motion: no-preference`.
  */
 @media (prefers-reduced-motion: reduce) {
   /*
@@ -470,7 +530,6 @@
    * fourth rule in this repository to have been written and never applied.
    */
   .dp-card[data-dp-motion="loop"],
-  .dp-card[data-dp-motion="loop"]::before,
   .dp-card[data-dp-motion="loop"]::after,
   .dp-card[data-dp-motion="loop"] .dp-card__hud-sweep {
     animation: none;
