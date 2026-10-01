@@ -138,6 +138,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   every card on the scene was redrawn at each flip. Once *Auto* has reduced the effects,
   it now waits for the frame rate to climb clear of the line — 46 fps at the default cap —
   before bringing them back.
+- **A text prop could go back to what it said before the scene redrew.** A card still
+  being prepared when the scene was drawn again — switching the viewed level does that —
+  could land on the new card for the same prop and stay there, with the older text, until
+  something else changed. It is dropped now.
 - **"Reveal all" showed a private note to the whole table.** A pin narrowed to one player
   and hidden for a beat went back to that player when revealed with `Space` or the eye —
   and to everyone when revealed from the Pinboard's bulk bar or "Reveal all". Every reveal

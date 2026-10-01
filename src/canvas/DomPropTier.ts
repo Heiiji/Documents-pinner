@@ -69,7 +69,7 @@ interface DomProp {
   element: HTMLElement;
   /** The content key the element currently shows, so a re-sync is free. */
   key: string;
-  /** Bumped on every resolve, so a slow one cannot overwrite a newer card. */
+  /** The resolve this card is waiting for, so a slow one cannot overwrite a newer card. */
   generation: number;
   /** The geometry last written, so a LOD pass after a pan writes nothing. */
   placedAt: PlacedRect | null;
@@ -85,6 +85,16 @@ interface DomProp {
 const RETRIES = 2;
 
 const props = new Map<string, DomProp>();
+
+/**
+ * Every resolve's number, across every card the tier has ever mounted.
+ *
+ * One counter for the tier, never one per card. Per card it started again at 1 for a new
+ * card under the same tile id — and a redraw of the same scene (in v14, switching the
+ * viewed Level is one) clears the cards while a resolve is in flight. The old resolve
+ * then matched the new card's first and wrote its older HTML over it.
+ */
+let generations = 0;
 
 /**
  * What the card's CONTENT depends on.
@@ -197,7 +207,8 @@ function upsert(entry: DomPropEntry): void {
   if (prop.key === key) return;
   prop.key = key;
 
-  const generation = ++prop.generation;
+  const generation = ++generations;
+  prop.generation = generation;
   const size = { width: entry.doc.width, height: entry.doc.height };
   void resolveCard(entry.pin, size, { tier: entry.tier, baked: false })
     .then((card) => {
