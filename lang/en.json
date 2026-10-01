@@ -244,6 +244,7 @@
   "DP.notice.spotlightElsewhere": "This pin is on a scene you are not viewing, so nothing was pointed at. View its scene to spotlight it.",
   "DP.notice.spotlightFailed": "The pin could not be revealed, so nothing was spotlit.",
   "DP.notice.spotlightNarrow": "Nobody's view was moved: this pin is not for everyone, and a pull reaches every player — it would show the rest of the table where it lies.",
+  "DP.notice.writeFailed": "The change could not be saved. The console (F12) says why.",
   "DP.onboarding.boardLine": "P opens the Pinboard: every pin on the scene, who can see it, one-click reveals.",
   "DP.onboarding.dragLine": "Alt-drag a journal from the sidebar onto the map. A ghost follows the cursor; click to place.",
   "DP.onboarding.findLater": "Both tools are in the Notes scene controls whenever you want them: Pin a document, and the Pinboard.",

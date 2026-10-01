@@ -19,6 +19,7 @@ vi.mock("../src/data/ownership-sync", () => ({
 }));
 
 let tile: any;
+let installed: ReturnType<typeof installWorld>;
 
 beforeEach(() => {
   vi.resetModules();
@@ -33,7 +34,7 @@ beforeEach(() => {
       },
     },
   };
-  installWorld({ isGM: true, tiles: [tile] });
+  installed = installWorld({ isGM: true, tiles: [tile] });
 });
 
 afterEach(() => uninstallWorld());
@@ -216,6 +217,27 @@ describe("which Studios a change re-renders", () => {
     refreshStudios(["Scene.s2.Tile.t1"]);
     expect(studio.renderCount).toBe(before);
     refreshStudios(["Scene.s1.Tile.t1"]);
+    expect(studio.renderCount).toBe(before + 1);
+  });
+});
+
+/**
+ * The Studio's buttons fire a write and move on. One core refused was an "Uncaught (in
+ * promise)" in the console, and the render meant to follow never ran.
+ */
+describe("a change Foundry refuses", () => {
+  it("is said, and the Studio still renders after it", async () => {
+    const studio = await studioOn("content");
+    const before = studio.renderCount;
+    tile.update = async () => {
+      throw new Error("refused");
+    };
+
+    studio.dispatch("resetSize");
+    await settled();
+    await tick();
+
+    expect(installed.notifications).toEqual([{ type: "error", message: "DP.notice.writeFailed" }]);
     expect(studio.renderCount).toBe(before + 1);
   });
 });

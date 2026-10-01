@@ -214,6 +214,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   poster's access starts off, so their card said the document was deleted. It now says the
   document is not available to them; you still see "no longer exists" when it really is
   gone.
+- **A change Pin Studio could not save failed in silence**, and the window went on
+  showing it as made. The Studio's controls and buttons, and the tile configuration's
+  *Pin* switch, now say when Foundry refuses a change, and the Studio redraws either way.
 
 ## [0.3.3] — 2026-09-30
 

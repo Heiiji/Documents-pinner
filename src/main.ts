@@ -111,8 +111,8 @@ Hooks.once("ready", () => {
     propManager().refresh();
   });
   warmFontCache();
-  void reconcile();
-  void onboardingReady();
+  void reconcile().catch((error) => log.warn("the ready sweep of the grants failed", error));
+  void onboardingReady().catch((error) => log.warn("the welcome could not be shown", error));
   // A pin hidden with "Hide while I edit" in a Studio this reload closed without asking.
   void resumeEditHolds().catch((error) => log.warn("could not resume the edit holds", error));
 

@@ -1078,7 +1078,7 @@ export function definePinStudio(): any {
       root.addEventListener("change", (event) => {
         const target = event.target as HTMLInputElement;
         if (!target?.name) return;
-        void this.#apply(target);
+        api.fireAndReport(this.#apply(target));
       });
 
       root.addEventListener("input", (event) => {
@@ -1124,7 +1124,7 @@ export function definePinStudio(): any {
         const change = (event as MouseEvent).shiftKey
           ? api.soloUser(this.doc, userId)
           : api.setUserVisible(this.doc, userId, chip.getAttribute("aria-checked") !== "true");
-        void change?.then(() => this.render());
+        api.fireAndReport(change, () => this.render());
       });
     }
 
@@ -1230,7 +1230,7 @@ function onSetTab(this: any, _event: Event, target: HTMLElement) {
 function onSetEffect(this: any, _event: Event, target: HTMLElement) {
   const id = target.dataset.dpPreset;
   if (!id) return;
-  void api.setEffect(this.doc, id)?.then(() => this.render());
+  api.fireAndReport(api.setEffect(this.doc, id), () => this.render());
 }
 
 function onLocate(this: any) {
@@ -1238,7 +1238,7 @@ function onLocate(this: any) {
 }
 
 function onFitHeight(this: any) {
-  void api.fitToContent(this.doc).then(() => this.render());
+  api.fireAndReport(api.fitToContent(this.doc), () => this.render());
 }
 
 /** The pin rides along, so the Preset Studio can offer to put a new preset on it. */
@@ -1254,7 +1254,7 @@ function onBrowseIcon(this: any) {
   new FilePicker({
     type: "image",
     current: doc?.texture?.src,
-    callback: (path: string) => void api.setPinIcon(doc, path),
+    callback: (path: string) => api.fireAndReport(api.setPinIcon(doc, path)),
   }).render({ force: true });
 }
 
@@ -1320,7 +1320,7 @@ function noteIcons(): { label: string; src: string }[] {
 }
 
 function onResetSize(this: any) {
-  void api.resetSize(this.doc).then(() => this.render());
+  api.fireAndReport(api.resetSize(this.doc), () => this.render());
 }
 
 /**
@@ -1329,7 +1329,11 @@ function onResetSize(this: any) {
  * The only action in the Studio that does. Everything else here is one change to undo;
  * this one is not, and it is sitting next to controls a GM is clicking quickly.
  */
-async function onDeletePin(this: any) {
+function onDeletePin(this: any) {
+  api.fireAndReport(deleteAfterAsking(this));
+}
+
+async function deleteAfterAsking(app: any): Promise<void> {
   const DialogV2 = ns("applications.api.DialogV2");
   const confirmed = DialogV2?.confirm
     ? await DialogV2.confirm({
@@ -1339,8 +1343,8 @@ async function onDeletePin(this: any) {
     : false;
   if (!confirmed) return;
 
-  await api.deletePin(this.doc);
-  this.close();
+  await api.deletePin(app.doc);
+  app.close();
 }
 
 function onHoldForEdit(this: any) {
@@ -1437,9 +1441,7 @@ function onRetargetSource(this: any) {
   const doc = this.doc;
   openPicker({
     onChoose: (source) => {
-      void confirmRetarget(source).then((ok) => {
-        if (ok) void api.retarget(doc, source);
-      });
+      api.fireAndReport(confirmRetarget(source).then((ok) => ok && api.retarget(doc, source)));
     },
   });
 }

@@ -51,6 +51,24 @@ declare const Hooks: any;
 
 const log = logger("api");
 
+/**
+ * Run a change nobody awaits, and say when it fails.
+ *
+ * Pin Studio's controls and buttons, and the config sheet's switch, fire a write and move
+ * on. One that rejected — the pin deleted under the gesture by another GM or by Ctrl+Z, an
+ * update core refused — surfaced only as "Uncaught (in promise)" in the console, and the
+ * render meant to follow it never ran, so the window went on showing the change as made.
+ * The failure is logged and the GM told, and `after` runs either way.
+ */
+export function fireAndReport(task: unknown, after?: () => unknown): void {
+  void Promise.resolve(task)
+    .catch((error: unknown) => {
+      log.warn("a change could not be saved", error);
+      notify({ key: "DP.notice.writeFailed" }, "error");
+    })
+    .finally(() => void after?.());
+}
+
 // ---------------------------------------------------------------------------
 // Sources
 // ---------------------------------------------------------------------------

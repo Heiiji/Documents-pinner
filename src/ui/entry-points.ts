@@ -275,10 +275,12 @@ export function onRenderConfig(app: any, element: HTMLElement): void {
       // Unpinning drops the payload and releases the ownership grant, and the sheet is
       // still holding the pre-toggle data — so this one asks, and puts the switch back
       // when the answer is no.
-      void confirmUnpin().then((ok) => {
-        if (ok) void api.unpin(doc);
-        else input.checked = true;
-      });
+      api.fireAndReport(
+        confirmUnpin().then((ok) => {
+          if (ok) return api.unpin(doc);
+          input.checked = true;
+        })
+      );
       return;
     }
     // Adopting needs a source, and the sheet is the wrong place to choose one — but the
@@ -307,12 +309,14 @@ function noteSection(doc: any): HTMLElement {
     `<p class="dp-config__hint">${t("DP.config.adoptNoteHint")}</p>`;
 
   section.querySelector(".dp-config__adopt")?.addEventListener("click", () => {
-    void confirmAdoptNote().then((ok) => {
-      if (!ok) return;
-      // A note that links a journal already knows its source; one that does not asks.
-      if (api.sourceFromNote(doc)) void api.adoptNote(doc);
-      else openPicker({ adopt: doc });
-    });
+    api.fireAndReport(
+      confirmAdoptNote().then((ok) => {
+        if (!ok) return;
+        // A note that links a journal already knows its source; one that does not asks.
+        if (api.sourceFromNote(doc)) return api.adoptNote(doc);
+        openPicker({ adopt: doc });
+      })
+    );
   });
   return section;
 }

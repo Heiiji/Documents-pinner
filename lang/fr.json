@@ -244,6 +244,7 @@
   "DP.notice.spotlightElsewhere": "Cette épingle est sur une scène que vous ne regardez pas : rien n'a été désigné. Affichez sa scène pour la mettre en lumière.",
   "DP.notice.spotlightFailed": "L'épingle n'a pas pu être révélée : rien n'a été mis en lumière.",
   "DP.notice.spotlightNarrow": "Aucune vue n'a bougé : cette épingle n'est pas pour tout le monde, et un recentrage atteint chaque joueur — il montrerait au reste de la table où elle se trouve.",
+  "DP.notice.writeFailed": "La modification n'a pas pu être enregistrée. La console (F12) en donne la raison.",
   "DP.onboarding.boardLine": "P ouvre le tableau de bord : toutes les épingles de la scène, qui les voit, révélation en un clic.",
   "DP.onboarding.dragLine": "Alt-glissez un journal depuis la barre latérale sur la carte. Un fantôme suit le curseur ; cliquez pour poser.",
   "DP.onboarding.findLater": "Les deux outils restent dans les contrôles de scène Notes, quand vous le voudrez : Épingler un document, et le tableau des épingles.",

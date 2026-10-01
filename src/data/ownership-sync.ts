@@ -315,7 +315,14 @@ export async function onSourceOwnershipEdited(
     const { ledger, notices } = planRebase(stored, ownershipChange(changed.ownership, stored));
     const data: Record<string, unknown> = {};
     writeLedger(data, doc, ledger);
-    if (Object.keys(data).length) await doc.update(data, internal());
+    // Caught here, as `applyPlan` catches its own: the update hook that calls this cannot
+    // await it, and a refusal surfaced only as an unhandled rejection.
+    try {
+      if (Object.keys(data).length) await doc.update(data, internal());
+    } catch (error) {
+      log.warn(`the ledger on ${doc?.uuid} could not follow a permission edit`, error);
+      return;
+    }
     for (const notice of notices) notify(notice, "warn");
   });
 }
