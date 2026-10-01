@@ -555,6 +555,26 @@ describe("the canvas tier's alpha, while it is moving", () => {
   });
 });
 
+describe("the LOD pass", () => {
+  it("asks whether this user may read a prop only for the one that is focused", async () => {
+    const second = propTile("t2");
+    tiles.push(second);
+    (globalThis as any).canvas.tiles.placeables.push(second.object);
+    manager.refresh();
+    await settle();
+
+    const api = await import("../src/api");
+    const canUserOpen = vi.spyOn(api, "canUserOpen");
+    manager.setFocused("t1");
+    await settle();
+
+    const asked = canUserOpen.mock.calls.map(([doc]) => doc.id);
+    expect(asked).toContain("t1");
+    expect(asked).not.toContain("t2");
+    canUserOpen.mockRestore();
+  });
+});
+
 /**
  * The coarse rung bakes its effect at half strength and always asks for 512 px; a full rung
  * between 320 and 512 px across at resolution 1 snaps to 512 as well. With nothing in the

@@ -643,13 +643,20 @@ class Manager {
         width: tile.document.width,
         height: tile.document.height,
       });
+      // Asked once: `isVisible` is the audience test, with a line-of-sight test behind it
+      // for a `discovered` pin, and it was asked twice per prop per pass.
+      const visible = tile.isVisible === true;
+      const focused = this.#focusedId === record.id;
       let tier = lodFor({
         apparentWidth: apparentWidth(matrix, tile.document.width),
         apparentTypeSize: metrics.fontPx * scaleOf(matrix),
         onScreen: rectsIntersect(bounds, viewport),
-        visible: tile.isVisible === true,
-        focused: this.#focusedId === record.id,
-        readable: api.canUserOpen(tile.document, g()?.user?.id ?? ""),
+        visible,
+        focused,
+        // Only the focused prop can be on the reader's rung, so only it is asked whether
+        // this user may read it — a source lookup and a permission test that ran for every
+        // prop on the scene on every pass to answer a question nobody else was asking.
+        readable: focused && api.canUserOpen(tile.document, g()?.user?.id ?? ""),
       });
 
       // The perf guard demotes uniformly: a scene where half the props are sharp and
@@ -658,7 +665,6 @@ class Manager {
 
       const dom = drawsAsDomUnder(policy, pin);
 
-      const visible = tile.isVisible === true;
       const revealing = visible && !record.wasVisible;
       record.wasVisible = visible;
       if (revealing) this.#onReveal(record, pin, dom, sounds);
@@ -675,11 +681,15 @@ class Manager {
           doc: tile.document,
           pin,
           tier,
-          focused: this.#focusedId === record.id,
+          focused,
           alpha: this.#alphaFor(tile, pin, tokens),
           pdf: this.#isPdf(pin),
           revealing,
-          reveal: revealOf(pin),
+          // Looked up when the card arrives revealing, which is the one time it is read:
+          // a preset lookup for every card on every pass, for a field read once a reveal.
+          get reveal() {
+            return revealOf(pin);
+          },
           controlled: tile.controlled === true,
         });
         continue;
@@ -930,9 +940,7 @@ class Manager {
 
     const provisional = this.#keyFor(tile, pin, tier, longEdge, record.contentHash);
     if (this.#cache.has(provisional)) {
-      this.#bind(record, tile, this.#cache.get(provisional), provisional);
-      this.applyAlpha();
-      this.#arrive(record, tile, false);
+      this.#land(record, tile, provisional, this.#cache.get(provisional));
       return;
     }
 
@@ -947,9 +955,7 @@ class Manager {
       const key = this.#keyFor(tile, pin, tier, longEdge, `pdf:${pdfPageOf(pin)}`);
       const cachedPdf = this.#cache.get(key);
       if (cachedPdf) {
-        this.#bind(record, tile, cachedPdf, key);
-        this.applyAlpha();
-        this.#arrive(record, tile, false);
+        this.#land(record, tile, key, cachedPdf);
         return;
       }
 
@@ -1004,11 +1010,7 @@ class Manager {
       }
 
       record.contentHash = `pdf:${pdfPageOf(pin)}`;
-      this.#cache.set(key, result.texture, result.bytes);
-      this.#bind(record, tile, result.texture, key);
-      this.applyAlpha();
-      this.#arrive(record, tile, true);
-      this.#trim();
+      this.#land(record, tile, key, result.texture, result);
       return;
     }
 
@@ -1022,9 +1024,7 @@ class Manager {
 
     const cached = this.#cache.get(key);
     if (cached) {
-      this.#bind(record, tile, cached, key);
-      this.applyAlpha();
-      this.#arrive(record, tile, false);
+      this.#land(record, tile, key, cached);
       return;
     }
     if (this.#failedKeys.has(key)) return;
@@ -1059,14 +1059,26 @@ class Manager {
         `tier ${tier}); cache now ${this.#cache.size} textures, ` +
         `${Math.round(this.#cache.bytes / 1024 / 1024)} MB`
     );
-    this.#cache.set(key, result.texture, result.bytes);
-    this.#bind(record, tile, result.texture, key);
-    // The mesh was held invisible while there was only a placeholder on it; now that the
-    // prop's own texture is bound it has something worth showing. `#recomputeLod` runs
-    // this before the queue drains, so the bind has to say so itself.
+    this.#land(record, tile, key, result.texture, result);
+  }
+
+  /**
+   * Put a texture on a prop at the end of a generate, and let it arrive.
+   *
+   * Five exits of `#generate` did this by hand. The order is the point: the bind; then the
+   * alpha, because the mesh was held at zero while it had only the placeholder and
+   * `#recomputeLod` applied the alpha before this queue drained, so the bind has to say
+   * so itself; then the arrival, which animates to the alpha just written. A texture this
+   * generate DREW — `drawn`, with its size — is new to the cache and to the screen: it is
+   * stored first, plays the draw-in rather than appearing, and may push the cache over
+   * its budget. One found in the cache is simply there.
+   */
+  #land(record: PropRecord, tile: any, key: string, texture: any, drawn?: { bytes: number }): void {
+    if (drawn) this.#cache.set(key, texture, drawn.bytes);
+    this.#bind(record, tile, texture, key);
     this.applyAlpha();
-    this.#arrive(record, tile, true);
-    this.#trim();
+    this.#arrive(record, tile, !!drawn);
+    if (drawn) this.#trim();
   }
 
   /**
