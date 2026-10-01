@@ -185,8 +185,10 @@ Hooks.on("chatMessage", onChatMessage);
 // and registering only the Tile one made adopting an existing Note impossible.
 Hooks.on("renderTileConfig", onRenderConfig);
 Hooks.on("renderNoteConfig", onRenderConfig);
+// The application rides along: a compendium window fires the same hooks as the sidebar,
+// and only its collection says that the row it was opened on is in a pack.
 for (const hook of CONTEXT_HOOKS) {
-  Hooks.on(hook, (_app: any, options: any[]) => addContextOption(options));
+  Hooks.on(hook, (app: any, options: any[]) => addContextOption(options, app));
 }
 
 Hooks.on(`${MODULE_ID}.openPicker`, () => openPicker());

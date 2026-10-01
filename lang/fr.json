@@ -54,7 +54,7 @@
   "DP.card.missing": "Le document visé par cette épingle n'existe plus.",
   "DP.card.packLocked": "Ce document se trouve dans un compendium que vous ne pouvez pas ouvrir.",
   "DP.card.pdf": "Cette page est un PDF ; ouvrez-la pour la lire.",
-  "DP.chat.noMatch": "Aucun journal ni page ne correspond à « {query} ».",
+  "DP.chat.noMatch": "Aucun journal, page ni journal de compendium ne correspond à « {query} ».",
   "DP.cheat.add": "Ajouter à la sélection",
   "DP.cheat.audience": "Visible des joueurs ⇄ masquée",
   "DP.cheat.buttons": "Passer d'un bouton à l'autre",

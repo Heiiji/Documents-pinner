@@ -28,7 +28,7 @@ vi.mock("../src/apps/PlacementGhost", () => ({
   disarm: vi.fn(),
 }));
 
-import { arm } from "../src/apps/PlacementGhost";
+import { arm, armAt } from "../src/apps/PlacementGhost";
 
 const PACK = "world.handouts";
 const ENTRY = `Compendium.${PACK}.JournalEntry.letters`;
@@ -83,6 +83,7 @@ const rows = (app: any) =>
 beforeEach(() => {
   vi.resetModules();
   vi.mocked(arm).mockClear();
+  vi.mocked(armAt).mockClear();
   document.body.innerHTML = "";
 });
 afterEach(() => uninstallWorld());
@@ -186,5 +187,54 @@ describe("Import & pin", () => {
 
     expect(arm).not.toHaveBeenCalled();
     expect(world.notifications).toEqual([{ type: "warn", message: "DP.notice.importFailed" }]);
+  });
+});
+
+describe("/pin and the compendium window's menu", () => {
+  it.each([
+    ["arms a match in a pack every player reads", undefined, "ledger"],
+    ["opens the picker on the search when only a locked pack matches", TRUSTED_ONLY, null],
+  ])("/pin %s", async (_what, ownership, armed) => {
+    install([handouts({ ownership })]);
+    const { onChatMessage } = await import("../src/ui/entry-points");
+    const { openPicker } = await import("../src/apps/DocumentPicker");
+
+    expect(onChatMessage(null, "/pin ledger")).toBe(false);
+    await flush();
+
+    expect(world.notifications).toEqual([]);
+    if (armed) {
+      expect(vi.mocked(armAt).mock.calls[0][0]).toMatchObject({
+        uuid: `Compendium.${PACK}.JournalEntry.${armed}`,
+      });
+    } else {
+      expect(armAt).not.toHaveBeenCalled();
+      // The same reused picker, opened on the query, its row offering the import.
+      const app = openPicker();
+      await flush();
+      expect(app.search).toBe("ledger");
+      expect(rows(app)).toEqual([["Ledger", "Handouts", true]]);
+    }
+  });
+
+  it.each([
+    ["a compendium window", () => world.game.packs.get(PACK), "letters", ENTRY],
+    ["the journal sidebar", () => world.game.journal, "mayor", "JournalEntry.mayor"],
+  ])("Pin to scene in %s arms the row's document", async (_where, collection, id, uuid) => {
+    install([handouts()]);
+    const registered = new Map<string, ((...args: any[]) => void)[]>();
+    (globalThis as any).Hooks.on = (name: string, fn: (...args: any[]) => void) =>
+      registered.set(name, [...(registered.get(name) ?? []), fn]);
+    await import("../src/main");
+
+    const options: any[] = [];
+    for (const handler of registered.get("getJournalEntryContextOptions") ?? []) {
+      handler({ collection: collection() }, options);
+    }
+    const row = document.createElement("li");
+    row.dataset.entryId = id;
+    options[0].onClick(new Event("click"), row);
+
+    expect(vi.mocked(armAt).mock.calls.map((call) => call[0].uuid)).toEqual([uuid]);
   });
 });
