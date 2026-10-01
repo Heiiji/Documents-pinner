@@ -1230,7 +1230,11 @@ interface DomPolicy {
 
 function domPolicy(): DomPolicy {
   const all = settings.get("rendering") === "dom";
-  return { all, html: all || rasterisationAvailable() === false };
+  // `!== true`, not `=== false`: an unanswered probe (`null`) is DOM for HTML. Core awaits
+  // the canvas before `ready`, so the first LOD pass always runs before the probe has
+  // answered — and read as "canvas is fine", it queued every text prop for a rasterisation
+  // the probe was about to forbid, and drew none of them until it did (DESIGN A29).
+  return { all, html: all || rasterisationAvailable() !== true };
 }
 
 function drawsAsDomUnder(policy: DomPolicy, pin: DpPinFlags): boolean {

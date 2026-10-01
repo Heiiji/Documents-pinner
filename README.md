@@ -158,9 +158,10 @@ Pin visibility is enforced **at parity with core Foundry, not above it**. Core e
 `Tile#hidden` on the client too; a determined player with a browser console can detect a
 hidden pin exactly as they can detect any hidden tile today.
 
-The one thing genuinely *removed* rather than hidden is a page's `secret` sections. Each
-client renders its own copy and secrets are stripped for anyone who is not an owner, so
-they never reach a player's browser.
+The one thing genuinely *removed* rather than hidden is a page's unrevealed `secret`
+sections. Each client renders its own copy and they are stripped for anyone who is not an
+owner, so they never reach a player's browser; a section you reveal reaches them, as it
+does in the journal itself.
 
 If you need real secrecy, keep the document out of the world until you want it seen.
 
@@ -424,9 +425,10 @@ au-dessus**. Foundry applique `Tile#hidden` côté client également : un joueur
 une console peut détecter une épingle masquée exactement comme n'importe quelle tuile
 masquée aujourd'hui.
 
-La seule chose réellement *retirée* plutôt que masquée, ce sont les sections `secret` d'une
-page. Chaque client fabrique sa propre copie et les secrets sont retirés pour quiconque
-n'est pas propriétaire : ils n'atteignent jamais le navigateur du joueur.
+La seule chose réellement *retirée* plutôt que masquée, ce sont les sections `secret` non
+révélées d'une page. Chaque client fabrique sa propre copie et elles sont retirées pour
+quiconque n'est pas propriétaire : elles n'atteignent jamais le navigateur du joueur ; une
+section que vous révélez lui parvient, comme dans le journal lui-même.
 
 Si vous avez besoin d'un vrai secret, gardez le document hors du monde jusqu'au moment
 voulu.

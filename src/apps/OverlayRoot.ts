@@ -10,14 +10,20 @@
  *    stage transform is the same for every element in scene space, so one composited
  *    write moves all of them and the browser never re-lays-out a card that only moved.
  *
- * 2. **Sync is guarded by a dirty check on the six matrix components, not by the
- *    `canvasPan` hook.** That hook fires every tick for the whole duration of an
- *    animated pan; six float comparisons per frame cost nothing and skip the write
- *    entirely whenever the view is still, which is most of the time.
+ * 2. **Sync is driven by core's `canvasPan` hook and dirty-checked on the six matrix
+ *    components.** That hook fires every tick for the whole duration of an animated pan,
+ *    from inside the PIXI ticker's own frame; reading the stage matrix and comparing six
+ *    floats costs nothing and skips the write entirely whenever the view is still. (The
+ *    ticker's dirty check in `PropManager` is a different one: it decides when the LOD
+ *    pass runs, not where the overlay is.)
  *
  * 3. **DOM access is write-only inside a frame.** Nothing here reads
- *    `getBoundingClientRect`, and every style change is batched into one rAF, so the
- *    module can never force a synchronous layout in the middle of a canvas frame.
+ *    `getBoundingClientRect`, so the module can never force a synchronous layout in the
+ *    middle of a canvas frame. Style changes are batched into one rAF — except the two
+ *    that describe THIS frame's map: the root's transform, and a card following core's
+ *    drag handles (`DomPropTier.followDomProp`). Both are written where they are decided,
+ *    because a write queued from inside the ticker's frame lands on the next one, and the
+ *    cards trailed the map by a frame through every pan.
  *
  * The mount point is DERIVED, never hardcoded: `#board`'s parent turned out to carry
  * no id in a real v14 world, so the overlay attaches as its sibling by reference. It
@@ -123,6 +129,12 @@ export function destroyOverlay(): void {
  * Safe to call every tick: it returns immediately unless the transform actually
  * changed. Returns whether a write was made, which the callers use to decide whether
  * anything downstream needs recomputing.
+ *
+ * Written NOW, not queued (rule 3's first exception). During an animated pan `canvasPan`
+ * fires from inside the PIXI ticker, which is already a `requestAnimationFrame` callback:
+ * a write queued from there waits for the NEXT frame, so every card was drawn one frame
+ * behind the map for the whole pan. The write is one style property and reads no layout,
+ * so it cannot force one.
  */
 export function syncTransform(force = false): boolean {
   const element = overlay();
@@ -132,9 +144,7 @@ export function syncTransform(force = false): boolean {
   if (!force && sameMat(matrix, lastMatrix)) return false;
 
   lastMatrix = matrix;
-  write(element, () => {
-    element.style.transform = toCssMatrix(matrix);
-  });
+  element.style.transform = toCssMatrix(matrix);
   return true;
 }
 

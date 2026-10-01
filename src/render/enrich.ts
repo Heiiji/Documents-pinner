@@ -11,14 +11,18 @@
  *
  * 2. **`secrets` is computed from the VIEWING user, never from the GM.** It is
  *    `page.isOwner` on this client — never `game.user.isGM`, and never a value that
- *    travelled from somewhere else. A GM's secret sections are stripped before the
- *    player's HTML exists, which is the one thing here that is genuinely *removed*
- *    rather than hidden.
+ *    travelled from somewhere else. A GM's unrevealed secret sections are stripped
+ *    before the player's HTML exists, which is the one thing here that is genuinely
+ *    *removed* rather than hidden; a section the GM revealed reaches the player, as it
+ *    does on the journal's own sheet.
  *
  * 3. **The result is scrubbed anyway.** Enriched HTML goes into markup we build
  *    ourselves rather than into a core sheet, so it is walked and stripped of scripts,
- *    frames, event handlers and executable URLs. Foundry exposes no public sanitiser,
- *    and a regex over HTML is a well-known way to be confidently wrong, so the scrub
+ *    frames, event handlers and executable URLs. Foundry's own `foundry.utils.cleanHTML`
+ *    (foundry.mjs 14.368 ~39332) is not that scrub: it is an allow-list made for chat
+ *    and tooltips, it keeps an `<iframe>` (sandboxed, but with `allow-scripts`), knows
+ *    nothing of secrets, and serialises as HTML, which the rasteriser's XML parser cannot
+ *    read. A regex over HTML is a well-known way to be confidently wrong, so the scrub
  *    parses a real tree and walks it.
  *
  * The secret post-filter in step 2 is belt-and-braces on top of `enrichHTML` already
@@ -200,14 +204,21 @@ export function serialiseXml(body: ParentNode & { firstChild: ChildNode | null }
 }
 
 /**
- * Remove GM secret sections. Applied whenever the viewer is not an owner.
+ * Remove the GM's UNREVEALED secret sections. Applied whenever the viewer is not an owner.
+ *
+ * Unrevealed only, as core's own enrichment does (`section.secret:not(.revealed)`,
+ * foundry.mjs 14.368 ~35316): the journal's Reveal button writes `class="secret revealed"`,
+ * and that is the GM saying "the players may read this now". Stripping every `.secret`
+ * took the revealed paragraph off the players' cards while their own journal sheet showed
+ * it — the card was the one place the GM's reveal did not reach.
  *
  * Descends into template content for the same reason `scrub` does: `querySelectorAll`
  * does not cross a DocumentFragment boundary, and this is the one filter in the module
  * where missing a node means a GM's notes reach a player.
  */
 export function stripSecrets(root: ParentNode): void {
-  for (const secret of [...root.querySelectorAll("section.secret, .secret")]) secret.remove();
+  const unrevealed = "section.secret:not(.revealed), .secret:not(.revealed)";
+  for (const secret of [...root.querySelectorAll(unrevealed)]) secret.remove();
   for (const element of [...root.querySelectorAll("template")]) {
     const content = (element as HTMLTemplateElement).content;
     if (content) stripSecrets(content);
@@ -218,6 +229,11 @@ export interface EnrichedContent {
   html: string;
   /** Whether this client's user owns the source, which is what gates secrets. */
   isOwner: boolean;
+  /**
+   * Enrichment threw and this is the raw text, scrubbed. Safe to show, wrong to keep: the
+   * card cache must not hold the unenriched words of a card a retry might enrich.
+   */
+  fellBack: boolean;
 }
 
 /**
@@ -231,7 +247,7 @@ export async function enrichFor(source: any, text: string): Promise<EnrichedCont
   const isOwner = source?.isOwner === true;
   const TextEditor = ns("applications.ux.TextEditor.implementation");
 
-  const html = await enrichOrRaw(TextEditor, text ?? "", {
+  const { html, fellBack } = await enrichOrRaw(TextEditor, text ?? "", {
     // NEVER game.user.isGM, and never a value from another client. See rule 2.
     secrets: isOwner,
     documents: true,
@@ -242,7 +258,7 @@ export async function enrichFor(source: any, text: string): Promise<EnrichedCont
     rollData: rollDataOf(source),
   });
 
-  return { html: sanitise(html, isOwner), isOwner };
+  return { html: sanitise(html, isOwner), isOwner, fellBack };
 }
 
 /**
@@ -267,19 +283,28 @@ function rollDataOf(source: any): Record<string, unknown> {
 /**
  * Enrich, or hand back the text as it is when enrichment throws.
  *
- * Core does not catch an enricher that throws — a module's custom `@Tag` pattern, an
- * embed of a document that fails to render — so one broken enricher rejected the whole
- * card: the prop on the map stayed blank and the reader's click did nothing at all. The
- * raw text is a safe fallback because it is never shown as it is: it goes through the
+ * Core catches an enricher's own throw, one match at a time (`_replaceTextContent`,
+ * foundry.mjs 14.368 ~35597), but not what runs around the enrichers: priming a
+ * compendium's documents is a request that can fail, and `_finalizeEnrichedHTML` and a
+ * system's own `TextEditor` subclass run outside that catch. Any of those rejected the
+ * whole card: the prop on the map stayed blank and the reader's click did nothing at all.
+ * The raw text is a safe fallback because it is never shown as it is: it goes through the
  * SAME `sanitise` as enriched output, which scrubs it and strips the secrets.
+ *
+ * No `TextEditor` at all is not a fallback — there is nothing to retry — so only a throw
+ * reports one.
  */
-async function enrichOrRaw(TextEditor: any, text: string, options: any): Promise<string> {
-  if (!TextEditor?.enrichHTML) return text;
+async function enrichOrRaw(
+  TextEditor: any,
+  text: string,
+  options: any
+): Promise<{ html: string; fellBack: boolean }> {
+  if (!TextEditor?.enrichHTML) return { html: text, fellBack: false };
   try {
-    return await TextEditor.enrichHTML(text, options);
+    return { html: await TextEditor.enrichHTML(text, options), fellBack: false };
   } catch (error) {
     log.warn(`enrichment failed; showing the text unenriched`, error);
-    return text;
+    return { html: text, fellBack: true };
   }
 }
 

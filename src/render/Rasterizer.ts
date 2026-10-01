@@ -7,13 +7,22 @@
  * darkened by scene darkness, lit by torches, masked by fog and occluded by roofs, all
  * for free, because it is genuinely part of the scene rather than floating over it.
  *
+ * **Dormant, on purpose.** Nothing reaches this pipeline unless `probeRasterisation`
+ * answers `true`, and it answers `false` on every Chromium it has been measured on — see
+ * the first failure mode below and DESIGN A29. It is kept rather than removed because
+ * the route back is known and short.
+ *
  * The pipeline has three silent failure modes, and each is handled explicitly because
  * every one of them looks identical from the outside — a prop that never appears:
  *
- * 1. **WebKit taints the canvas** for any SVG containing a `foreignObject`. Both the
- *    pixel readback and the WebGL upload then throw. Probed once at `ready` and, when
- *    it fails, the whole client falls back to DOM rendering rather than showing
- *    nothing.
+ * 1. **A `foreignObject` SVG decoded from a `blob:` URL taints the canvas**, and
+ *    `decodeSvg` decodes from one. Both the pixel readback and the WebGL upload then
+ *    throw `SecurityError`. Re-verified 2026-10-01 in Chromium 152 and Chrome 154, on a
+ *    real Foundry origin: the SAME SVG decoded from a `data:` URL does not taint — the
+ *    readback and the upload both succeed, text, `@font-face` data URIs and nested data
+ *    images included. So the taint is the decode's, not `foreignObject`'s. Probed once at
+ *    `ready`; when it fails, the whole client draws HTML props as DOM cards rather than
+ *    showing nothing.
  * 2. **Chrome renders nothing without explicit width/height** on both the `<svg>` and
  *    the `<foreignObject>` — see `CardTemplate.svgDocument`.
  * 3. **A layout that produced no pixels** decodes and draws perfectly and is simply
@@ -61,17 +70,20 @@ let consecutiveFailures = 0;
  * Draws a tiny card and counts painted pixels. Cached, because the answer is a property
  * of the browser and cannot change within a session.
  *
- * **This currently fails in Chromium too, and that is not a bug in the probe.** An SVG
- * image containing a `foreignObject` taints the canvas it is drawn into — in Chromium as
- * well as in WebKit — so the readback throws `SecurityError`, and so does the WebGL
- * upload the real pipeline depends on (`texImage2D: Tainted canvases may not be loaded`).
- * Verified in a live v14 world on Chromium 144: a plain SVG uploads fine, the same SVG
- * with a `foreignObject` does not, and `createImageBitmap` cannot decode an SVG blob at
- * all. There is no workaround along this path.
- *
- * A2 assumed this was a WebKit quirk. It is not: it is what every current browser does,
- * and it means the canvas tier described in DESIGN §6 cannot work as designed anywhere.
- * The DOM tier is therefore the tier that actually runs. See amendment A10.
+ * **This answers `false` wherever it has been measured, and that is not a bug in the
+ * probe.** It decodes through `decodeSvg`, from a `blob:` URL, and a `foreignObject` SVG
+ * decoded that way taints the canvas it is drawn into — so the readback throws
+ * `SecurityError`, and so does the WebGL upload the real pipeline depends on
+ * (`texImage2D: Tainted canvases may not be loaded`). A10 measured that on Chromium 144
+ * and concluded no browser allows it; A29 re-measured it on 2026-10-01 in Chromium 152
+ * and Chrome 154, on a real Foundry origin, with a control A10 lacked: the same SVG
+ * decoded from a `data:` URL does NOT taint, and both the readback and the upload
+ * succeed. So the canvas tier for HTML is reachable, by changing the decode — which is
+ * the 0.5 follow-up, with a live verification on Electron and Firefox (neither was
+ * measured) first. Until then
+ * the probe, and therefore the pipeline, stays exactly as it is: dormant, and the DOM
+ * tier is the tier that runs. Nothing should do work for this path before the probe
+ * answers `true` (`PropManager`'s DOM policy, `main.ts`'s font warm-up).
  */
 export async function probeRasterisation(): Promise<boolean> {
   if (canRasterise !== null) return canRasterise;

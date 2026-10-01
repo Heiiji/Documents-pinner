@@ -7,7 +7,7 @@
  * here imports `main.ts` with a recording `Hooks.on` and calls the handler it recorded.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { FLAGS, MODULE_ID } from "../src/const";
+import { FLAGS, INTERNAL_OPTION, MODULE_ID } from "../src/const";
 import { defaultPin } from "../src/data/pin-schema";
 import {
   DATA_FIELDS,
@@ -34,8 +34,19 @@ vi.mock("../src/apps/PlacementGhost", () => ({
   disarm: vi.fn(),
 }));
 
+// The card cache's own behaviour is `card-cache.test.ts`'s; here, only who reaches it.
+vi.mock("../src/render/card-cache", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../src/render/card-cache")>();
+  return {
+    ...actual,
+    forgetSource: vi.fn(actual.forgetSource),
+    clearResolved: vi.fn(actual.clearResolved),
+  };
+});
+
 import { armAt } from "../src/apps/PlacementGhost";
 import { onSourceOwnershipEdited } from "../src/data/ownership-sync";
+import { clearResolved, forgetSource } from "../src/render/card-cache";
 
 let world: ReturnType<typeof installWorld>;
 const registered = new Map<string, ((...args: any[]) => unknown)[]>();
@@ -60,6 +71,8 @@ beforeEach(() => {
   vi.resetModules();
   vi.mocked(armAt).mockClear();
   vi.mocked(onSourceOwnershipEdited).mockClear();
+  vi.mocked(forgetSource).mockClear();
+  vi.mocked(clearResolved).mockClear();
   document.body.innerHTML = '<div id="board"></div>';
 });
 afterEach(() => uninstallWorld());
@@ -197,6 +210,111 @@ describe("an edit to an actor with a poster on the map", () => {
       renamed: redraw.mock.calls.length > 0,
       rebased: vi.mocked(onSourceOwnershipEdited).mock.calls.length > 0,
     }).toEqual(expected);
+  });
+});
+
+/**
+ * The card cache keeps a document's enriched body and its height (DESIGN A29), and the
+ * source hooks forget them BEFORE deciding whether anything redraws: that filter answers
+ * "redraw a card on this scene now?", and a body kept for a pin on another scene, or an
+ * actor whose hit points an inline roll reads, is stale either way.
+ */
+describe("what the card cache forgets", () => {
+  it("forgets a journal edited on another scene, which redraws nothing here", async () => {
+    const ledger = fakeJournal({ id: "ledger", name: "Ledger" });
+    await boot({ journals: [ledger] });
+    const { propManager } = await import("../src/canvas/PropManager");
+    const invalidate = vi.spyOn(propManager(), "invalidate");
+
+    fire("updateJournalEntry", ledger, { name: "Ledger (old)" }, {}, "gm");
+
+    expect(vi.mocked(forgetSource).mock.calls).toEqual([["JournalEntry.ledger"]]);
+    expect(invalidate).not.toHaveBeenCalled();
+  });
+
+  it("forgets an actor whose hit points changed, without redrawing its poster", async () => {
+    const tile = fakeTile({ id: "t1", uuid: "Scene.s1.Tile.t1" });
+    tile.flags = {
+      [MODULE_ID]: {
+        [FLAGS.PIN]: {
+          ...defaultPin(),
+          source: { ...defaultPin().source, uuid: "Actor.jack", field: null },
+        },
+      },
+    };
+    const jack = fakeActor({
+      id: "jack",
+      name: "Black Jack",
+      type: "npc",
+      system: { attributes: { hp: { value: 12 } } },
+    });
+    await boot({ tiles: [tile], actors: [jack] });
+    const { propManager } = await import("../src/canvas/PropManager");
+    const invalidate = vi.spyOn(propManager(), "invalidate");
+
+    fire("updateActor", jack, { system: { attributes: { hp: { value: 3 } } } }, {}, "gm");
+
+    expect(vi.mocked(forgetSource).mock.calls).toEqual([["Actor.jack"]]);
+    expect(invalidate).not.toHaveBeenCalled();
+  });
+
+  it("forgets before it redraws, so the redraw is not served the old words", async () => {
+    const journal = fakeJournal({ id: "ledger", name: "Ledger" });
+    const tile = fakeTile({ id: "t1", uuid: "Scene.s1.Tile.t1" });
+    tile.flags = {
+      [MODULE_ID]: {
+        [FLAGS.PIN]: {
+          ...defaultPin(),
+          mode: "prop",
+          source: { ...defaultPin().source, uuid: "JournalEntry.ledger" },
+        },
+      },
+    };
+    await boot({ tiles: [tile], journals: [journal] });
+    const { propManager } = await import("../src/canvas/PropManager");
+    const order: string[] = [];
+    vi.mocked(forgetSource).mockImplementationOnce(() => void order.push("forget"));
+    vi.spyOn(propManager(), "invalidate").mockImplementation(() => void order.push("invalidate"));
+
+    fire("updateJournalEntry", journal, { name: "Debts" }, {}, "gm");
+
+    expect(order).toEqual(["forget", "invalidate"]);
+  });
+
+  it("forgets nothing for the module's own write", async () => {
+    const ledger = fakeJournal({ id: "ledger", name: "Ledger" });
+    await boot({ journals: [ledger] });
+
+    fire(
+      "updateJournalEntry",
+      ledger,
+      { ownership: { ali: 1 } },
+      { [INTERNAL_OPTION]: true },
+      "gm"
+    );
+
+    expect(forgetSource).not.toHaveBeenCalled();
+  });
+
+  it("forgets a deleted page, whatever scene shows it", async () => {
+    const ledger = fakeJournal({
+      id: "ledger",
+      name: "Ledger",
+      pages: [{ id: "debts", name: "Debts" }],
+    });
+    await boot({ journals: [ledger] });
+
+    fire("deleteJournalEntryPage", ledger.pages.get("debts"), {}, "gm");
+
+    expect(vi.mocked(forgetSource).mock.calls).toEqual([
+      ["JournalEntry.ledger.JournalEntryPage.debts"],
+    ]);
+  });
+
+  it("forgets everything when the canvas goes", async () => {
+    await boot();
+    fire("canvasTearDown");
+    expect(clearResolved).toHaveBeenCalledTimes(1);
   });
 });
 

@@ -31,9 +31,11 @@ import {
 } from "./canvas/PinnedTile";
 import { registerPropHitLayer, syncHitLayer } from "./canvas/PropHitLayer";
 import { tileChangeHandler } from "./canvas/tile-hooks";
+import { userConnectedHandler, userUpdateHandler } from "./canvas/user-hooks";
 import { propManager, teardownProps } from "./canvas/PropManager";
 import { probeRasterisation } from "./render/Rasterizer";
 import { clearPdfCache } from "./render/PdfPage";
+import { clearResolved, forgetSource } from "./render/card-cache";
 import { warmFontCache } from "./render/AssetInliner";
 import { definePinHUD, refreshPinHUD } from "./apps/PinHUD";
 import { openStudio, refreshStudios, resumeEditHolds } from "./apps/PinStudio";
@@ -84,15 +86,19 @@ Hooks.once("ready", () => {
       `ready | props render on the ${canRasterise ? "canvas" : "DOM"} path` +
         `${settings.get("rendering") === "dom" ? " (chosen in settings)" : ""}`
     );
-    // AND recompute. The probe is asynchronous, so `canvasReady` usually runs its first
-    // LOD pass while the answer is still `null` — which reads as "canvas is fine", takes
-    // the canvas path, holds every prop's mesh invisible waiting for a texture that will
-    // never arrive, and mounts no DOM card either. The props were then invisible until
-    // something unrelated happened to schedule another pass. Measured on a fresh load:
-    // zero cards; one forced recompute and all three appeared, correctly placed.
+    // AND recompute. Core awaits the canvas before `ready`, so `canvasReady` always runs
+    // its first LOD pass before this answer exists. That pass draws text props as DOM
+    // cards while the answer is `null` (`PropManager`'s policy), and this one moves them
+    // to the canvas if the answer is `true`. (While the policy read `null` as "canvas",
+    // the first pass held every text prop on an invisible mesh, and a fresh load showed
+    // no card at all until this recompute.)
     propManager().refresh();
+    // The rasteriser's fonts, encoded as data URIs, are for the canvas path only — and
+    // the probe decodes from a `blob:` URL, which taints, so it answers `false` wherever
+    // it has been measured (DESIGN A29). Encoding every face for a path that will not run
+    // cost each client its idle time at load for nothing.
+    if (canRasterise) warmFontCache();
   });
-  warmFontCache();
   void reconcile().catch((error) => log.warn("the ready sweep of the grants failed", error));
   void onboardingReady().catch((error) => log.warn("the welcome could not be shown", error));
   // A pin hidden with "Hide while I edit" in a Studio this reload closed without asking.
@@ -129,11 +135,15 @@ Hooks.on("canvasTearDown", () => {
   teardownProps();
   destroyOverlay();
   clearPdfCache();
+  // What was kept of the cards goes with the scene, as the textures and the pages do.
+  clearResolved();
 });
 
 Hooks.on("canvasPan", () => {
-  // Cheap and idempotent: both of these dirty-check before writing anything, so this
-  // hook firing every tick during an animated pan costs six float comparisons.
+  // Cheap and idempotent, and both dirty-checked: the overlay compares the stage's six
+  // matrix components and writes only when they moved — at once, inside the ticker's
+  // frame — and the reader writes only when its scene-space rectangle changed, which a
+  // pan never does. This hook fires every tick of an animated pan.
   syncTransform();
   repositionReader();
 });
@@ -244,6 +254,7 @@ for (const hook of ["updateToken", "createToken", "deleteToken"]) {
 // Every type of document a pin can show: an edit to one may rename a pin, change who holds
 // it, or change what its card says — and for an actor, mostly does none of these.
 const onSourceUpdated = sourceUpdateHandler({
+  forget: forgetSource,
   rebase: onSourceOwnershipEdited,
   rename: onSourceRenamed,
   invalidate: (uuid) => propManager().invalidate(uuid),
@@ -252,6 +263,7 @@ const onSourceUpdated = sourceUpdateHandler({
 // And one created or deleted: a deleted journal, page or actor drew on until the next canvas
 // draw, and a page added to a journal a pin shows whole never appeared.
 const onSourceCameOrWent = sourceLifecycleHandler({
+  forget: forgetSource,
   invalidate: (uuid) => propManager().invalidate(uuid),
   refresh: refreshPinboard,
   revalidate: revalidateReader,
@@ -262,12 +274,17 @@ for (const type of hookedDocumentNames()) {
   Hooks.on(`delete${type}`, onSourceCameOrWent);
 }
 
-// A user connecting or disconnecting changes who is in an audience, and therefore what
-// every chip shows and which props this client should be drawing at all.
-for (const hook of ["userConnected", "updateUser"]) {
-  Hooks.on(hook, () => {
+// A user's change reaches only what reads it (`user-hooks`): this user's hit areas and
+// cards, the pins and the HUD when a role moves `playerIds()`, the Pinboard's chips always.
+// Rebuilding the hit areas for anyone's flag write cleared a hovering player's tooltip.
+const userEffects = {
+  rebuildHits: syncHitLayer,
+  forgetCards: clearResolved,
+  redrawPins: () => {
     refreshAllPins();
-    syncHitLayer();
-    refreshPinboard();
-  });
-}
+    refreshPinHUD(null);
+  },
+  refreshBoard: refreshPinboard,
+};
+Hooks.on("updateUser", userUpdateHandler(userEffects));
+Hooks.on("userConnected", userConnectedHandler(userEffects));

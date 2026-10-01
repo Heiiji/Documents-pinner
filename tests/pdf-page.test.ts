@@ -1,10 +1,11 @@
 /**
  * The one content type that can reach the canvas tier.
  *
- * DESIGN A10 established that HTML cannot: rendering it means an SVG `foreignObject`, that
- * taints the canvas in every current browser, and a tainted canvas is refused by
- * `texImage2D`. pdf.js paints with ordinary Canvas2D calls instead, so its output stays
- * origin-clean. Measured on a live v14.365 server against a real 32-page document:
+ * HTML does not today: the rasteriser decodes its `foreignObject` SVG from a `blob:` URL,
+ * which taints the canvas (DESIGN A10; A29 measured that a `data:` URL does not), and a
+ * tainted canvas is refused by `texImage2D`. pdf.js paints with ordinary Canvas2D calls
+ * instead, so its output stays origin-clean. Measured on a live v14.365 server against a
+ * real 32-page document:
  *
  *     pdf.js -> canvas -> getImageData   clean, 561697 painted pixels
  *     pdf.js -> canvas -> texImage2D     OK

@@ -37,9 +37,14 @@ interface SettingDef {
 export const SETTINGS = {
   /**
    * Canvas rendering is the point of the module — a prop lit by the room's torches —
-   * but it needs `foreignObject` rasterisation, which WebKit refuses by tainting the
-   * canvas. `ready` probes for that and falls back on its own; this setting exists so
-   * a player on a low-VRAM machine can choose the cheap path deliberately.
+   * and for a PDF page it is what happens. For HTML it needs the `foreignObject`
+   * rasteriser, and `ready` probes it: the probe decodes its SVG from a `blob:` URL,
+   * which taints the canvas (re-verified 2026-10-01 in Chromium 152 and Chrome 154, on a
+   * real Foundry origin), so it answers `false` and text props are drawn as DOM cards.
+   * The same SVG decoded from a `data:` URL does NOT taint; switching the decode and
+   * verifying it live — Electron and Firefox too — is the follow-up for 0.5 (DESIGN A29).
+   * This setting exists so a player on a low-VRAM machine can choose the cheap path
+   * deliberately, for PDFs too.
    */
   rendering: {
     scope: "client",
