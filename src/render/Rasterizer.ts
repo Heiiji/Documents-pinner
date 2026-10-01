@@ -8,9 +8,9 @@
  * for free, because it is genuinely part of the scene rather than floating over it.
  *
  * **Dormant, on purpose.** Nothing reaches this pipeline unless `probeRasterisation`
- * answers `true`, and today it answers `false` on every supported browser — see the
- * first failure mode below and DESIGN A29. It is kept rather than removed because the
- * route back is known and short.
+ * answers `true`, and it answers `false` on every Chromium it has been measured on — see
+ * the first failure mode below and DESIGN A29. It is kept rather than removed because
+ * the route back is known and short.
  *
  * The pipeline has three silent failure modes, and each is handled explicitly because
  * every one of them looks identical from the outside — a prop that never appears:
@@ -70,7 +70,7 @@ let consecutiveFailures = 0;
  * Draws a tiny card and counts painted pixels. Cached, because the answer is a property
  * of the browser and cannot change within a session.
  *
- * **This answers `false` on every supported browser today, and that is not a bug in the
+ * **This answers `false` wherever it has been measured, and that is not a bug in the
  * probe.** It decodes through `decodeSvg`, from a `blob:` URL, and a `foreignObject` SVG
  * decoded that way taints the canvas it is drawn into — so the readback throws
  * `SecurityError`, and so does the WebGL upload the real pipeline depends on
@@ -79,7 +79,8 @@ let consecutiveFailures = 0;
  * and Chrome 154, on a real Foundry origin, with a control A10 lacked: the same SVG
  * decoded from a `data:` URL does NOT taint, and both the readback and the upload
  * succeed. So the canvas tier for HTML is reachable, by changing the decode — which is
- * the 0.5 follow-up, with a live verification on Electron and Firefox first. Until then
+ * the 0.5 follow-up, with a live verification on Electron and Firefox (neither was
+ * measured) first. Until then
  * the probe, and therefore the pipeline, stays exactly as it is: dormant, and the DOM
  * tier is the tier that runs. Nothing should do work for this path before the probe
  * answers `true` (`PropManager`'s DOM policy, `main.ts`'s font warm-up).
