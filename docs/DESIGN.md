@@ -2123,10 +2123,14 @@ rejected resolve, a measurement that gave up on a face or a picture. Forgotten: 
 hooks, before their filters (`forget`); on `canvasTearDown`; on a change to this user's role
 or permissions. A card built from a kept body is byte-identical to a fresh one at every rung
 and level (`card-cache.test.ts`). The DOM tier resolves two cards at a time and writes the
-markup and its overflow mark in one write. **The trade-off, accepted:** a link or an embed in
-a card that names *another* document now stays as it was until the pin's own source is
-edited, the canvas is redrawn or this user's role changes; before, it refreshed whenever the
-card happened to re-resolve.
+markup and its overflow mark in one write.
+
+Two holes the release review found, and closed before the release: a body named other
+documents — every link and embed carries its target's `data-uuid` (44914, 58763) — and was
+forgotten only for its own, so an embedded page's secret, hidden again, stayed readable in
+the reader; a body now records what it names and is forgotten for any of them. And work in
+flight was shared by every caller, so an enrichment waiting on an embed that never answered
+held its card blank everywhere; past 15 s the next caller starts its own.
 
 #### Queues, and which waits on which
 
