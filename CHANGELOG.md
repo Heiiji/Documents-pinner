@@ -116,8 +116,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   more than Limited, and the Audience tab offers Limited alone and says that what a
   Limited sheet shows is your game system's choice. The poster reads in place without any
   access, so granting it — which lists the actor in your players' sidebar — is yours to
-  switch on, pin by pin. *Show to players* opens journals only, and says so on an actor or
-  an item rather than claiming it was shown.
+  switch on, pin by pin; a pin pointed at an actor from Pin Studio switches it off and
+  says so, and starts again on the automatic text. *Show to players* opens journals only:
+  the Pinboard no longer offers it on an actor's or an item's row, and `Shift+S` says so
+  rather than claiming it was shown.
 - **Alt-dragging an actor still places Foundry's hidden token.** Alt is the default drag
   modifier, and Foundry already uses it on actors; an actor is pinned by dragging only
   when the modifier is Ctrl or Shift, and the setting's hint says so. With no modifier

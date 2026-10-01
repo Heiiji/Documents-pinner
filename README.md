@@ -115,8 +115,9 @@ refused on import.
 *Text shown* lists every rich-text field your game system gives that kind of actor or
 item, and *Automatic* picks public text first, then a biography or a description, never a
 field named for the GM. Its secret sections reach only its owners and you. Revealing an
-actor shares it at Limited at most, and a new actor pin starts with *Grant document
-access* off: the poster reads in place without it. An actor is pinned from its context
+actor shares it at Limited at most, and a new actor pin — or a pin pointed at an actor
+from Pin Studio — starts with *Grant document access* off: the poster reads in place
+without it. An actor is pinned from its context
 menu, its sheet, *Pin a document* or `/pin`; dragging one onto the map stays Foundry's
 token unless the drag modifier is Ctrl or Shift.
 
@@ -364,8 +365,9 @@ textes : *Texte affiché*, dans le Studio, liste chaque champ de texte enrichi q
 système de jeu donne à ce type d'acteur ou d'objet, et *Automatique* choisit d'abord un
 texte public, puis une biographie ou une description, jamais un champ que son nom réserve
 au MJ. Ses sections secrètes n'atteignent que ses propriétaires et vous. Révéler un acteur
-le partage en accès Limité au plus, et une nouvelle épingle d'acteur commence avec
-*Accorder l'accès au document* désactivé : l'avis se lit sur place sans lui. Un acteur
+le partage en accès Limité au plus, et une nouvelle épingle d'acteur — ou une épingle
+dirigée vers un acteur depuis le Studio — commence avec *Accorder l'accès au document*
+désactivé : l'avis se lit sur place sans lui. Un acteur
 s'épingle depuis son menu contextuel, sa fiche, *Épingler un document* ou `/pin` ; le
 glisser sur la carte reste le jeton de Foundry, sauf si la touche de glisser-épingler est
 Ctrl ou Maj.
