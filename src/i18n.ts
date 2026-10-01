@@ -20,14 +20,27 @@ export function t(key: string, data: Record<string, unknown> = {}): string {
 }
 
 /**
+ * Whether this module's tables define a key.
+ *
+ * Core's own `has` where there is one (foundry.mjs 205151, fallback language included);
+ * else the old comparison, which works because `localize` hands back a key it does not
+ * know unchanged — and fails for a key whose translation happens to be the key itself.
+ */
+export function hasKey(key: string): boolean {
+  const full = key.startsWith(PREFIX) ? key : `${PREFIX}${key}`;
+  const i18n = typeof game !== "undefined" ? game?.i18n : null;
+  if (typeof i18n?.has === "function") return i18n.has(full) === true;
+  if (!i18n?.localize) return false;
+  return i18n.localize(full) !== full;
+}
+
+/**
  * A translation where one exists, else the fallback — for values that come from the
  * world rather than from this module, such as a page type a system added. Showing the
  * raw `text` or `pdf` to a French GM was the alternative.
  */
 export function tOr(key: string, fallback: string): string {
-  const full = key.startsWith(PREFIX) ? key : `${PREFIX}${key}`;
-  const out = t(full);
-  return out === full ? fallback : out;
+  return hasKey(key) ? t(key) : fallback;
 }
 
 /** Format a notice returned by a pure module. */

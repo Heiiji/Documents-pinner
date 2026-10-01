@@ -270,7 +270,7 @@ function listMarkup(presets: readonly DpPreset[], selectedId: string): string {
   const item = (preset: DpPreset) =>
     `<li><button type="button" class="dp-presets__item" data-action="select"` +
     ` data-dp-preset="${escapeAttr(preset.id)}" aria-pressed="${preset.id === selectedId}">` +
-    `<span class="dp-presets__name">${escapeHtml(t(preset.label))}</span>` +
+    `<span class="dp-presets__name">${escapeHtml(library.presetName(preset))}</span>` +
     (preset.author === "core"
       ? `<i class="fa-solid fa-lock" aria-hidden="true" title="${escapeAttr(t("DP.presets.readOnly"))}"></i>`
       : "") +
@@ -311,7 +311,7 @@ function previewMarkup(preset: DpPreset, backdrop: Backdrop, frozen: boolean): s
     `<div class="dp-presets__preview" data-dp-bg="${backdrop}">` +
     `<div class="dp-card"${attrs} style="${escapeAttr(style)}">` +
     `<div class="dp-card__sheet">` +
-    `<h1 class="dp-card__title">${escapeHtml(t(preset.label))}</h1>` +
+    `<h1 class="dp-card__title">${escapeHtml(library.presetName(preset))}</h1>` +
     `<div class="dp-card__body"><p>${escapeHtml(t("DP.presets.sample"))}</p></div>` +
     `</div></div></div>` +
     `<div class="dp-presets__bgs" role="group" aria-label="${escapeAttr(t("DP.presets.backdrop"))}">` +
@@ -476,11 +476,13 @@ function paramsMarkup(
   }).join("");
 
   // A user preset can be named. A duplicate used to be "(copy)" forever, because there
-  // was no name field anywhere in the window.
+  // was no name field anywhere in the window. The field holds the name as the list shows
+  // it: a label 0.4.0 stored as a key reads as words here too, and is stored as words the
+  // first time the GM changes it.
   const name = editable
     ? `<label class="dp-presets__param dp-presets__name-field">` +
       `<span>${escapeHtml(t("DP.presets.name"))}</span>` +
-      `<input type="text" name="_label" value="${escapeAttr(preset.label)}" maxlength="64">` +
+      `<input type="text" name="_label" value="${escapeAttr(library.presetName(preset))}" maxlength="64">` +
       `</label>`
     : "";
 
@@ -677,7 +679,8 @@ export function definePresetStudio(): any {
     async #rename(label: string) {
       const preset = this.selected;
       const next = label.trim().slice(0, 64);
-      if (preset.author === "core" || !next || next === preset.label) return;
+      // Compared with what the field showed, which is the name, not the stored label.
+      if (preset.author === "core" || !next || next === library.presetName(preset)) return;
       await library.savePreset({ ...preset, label: next });
       this.render();
     }

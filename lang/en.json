@@ -290,6 +290,7 @@
   "DP.preset.agedParchment": "Aged Parchment",
   "DP.preset.arcaneGlow": "Arcane Glow",
   "DP.preset.bloodstained": "Bloodstained",
+  "DP.preset.copyOf": "{name} (copy)",
   "DP.preset.crtScanlines": "CRT Scanlines",
   "DP.preset.error.badId": "\"{value}\" is not a valid preset id. Use lowercase letters, digits and hyphens.",
   "DP.preset.error.coreReadOnly": "Shipped presets cannot be changed. Duplicate it first.",

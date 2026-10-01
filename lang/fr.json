@@ -290,6 +290,7 @@
   "DP.preset.agedParchment": "Parchemin vieilli",
   "DP.preset.arcaneGlow": "Lueur arcanique",
   "DP.preset.bloodstained": "Taché de sang",
+  "DP.preset.copyOf": "{name} (copie)",
   "DP.preset.crtScanlines": "Balayage cathodique",
   "DP.preset.error.badId": "« {value} » n'est pas un identifiant valide. Utilisez des minuscules, des chiffres et des tirets.",
   "DP.preset.error.coreReadOnly": "Les préréglages fournis ne peuvent pas être modifiés. Dupliquez-le d'abord.",

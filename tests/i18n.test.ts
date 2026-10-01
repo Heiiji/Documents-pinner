@@ -1,6 +1,8 @@
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+import { tOr } from "../src/i18n";
+import { installWorld, uninstallWorld } from "./helpers/fake-foundry";
 
 const ROOT = join(import.meta.dirname, "..");
 const LANGS = ["en", "fr"] as const;
@@ -139,5 +141,29 @@ describe("localisation files", () => {
       if (!(key in tables.en)) missing.push(`${key}  (${file})`);
     }
     expect(missing, `undefined i18n keys:\n${missing.join("\n")}`).toEqual([]);
+  });
+});
+
+/**
+ * `tOr` decided whether a key existed by comparing `localize`'s answer with the key, which
+ * is core's answer for a key it does not know — and for one whose translation is the key
+ * itself. Core has `has` for the question (foundry.mjs 205151). The fake echoes every key,
+ * so here only `has` can tell a defined key from a missing one.
+ */
+describe("tOr", () => {
+  afterEach(() => uninstallWorld());
+
+  it("asks core whether the key is defined, not what `localize` gave back", () => {
+    installWorld();
+    expect(tOr("DP.pageType.pdf", "pdf")).toBe("DP.pageType.pdf");
+    expect(tOr("DP.pageType.systemOwnType", "systemOwnType")).toBe("systemOwnType");
+  });
+
+  it("still falls back by comparison on a core with no `has`", () => {
+    const world = installWorld();
+    delete world.game.i18n.has;
+    world.game.i18n.localize = (key: string) => (key === "DP.pageType.pdf" ? "PDF" : key);
+    expect(tOr("DP.pageType.pdf", "pdf")).toBe("PDF");
+    expect(tOr("DP.pageType.systemOwnType", "systemOwnType")).toBe("systemOwnType");
   });
 });
