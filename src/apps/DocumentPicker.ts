@@ -85,17 +85,23 @@ const PACK_QUERY_MIN = 2;
 /** At most this many compendium rows; the rest are counted, and the GM keeps typing. */
 const PACK_ROWS_MAX = 50;
 
-/** An index entry's folded name, kept for as long as core keeps that entry. */
-const foldedNames = new WeakMap<object, string>();
+/**
+ * An index entry's folded name, and the name it was folded from, for as long as core
+ * keeps that entry. The name is checked on every read: a document renamed in an unlocked
+ * compendium may be merged INTO its existing entry rather than replace it (RECALLED:
+ * `indexDocument` merges), and a cache keyed on the entry alone would go on matching the
+ * old name until a reload.
+ */
+const foldedNames = new WeakMap<object, { name: string; folded: string }>();
 /** Packs whose empty index this session has already asked core to load. */
 const indexAsked = new WeakSet<object>();
 
 function foldedName(entry: any): string {
-  let folded = foldedNames.get(entry);
-  if (folded === undefined) {
-    folded = fold(String(entry?.name ?? ""));
-    if (entry && typeof entry === "object") foldedNames.set(entry, folded);
-  }
+  const name = String(entry?.name ?? "");
+  const cached = foldedNames.get(entry);
+  if (cached?.name === name) return cached.folded;
+  const folded = fold(name);
+  if (entry && typeof entry === "object") foldedNames.set(entry, { name, folded });
   return folded;
 }
 

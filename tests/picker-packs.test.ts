@@ -89,22 +89,39 @@ beforeEach(() => {
 afterEach(() => uninstallWorld());
 
 describe("the picker's compendium rows", () => {
+  /**
+   * Core may merge a rename INTO the existing index entry rather than replace it
+   * (RECALLED: `indexDocument` merges), so this row unfreezes the entry, searches once to
+   * fold its name, and renames it in place.
+   */
+  const renameInPlace = async (pack: any) => {
+    const entry = { ...pack.index.get("ledger") };
+    pack.index.set("ledger", entry);
+    await picker("le");
+    entry.name = "Abbey Accounts";
+  };
+
   it.each([
-    ["", [["Letter to the Mayor", "", false]]],
-    ["l", [["Letter to the Mayor", "", false]]],
+    ["no search", "", [["Letter to the Mayor", "", false]], null],
+    ["one letter", "l", [["Letter to the Mayor", "", false]], null],
     [
+      "two",
       "le",
       [
         ["Letter to the Mayor", "", false],
         ["Letters", "Handouts", false],
         ["Ledger", "Handouts", false],
       ],
+      null,
     ],
+    ["a journal renamed in place", "abbey", [["Abbey Accounts", "Handouts", false]], renameInPlace],
   ])(
-    "follow the world's, labelled with their pack, from two letters (%j)",
-    async (search, expected) => {
-      install([handouts()]);
-      expect(rows(await picker(search))).toEqual(expected);
+    "follow the world's, labelled with their pack, from two letters: %s",
+    async (_what, search, expected, before) => {
+      const pack = handouts();
+      install([pack]);
+      await before?.(pack);
+      expect(rows(await picker(search as string))).toEqual(expected);
     }
   );
 
