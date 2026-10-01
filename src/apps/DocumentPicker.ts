@@ -229,13 +229,19 @@ export function definePicker(): any {
     }
 
     #wire(root: HTMLElement) {
-      root.addEventListener("input", (event) => {
+      // Not mid-composition — a dead key's accent, an IME's syllables: a render rebuilt
+      // the field under the composition and dropped it. The search runs when the
+      // composition ends, and once, whether or not the browser then sends a plain `input`.
+      const search = (event: Event) => {
         const input = event.target as HTMLInputElement;
         if (input?.dataset?.action !== "search") return;
+        if ((event as InputEvent).isComposing || input.value === this.search) return;
         this.search = input.value;
         this.activeIndex = 0;
         this.render();
-      });
+      };
+      root.addEventListener("input", search);
+      root.addEventListener("compositionend", search);
 
       root.addEventListener("click", (event) => {
         const item = (event.target as HTMLElement).closest<HTMLElement>(".dp-picker__item");

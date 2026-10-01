@@ -336,13 +336,20 @@ export function definePinboard(): any {
     }
 
     #wire(root: HTMLElement) {
-      root.addEventListener("input", (event) => {
+      // A word still being composed — a dead key's accent, an IME's syllables — is not a
+      // search yet: a render mid-composition rebuilt the field under it and dropped what
+      // was being composed, so "é" or "日本" could not be typed at all. The search runs
+      // when the composition ends, and once: a browser that follows `compositionend` with
+      // a plain `input` finds the search already done.
+      const search = (event: Event) => {
         const input = event.target as HTMLInputElement;
-        if (input?.dataset?.action === "search") {
-          this.query = { ...this.query, search: input.value };
-          this.render();
-        }
-      });
+        if (input?.dataset?.action !== "search") return;
+        if ((event as InputEvent).isComposing || input.value === this.query.search) return;
+        this.query = { ...this.query, search: input.value };
+        this.render();
+      };
+      root.addEventListener("input", search);
+      root.addEventListener("compositionend", search);
 
       root.addEventListener("change", (event) => {
         const select = event.target as HTMLSelectElement;
