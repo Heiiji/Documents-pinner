@@ -114,6 +114,9 @@ export function onGetHeaderControls(app: any, controls: any[]): void {
   });
 }
 
+/** The menu entry's label, which is also how a menu that already has it is told. */
+const PIN_THIS = "DP.controls.pinThis";
+
 /**
  * Sidebar, page and compendium-window context menus — journals', actors' and items'. The
  * hook name differs by collection, so all of them wire here, with the application that
@@ -122,11 +125,13 @@ export function onGetHeaderControls(app: any, controls: any[]): void {
  */
 export function addContextOption(options: any[], app?: any): void {
   if (!isGM()) return;
+  // Once per menu: two of the hook names may fire for the same one.
+  if (options.some((option) => option?.label === PIN_THIS)) return;
 
   // v14's entry shape. `name`, `condition` and `callback` still work, each with a
   // compatibility warning, until v16 (foundry.mjs 14.367, 29368-29380 and 29616).
   options.push({
-    label: "DP.controls.pinThis",
+    label: PIN_THIS,
     icon: '<i class="fa-solid fa-thumbtack"></i>',
     visible: () => isGM(),
     onClick: (_event: Event, target: any) => {

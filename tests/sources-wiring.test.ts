@@ -94,6 +94,25 @@ describe("an actor's or an item's sheet header", () => {
   });
 });
 
+/**
+ * A v14 directory fires `get${documentName}ContextOptions`; the 14.366 types name the
+ * journal sidebar's `getJournalContextOptions`, which was not registered. Both are, and the
+ * entry is added once however many fire.
+ */
+describe("Pin to scene in the journal sidebar's menu", () => {
+  it.each([
+    ["the types' name for it", ["getJournalContextOptions"]],
+    ["both names, for one menu", ["getJournalEntryContextOptions", "getJournalContextOptions"]],
+  ])("is there once, when %s fires", async (_what, hooks) => {
+    await boot();
+    const options: any[] = [];
+
+    for (const hook of hooks) fire(hook, { collection: world.game.journal }, options);
+
+    expect(options.map((option) => option.label)).toEqual(["DP.controls.pinThis"]);
+  });
+});
+
 describe("an edit to an actor with a poster on the map", () => {
   const { HTMLField, SchemaField, StringField } = DATA_FIELDS;
   const jack = () =>

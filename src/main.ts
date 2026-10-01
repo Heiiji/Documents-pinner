@@ -64,19 +64,20 @@ const log = logger("boot");
 declare const Hooks: any;
 
 /**
- * Context-menu hooks core has used across generations, for every directory a pin's source
- * can be listed in: journals, actors, items — the sidebar's and a compendium window's,
- * which fire the same family. Unknown names never fire.
+ * The context-menu hooks of every directory a pin's source can be listed in — journals,
+ * actors, items, the sidebar's and a compendium window's alike — and of a journal sheet's
+ * pages. A v14 directory fires `get${documentName}ContextOptions` (foundry.mjs 14.368,
+ * 131819), and a sheet's pages `getJournalEntryPageContextOptions` (101133); the 14.366
+ * types name the journal sidebar's `getJournalContextOptions`, so that one is registered too,
+ * and `addContextOption` adds its entry once however many of them fire. The AppV1 names
+ * (`get…DirectoryEntryContext`, `getJournalSheetPageContextOptions`) cannot fire on 14.
  */
 const CONTEXT_HOOKS = [
   "getJournalEntryContextOptions",
-  "getJournalDirectoryEntryContext",
-  "getJournalSheetPageContextOptions",
+  "getJournalContextOptions",
   "getJournalEntryPageContextOptions",
   "getActorContextOptions",
-  "getActorDirectoryEntryContext",
   "getItemContextOptions",
-  "getItemDirectoryEntryContext",
 ];
 
 Hooks.once("init", () => {
