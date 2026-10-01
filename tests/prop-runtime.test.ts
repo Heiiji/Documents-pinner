@@ -119,6 +119,8 @@ describe("the perf guard", () => {
       false,
     ],
     ["still fires on a scene that holds 30 fps", () => play(30, 5), true],
+    // Every frame longer than a pause: a run of them is a slow machine, not a hidden tab.
+    ["still fires on a scene that holds 3 fps", () => play(3, 30), true],
   ])("%s", (_label, run, fires) => {
     run();
     expect(manager.stats().degraded).toBe(fires);
