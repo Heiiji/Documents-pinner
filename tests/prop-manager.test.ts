@@ -563,8 +563,9 @@ describe("the LOD pass", () => {
     manager.refresh();
     await settle();
 
-    const api = await import("../src/api");
-    const canUserOpen = vi.spyOn(api, "canUserOpen");
+    // The question the canvas asks lives in `data/access` (A29), not the verbs' façade.
+    const access = await import("../src/data/access");
+    const canUserOpen = vi.spyOn(access, "canUserOpen");
     manager.setFocused("t1");
     await settle();
 

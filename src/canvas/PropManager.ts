@@ -30,7 +30,7 @@ import { cancelIdle, cv, g, notify, ns, onIdle, rendererResolution } from "../fv
 import * as settings from "../settings";
 import { readPin } from "../data/PinData";
 import { cardMetrics } from "../data/pin-schema";
-import * as api from "../api";
+import * as access from "../data/access";
 import {
   apparentWidth,
   rectsIntersect,
@@ -656,7 +656,7 @@ class Manager {
         // Only the focused prop can be on the reader's rung, so only it is asked whether
         // this user may read it — a source lookup and a permission test that ran for every
         // prop on the scene on every pass to answer a question nobody else was asking.
-        readable: focused && api.canUserOpen(tile.document, g()?.user?.id ?? ""),
+        readable: focused && access.canUserOpen(tile.document, g()?.user?.id ?? ""),
       });
 
       // The perf guard demotes uniformly: a scene where half the props are sharp and
