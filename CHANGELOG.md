@@ -89,9 +89,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   as a letter held up to a lamp. Generic faces only, so they look right in every world
   with no font installed; a pin that should keep the old face can choose it in Pin Studio.
 - **Pins are stored in format 5 and presets in format 3, for the typeface, the reveal
-  sound and the text an actor's or an item's card shows.** Opening a scene updates its pins silently and the rest of the world is offered
-  once, as before; nothing changes on any map. A preset exported from this version and
-  imported into an older one is reported there as newer, and loses only its typeface.
+  sound and the text an actor's or an item's card shows.** Opening a scene updates its
+  pins silently and the rest of the world is offered once, as before; nothing changes on
+  any map. A preset exported from this version and imported into an older one is reported
+  there as newer, and loses only its typeface.
 - **"Reveal all" asks first, and has left the footer.** It sat one button from "Hide all",
   and it is the one reveal whose slip is a whole scene's worth of spoilers — hiding again
   does not take back what the table has read. It is now in the bulk bar, apart from the
