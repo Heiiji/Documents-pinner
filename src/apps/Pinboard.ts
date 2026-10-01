@@ -67,6 +67,13 @@ export {
 
 const log = logger("board");
 
+/**
+ * How long a requested render waits for its window's frame before it runs anyway — the
+ * overlay's floor (`OverlayRoot.write`), for the same reason: a window that is not
+ * painting fires no frame at all.
+ */
+export const RENDER_FLOOR_MS = 250;
+
 let PinboardClass: any = null;
 let instance: any = null;
 
@@ -169,6 +176,8 @@ export function definePinboard(): any {
     #pending: Promise<void> | null = null;
     /** Whether that render still has work to do: a render that began since did it. */
     #wanted = false;
+    /** Ends the render asked for without running it, for a board that is closing. */
+    #settle: (() => void) | null = null;
 
     get scene(): any {
       return cv()?.scene ?? g()?.scenes?.current ?? null;
@@ -208,14 +217,35 @@ export function definePinboard(): any {
      * while the main window is hidden. With no frame to wait for, a microtask. A render
      * that begins in the meantime (an arrow key, a search) reads everything the request was
      * for, and the frame then has nothing left to do. Resolves once the render has run.
+     *
+     * A frame is not a promise, so it is raced against a floor (`RENDER_FLOOR_MS`), as the
+     * overlay's writes are: a window that stops painting — a minimised popup, a hidden tab —
+     * fires no frame, and a popup closed by a re-attach takes the one it was asked for with
+     * it. The request was shared by everything that asked after it, so one lost frame left
+     * the board drawing nothing but arrow keys and searches for the rest of the session,
+     * reopened or not. Whichever comes first runs, once; closing the board settles it.
      */
     requestRender(): Promise<void> {
       this.#wanted = true;
       if (this.#pending) return this.#pending;
       const view = docOf(this.element)?.defaultView;
+      let frame = 0;
+      let floor: ReturnType<typeof setTimeout> | undefined;
+      let settled = false;
       const pending = new Promise<void>((resolve) => {
+        const settle = (): boolean => {
+          if (settled) return false;
+          settled = true;
+          if (frame) view?.cancelAnimationFrame?.(frame);
+          clearTimeout(floor);
+          if (this.#pending === pending) {
+            this.#pending = null;
+            this.#settle = null;
+          }
+          return true;
+        };
         const run = () => {
-          this.#pending = null;
+          if (!settle()) return;
           if (!this.#wanted) return resolve();
           this.#wanted = false;
           // Caught: nothing awaits a frame, and a render core refused must not surface as
@@ -225,8 +255,13 @@ export function definePinboard(): any {
             .catch((error: unknown) => log.warn("the board could not be redrawn", error))
             .finally(resolve);
         };
-        if (typeof view?.requestAnimationFrame === "function") view.requestAnimationFrame(run);
-        else queueMicrotask(run);
+        this.#settle = () => {
+          if (settle()) resolve();
+        };
+        if (typeof view?.requestAnimationFrame === "function") {
+          frame = view.requestAnimationFrame(run);
+          floor = setTimeout(run, RENDER_FLOOR_MS);
+        } else queueMicrotask(run);
       });
       this.#pending = pending;
       return pending;
@@ -295,6 +330,10 @@ export function definePinboard(): any {
         super._onClose?.(options);
       } finally {
         closeCheatSheet("board", false);
+        // A render asked for a board that is gone has nothing to draw, and must not be the
+        // request every later one is handed when the board opens again (`requestRender`).
+        this.#wanted = false;
+        this.#settle?.();
       }
     }
 
