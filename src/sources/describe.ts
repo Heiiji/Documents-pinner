@@ -34,7 +34,7 @@ export type SourceOrigin = "world" | "pack" | "image" | "missing";
 
 export interface SourceSummary {
   origin: SourceOrigin;
-  /** Of the document the uuid NAMES: `JournalEntry` or `JournalEntryPage`, or null. */
+  /** Of the document the uuid NAMES: `JournalEntry`, `JournalEntryPage`, `Actor`, `Item`, or null. */
   documentName: string | null;
   uuid: string | null;
   /** The pack, as facts; whether a user can read it is `packs.packReadableBy`'s to say. */
@@ -79,6 +79,7 @@ export function rememberShown(source: DpSource, shown: any): void {
     documentName: typeof shown.documentName === "string" ? shown.documentName : null,
     type: typeof shown.type === "string" ? shown.type : null,
     src: typeof shown.src === "string" ? shown.src : null,
+    img: typeof shown.img === "string" ? shown.img : null,
   });
 }
 
@@ -129,9 +130,12 @@ function packSummary(source: DpSource): SourceSummary {
   const entry = typeof index?.name === "string" ? index.name : "";
   const documentName = parsed.documentName ?? facts.documentName;
   // Until a load says otherwise, a page is named by its journal: the index lists entries.
+  // An actor's or an item's entry also carries its picture and its type.
   const shown = remembered.get(keyOf(source)) ?? {
     name: entry,
     documentName: source.pageId ? "JournalEntryPage" : documentName,
+    img: index?.img,
+    type: index?.type,
   };
   return {
     origin: "pack",

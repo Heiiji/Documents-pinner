@@ -537,8 +537,12 @@ function grantNote(pin: DpPinFlags): string {
       ? t("DP.studio.grantsPack", { pack: scope.pack, entry: scope.entry })
       : scope.kind === "page"
         ? t("DP.studio.grantsPage", { page: scope.page, entry: scope.entry })
-        : t("DP.studio.grantsJournal", { entry: scope.entry }) +
-          (scope.pages > 1 ? ` ${t("DP.studio.grantsJournalHint")}` : "");
+        : scope.kind === "actor" || scope.kind === "item"
+          ? t(scope.kind === "actor" ? "DP.studio.grantsActor" : "DP.studio.grantsItem", {
+              name: scope.name,
+            })
+          : t("DP.studio.grantsJournal", { entry: scope.entry }) +
+            (scope.pages > 1 ? ` ${t("DP.studio.grantsJournalHint")}` : "");
   return `<p class="dp-studio__note" data-dp-grants="${scope.kind}">${escapeHtml(text)}</p>`;
 }
 

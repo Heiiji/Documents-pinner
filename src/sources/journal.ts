@@ -189,8 +189,12 @@ const documentSource = (uuid: string, pageId: string | null = null): DpSource =>
 
 export const journalAdapter: SourceAdapter = {
   names: ["JournalEntry", "JournalEntryPage"],
+  layout: "page",
   // OBSERVER is the level at which a text page actually opens; LIMITED is the tease.
   openLevel: "OBSERVER",
+  maxGrant: 2,
+  syncOnCreate: true,
+  canShow: true,
 
   fromDrop(data) {
     if (!data?.uuid) return null;
@@ -203,6 +207,10 @@ export const journalAdapter: SourceAdapter = {
   fromDocument(doc) {
     return doc?.uuid ? documentSource(doc.uuid) : null;
   },
+  // A page is embedded in its journal and is a source all the same; every journal edit
+  // may change a card, as it always could.
+  isSource: () => true,
+  redrawsOn: () => true,
   shown: journalShown,
   describe: journalFacts,
   pdf: pdfSourceOf,

@@ -34,7 +34,15 @@ import * as settings from "./settings";
 import { centreOf, docPositionFor } from "./canvas/transform";
 import { nextToReveal, type PinboardQuery, type RowFacts } from "./apps/pinboard-model";
 import { describeSource, rememberShown } from "./sources/describe";
-import { adapterFor, adapterForDoc, type PageChoice } from "./sources/index";
+import { fieldsFor, rankDefault, type FieldChoice } from "./sources/fields";
+import {
+  adapterFor,
+  adapterForDoc,
+  adapterOrJournal,
+  isRefusal,
+  type PageChoice,
+  type Refusal,
+} from "./sources/index";
 import { packFacts, packLockedHere, packOf, packReadableBy, playersCanRead } from "./sources/packs";
 import { isPackUuid } from "./sources/uuid";
 import type { DpAudience, DpMode, DpPinFlags, DpSource } from "./types/dp";
@@ -48,14 +56,16 @@ const log = logger("api");
 // ---------------------------------------------------------------------------
 
 /**
- * A pin source from a sidebar drag payload.
+ * A pin source from a sidebar drag payload — or, for a document of a type the module
+ * knows but will not pin (an item an actor owns, a token's actor), the notice that says
+ * why, so the drop can be refused rather than left to core as if it were not ours.
  *
  * A document of a type some adapter answers for (`sources/index.ts`) becomes a document
  * source, and bare image files an image source. Anything else returns `null`, which lets
  * the drop fall through to whatever core or another module would have done, rather than
  * producing a pin of the wrong thing.
  */
-export function sourceFromDropData(data: any): DpSource | null {
+export function dropOutcome(data: any): DpSource | Refusal | null {
   if (!data) return null;
 
   const named = adapterFor(data.type)?.fromDrop(data);
@@ -74,8 +84,21 @@ export function sourceFromDropData(data: any): DpSource | null {
   return null;
 }
 
+/** `dropOutcome`, for a caller that only wants a source: a refused drop is none. */
+export function sourceFromDropData(data: any): DpSource | null {
+  const outcome = dropOutcome(data);
+  return isRefusal(outcome) ? null : outcome;
+}
+
+/** A source from a document — the menus, the sheet header — or null for one not pinned. */
 export function sourceFromDocument(doc: any): DpSource | null {
-  return adapterFor(doc?.documentName)?.fromDocument(doc) ?? null;
+  const outcome = adapterFor(doc?.documentName)?.fromDocument(doc) ?? null;
+  return isRefusal(outcome) ? null : outcome;
+}
+
+/** The adapter for the document a source names, by its uuid or its pack: no load. */
+function adapterOf(source: DpSource) {
+  return adapterOrJournal(source.kind === "document" ? describeSource(source).documentName : null);
 }
 
 /**
@@ -141,11 +164,35 @@ export async function pageChoicesFor(pin: DpPinFlags): Promise<PageChoice[]> {
   return pagesOf(await resolveUuid(pin.source.uuid));
 }
 
+/** The text fields a GM may choose between for an actor's or an item's card. */
+export interface FieldChoices {
+  fields: FieldChoice[];
+  /** The label of the field the automatic choice shows, or null when none would. */
+  automatic: string | null;
+}
+
+/**
+ * The fields of the document a portrait pin shows, or null for a pin that has none to
+ * choose — a journal, an image. A compendium document needs no load: its type is in the
+ * pack's index, and its fields are its type's.
+ */
+export function fieldChoices(pin: DpPinFlags): FieldChoices | null {
+  if (pin.source.kind !== "document") return null;
+  const summary = describeSource(pin.source);
+  const documentName = summary.documentName;
+  if (!documentName || adapterOrJournal(documentName).layout !== "portrait") return null;
+  const fields = fieldsFor(documentName, summary.doc?.type ?? summary.index?.type, summary.doc);
+  const automatic = rankDefault(fields);
+  return { fields, automatic: fields.find((field) => field.path === automatic)?.label ?? null };
+}
+
 /** What revealing a pin shares, for the Studio to say where the choice is made. */
 export type GrantScope =
   | { kind: "page"; page: string; entry: string }
   | { kind: "journal"; entry: string; pages: number }
-  | { kind: "pack"; pack: string; entry: string };
+  | { kind: "pack"; pack: string; entry: string }
+  | { kind: "actor"; name: string; level: number }
+  | { kind: "item"; name: string; level: number };
 
 /**
  * One page and its journal's listing, a whole journal, or a compendium document — which
@@ -163,12 +210,13 @@ export function grantScope(pin: DpPinFlags): GrantScope | null {
   }
   const named = summary.doc;
   if (!named) return null;
-  const [shown, entry] = grantTargets(
-    named,
-    pin.source.pageId,
-    pin.audience.ownershipSync.level
-  ).map((target) => target.doc);
+  const targets = grantTargets(named, pin.source.pageId, pin.audience.ownershipSync.level);
+  const [shown, entry] = targets.map((target) => target.doc);
   if (!shown) return null;
+  if (summary.documentName === "Actor" || summary.documentName === "Item") {
+    const kind = summary.documentName === "Actor" ? ("actor" as const) : ("item" as const);
+    return { kind, name: shown.name ?? "", level: targets[0].level };
+  }
   if (entry) return { kind: "page", page: shown.name ?? "", entry: entry.name ?? "" };
   return { kind: "journal", entry: shown.name ?? "", pages: shown.pages?.contents?.length ?? 0 };
 }
@@ -260,7 +308,9 @@ export async function pinAt(scene: any, source: DpSource, at: PinPlacement): Pro
     audience: audience.makeAudience({
       kind,
       ownershipSync: {
-        enabled: settings.get("defaultOwnershipSync"),
+        // An actor's pin starts with it off: a poster reads in place without any grant,
+        // and a grant lists the NPC in every sidebar it reaches (DESIGN A28, D2).
+        enabled: adapterOf(source).syncOnCreate && settings.get("defaultOwnershipSync"),
         level: 2,
       },
     }),
@@ -513,6 +563,13 @@ export function patch(anchorDoc: any, changes: PinPatch): Promise<any> {
 export async function showToAudience(anchorDoc: any): Promise<void> {
   const pin = readPin(anchorDoc);
   if (!pin || !isGM()) return;
+
+  // Core shows journals only; anything else resolves without opening a window anywhere.
+  // An actor's or an item's pin is revealed by its audience, and reads in place.
+  if (pin.source.kind === "document" && !adapterOf(pin.source).canShow) {
+    notify({ key: "DP.notice.showJournalsOnly" }, "warn");
+    return;
+  }
 
   const source = await resolveSource(pin);
   if (!source) {
@@ -1065,7 +1122,10 @@ export async function adoptTile(tileDoc: any, source: DpSource): Promise<void> {
         ? "prop"
         : settings.get("defaultMode"),
     source,
-    audience: audience.makeAudience({ kind: tileDoc.hidden ? "hidden" : "everyone" }),
+    audience: audience.makeAudience({
+      kind: tileDoc.hidden ? "hidden" : "everyone",
+      ownershipSync: { enabled: adapterOf(source).syncOnCreate, level: 2 },
+    }),
   };
   // A tile adopted as a prop is drawn at its own size from the first frame; freeze the
   // proportional look there, exactly as the migration does for an existing prop.

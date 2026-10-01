@@ -25,6 +25,7 @@ import * as settings from "../settings";
 import { armAt } from "../apps/PlacementGhost";
 import { openPicker, packEntries } from "../apps/DocumentPicker";
 import { readPin } from "../data/PinData";
+import { isRefusal } from "../sources/index";
 
 /** Whether the configured drag modifier is currently held. */
 export function modifierHeld(event?: DragEvent | MouseEvent): boolean {
@@ -43,16 +44,39 @@ export function modifierHeld(event?: DragEvent | MouseEvent): boolean {
 }
 
 /**
+ * Whether a drop is core's whatever the modifier says: an Actor's, unless the modifier is
+ * Ctrl or Shift.
+ *
+ * Core makes a token of an Actor dropped on the map, and a HIDDEN token when Alt is held
+ * (RECALLED, unverified). Alt is this module's default modifier, so taking an Alt-dropped
+ * actor would take the GM's hidden-token gesture away — and under "no modifier", every
+ * token drop. Native drags are not hijacked (DESIGN §5.1). An actor is pinned from its
+ * menus, its sheet, the picker and `/pin`, and by drop when the modifier is one core does
+ * not use for actors.
+ */
+function leftToCore(data: any): boolean {
+  if (data?.type !== "Actor") return false;
+  const which = settings.get("dropModifier");
+  return which !== "ctrl" && which !== "shift";
+}
+
+/**
  * `dropCanvasData`. Returns `false` to suppress core's own handling.
  *
  * Anything we do not recognise, or any drop without the modifier, falls straight
- * through to core untouched.
+ * through to core untouched. A document the module knows but will not pin — an item an
+ * actor owns, a token's actor — is refused with a word, and swallowed: the gesture was
+ * ours, and leaving it to core would do something else the GM did not ask for.
  */
 export function onDropCanvasData(canvas: any, data: any, event?: DragEvent): boolean | void {
-  if (!isGM() || !modifierHeld(event)) return;
+  if (!isGM() || !modifierHeld(event) || leftToCore(data)) return;
 
-  const source = api.sourceFromDropData(data);
+  const source = api.dropOutcome(data);
   if (!source) return;
+  if (isRefusal(source)) {
+    notify({ key: source.refused }, "info");
+    return false;
+  }
 
   const point = {
     x: data?.x ?? canvas?.mousePosition?.x ?? 0,

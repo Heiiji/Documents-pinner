@@ -25,7 +25,7 @@ import { dressing } from "../effects/EffectRegistry";
 import { currentLevel } from "../effects/level";
 import { findPreset } from "../effects/preset-library";
 import type { LodTier } from "../canvas/lod";
-import { enrichFor } from "./enrich";
+import { enrichFor, sanitise } from "./enrich";
 import { renderPdfPage } from "./PdfPage";
 import { hashContent } from "./TextureCache";
 import { measureCardHeight } from "./measure";
@@ -159,14 +159,25 @@ export async function resolveCard(
     }
   }
 
-  const { text, kind } = adapter.rawContent(source, pin);
+  const { text, kind, figure } = adapter.rawContent(source, pin);
   const { html, isOwner } = await enrichFor(source, text);
   const title = pin.display.label || source.name || "";
+  // The portrait is ours, built here from a path and escaped, then scrubbed exactly as an
+  // image page's own <img> is — a `javascript:` path comes out with no `src` at all. Its
+  // box is sized by the stylesheet, so the card measures right before the picture decodes.
+  const figureHtml = figure
+    ? sanitise(
+        `<figure class="dp-card__portrait"><img src="${escapeHtml(figure)}" alt=""></figure>`,
+        true
+      )
+    : "";
+  const layout = adapter.layout === "portrait" ? ("portrait" as const) : undefined;
 
   // Measured at the width it will be drawn at, then marked if the box is too short.
   // The mark is a function of the size, and the size is in every cache key already, so
   // the content hash does not carry it.
-  const build = (overflow: boolean) => cardHtml({ ...common, title, bodyHtml: html, overflow });
+  const build = (overflow: boolean) =>
+    cardHtml({ ...common, title, bodyHtml: html, overflow, figureHtml, layout });
   const naturalHeight = await measureCardHeight(build(false), size.width);
   const overflow = naturalHeight !== null && naturalHeight > size.height + 1;
 
@@ -177,7 +188,7 @@ export async function resolveCard(
     // `isOwner` is in the hash because it changes what the HTML contains: a GM and a
     // player must never share a cache entry, and this is the second guard on that
     // after the user id already in the key.
-    contentHash: hashContent(`${kind}|${isOwner}|${html}`),
+    contentHash: hashContent(`${kind}|${isOwner}|${html}${figureHtml ? `|${figureHtml}` : ""}`),
     missing: false,
     naturalHeight,
   };

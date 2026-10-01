@@ -123,6 +123,28 @@
   font-variant: small-caps;
 }
 
+/*
+ * The portrait card: a picture above the name and the chosen text below it — a wanted
+ * poster, a found object. The box is sized here, in em, and never by the picture: Fit to
+ * content measures the card before the image has decoded, when an <img> is 0 px tall, and
+ * a box that took its height from the image would fit the poster to no portrait at all.
+ * The picture is cropped into the box rather than letterboxed, as a printed portrait is.
+ */
+.dp-card[data-dp-layout="portrait"] .dp-card__portrait {
+  display: flex;
+  flex: 0 0 auto;
+  justify-content: center;
+  margin: 0 0 0.6em;
+}
+
+.dp-card[data-dp-layout="portrait"] .dp-card__portrait img {
+  inline-size: 9em;
+  block-size: 9em;
+  max-inline-size: 100%;
+  object-fit: cover;
+  border: 1px solid color-mix(in oklab, var(--dp-paper-edge) 85%, transparent);
+}
+
 .dp-card__body {
   font-size: 1em;
   flex: 1 1 auto;

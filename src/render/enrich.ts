@@ -239,10 +239,20 @@ export async function enrichFor(source: any, text: string): Promise<EnrichedCont
     rolls: true,
     embeds: true,
     relativeTo: source,
-    rollData: source?.parent?.getRollData?.() ?? {},
+    rollData: rollDataOf(source),
   });
 
   return { html: sanitise(html, isOwner), isOwner };
+}
+
+/**
+ * The data inline rolls read. An actor's or an item's own — a `[[/r 1d20 + @abilities.str.mod]]`
+ * in a biography reads that actor's, as its sheet would — and a journal page's parent's,
+ * as it always was.
+ */
+function rollDataOf(source: any): Record<string, unknown> {
+  const own = source?.documentName === "Actor" || source?.documentName === "Item";
+  return (own ? source?.getRollData?.() : source?.parent?.getRollData?.()) ?? {};
 }
 
 /**
