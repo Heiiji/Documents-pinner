@@ -51,6 +51,7 @@ describe("a pin on a whole journal", () => {
         { id: "handout", sort: 100 },
       ],
       "handout text",
+      ["handout", "notes"],
     ],
     [
       "past a page its own permission keeps from the players — on the GM's screen too",
@@ -60,6 +61,7 @@ describe("a pin on a whole journal", () => {
         { id: "handout", sort: 200 },
       ],
       "handout text",
+      ["notes", "handout"],
     ],
     [
       "nothing, when every page keeps itself from the players",
@@ -69,43 +71,33 @@ describe("a pin on a whole journal", () => {
         { id: "aside", sort: 200, own: LIMITED },
       ],
       "",
+      ["notes", "aside"],
     ],
-  ])("shows %s", async (_what, userId, pages, shown) => {
-    const tile = fakeTile({ id: "t1", uuid: "Scene.s1.Tile.t1", width: 400, height: 560 });
-    tile.flags = {
-      [MODULE_ID]: {
-        [FLAGS.PIN]: {
-          ...defaultPin(),
-          source: { ...defaultPin().source, uuid: "JournalEntry.keep" },
+  ])(
+    "shows %s, and the Studio lists its pages in that order",
+    async (_what, userId, pages, shown, listed) => {
+      const tile = fakeTile({ id: "t1", uuid: "Scene.s1.Tile.t1", width: 400, height: 560 });
+      tile.flags = {
+        [MODULE_ID]: {
+          [FLAGS.PIN]: {
+            ...defaultPin(),
+            source: { ...defaultPin().source, uuid: "JournalEntry.keep" },
+          },
         },
-      },
-    };
-    const world = installWorld({ isGM: !userId, userId, tiles: [tile] });
-    installSources(world, { journals: [journal(pages)] });
-    const { resolveCard } = await import("../src/render/ContentResolver");
+      };
+      const world = installWorld({ isGM: !userId, userId, tiles: [tile] });
+      installSources(world, { journals: [journal(pages)] });
+      const { resolveCard } = await import("../src/render/ContentResolver");
+      const { pageChoices } = await import("../src/api");
+      const pin = tile.flags[MODULE_ID][FLAGS.PIN];
 
-    const card = await resolveCard(tile.flags[MODULE_ID][FLAGS.PIN], { width: 400, height: 560 });
-    const body = new DOMParser()
-      .parseFromString(card.html, "text/html")
-      .querySelector(".dp-card__body");
+      const card = await resolveCard(pin, { width: 400, height: 560 });
+      const body = new DOMParser()
+        .parseFromString(card.html, "text/html")
+        .querySelector(".dp-card__body");
 
-    expect(body?.textContent?.trim()).toBe(shown);
-  });
-
-  it("lists its pages in the Studio in the journal's order", async () => {
-    const world = installWorld({ isGM: true });
-    installSources(world, {
-      journals: [
-        journal([
-          { id: "notes", sort: 200 },
-          { id: "handout", sort: 100 },
-        ]),
-      ],
-    });
-    const { pageChoices } = await import("../src/api");
-
-    const pin = { ...defaultPin(), source: { ...defaultPin().source, uuid: "JournalEntry.keep" } };
-
-    expect(pageChoices(pin).map((page) => page.id)).toEqual(["handout", "notes"]);
-  });
+      expect(body?.textContent?.trim()).toBe(shown);
+      expect(pageChoices(pin).map((page) => page.id)).toEqual(listed);
+    }
+  );
 });
