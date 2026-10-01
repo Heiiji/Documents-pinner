@@ -42,6 +42,7 @@ import { currentLevel } from "../effects/level";
 import { mount, overlay, write } from "../apps/OverlayRoot";
 import { tileRect, type PlacedRect } from "./transform";
 import type { LodTier } from "./lod";
+import type { EffectsLevel } from "../effects/EffectRegistry";
 import type { DpPinFlags } from "../types/dp";
 
 const log = logger("props.dom");
@@ -111,7 +112,7 @@ let generations = 0;
  * re-resolves when that changes — exactly as its look demands. A PDF page is rendered
  * at a size, so its geometry is in outright.
  */
-function contentKeyOf(entry: DomPropEntry): string {
+function contentKeyOf(entry: DomPropEntry, level: EffectsLevel): string {
   const { pin, doc } = entry;
   const size = { width: doc.width, height: doc.height };
   const { fontPx, padPx } = cardMetrics(pin.display, size);
@@ -137,7 +138,7 @@ function contentKeyOf(entry: DomPropEntry): string {
     pin.display.label,
     entry.pdf ? `${size.width}x${size.height}` : "",
     entry.tier,
-    currentLevel(),
+    level,
   ].join("|");
 }
 
@@ -148,8 +149,14 @@ function contentKeyOf(entry: DomPropEntry): string {
  * items, and a caller-side diff would be one more place for the card and the placeable
  * to drift apart — which on this tier is a prop left behind on a scene it was deleted
  * from.
+ *
+ * `level` is the pass's, read once by the caller: per card it cost a settings read and a
+ * fresh `matchMedia` for every prop on the scene, every pass.
  */
-export function syncDomTier(entries: readonly DomPropEntry[]): void {
+export function syncDomTier(
+  entries: readonly DomPropEntry[],
+  level: EffectsLevel = currentLevel()
+): void {
   const live = new Set<string>();
 
   for (const entry of entries) {
@@ -162,7 +169,7 @@ export function syncDomTier(entries: readonly DomPropEntry[]): void {
     // reader costs anyway.
     if (entry.tier === "L0") continue;
     live.add(entry.id);
-    upsert(entry);
+    upsert(entry, level);
   }
 
   for (const [id, prop] of [...props]) {
@@ -172,7 +179,7 @@ export function syncDomTier(entries: readonly DomPropEntry[]): void {
   }
 }
 
-function upsert(entry: DomPropEntry): void {
+function upsert(entry: DomPropEntry, level: EffectsLevel): void {
   let prop = props.get(entry.id);
 
   let mounted = false;
@@ -203,7 +210,7 @@ function upsert(entry: DomPropEntry): void {
   applyAlpha(prop, entry.alpha);
   if (mounted) arrive(prop.element, entry);
 
-  const key = contentKeyOf(entry);
+  const key = contentKeyOf(entry, level);
   if (prop.key === key) return;
   prop.key = key;
 

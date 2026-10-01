@@ -174,23 +174,6 @@ class Manager {
   /** Uniform amount every prop is demoted by, after the perf guard fires. */
   #globalDemotions = 0;
 
-  /**
-   * Whether props are drawn into the scene or over it.
-   *
-   * Two independent reasons to fall back: the client cannot rasterise at all (WebKit
-   * taints a `foreignObject` canvas), or the GM chose the compatibility path. Either
-   * way `DomPropTier` takes over — it is never "no props at all", which is what this
-   * used to mean.
-   */
-  #domMode(): boolean {
-    return rasterisationAvailable() === false || settings.get("rendering") === "dom";
-  }
-
-  /** Whether THIS prop has to be drawn as DOM. See `drawsAsDom`. */
-  #domModeFor(pin: any): boolean {
-    return drawsAsDom(pin);
-  }
-
   #isPdf(pin: any): boolean {
     return isPdfPin(pin);
   }
@@ -364,6 +347,7 @@ class Manager {
     if (!canvas?.ready) return;
 
     const tokens = visibleTokens();
+    const policy = domPolicy();
 
     for (const record of this.#records.values()) {
       const tile = canvas.tiles?.get(record.id);
@@ -373,7 +357,7 @@ class Manager {
       // The reader dims its own prop; leaving that alone keeps the two from fighting.
       if (this.#focusedId === record.id) continue;
 
-      const dom = this.#domModeFor(pin);
+      const dom = drawsAsDomUnder(policy, pin);
       const alpha = this.#alphaFor(tile, pin, tokens);
       if (dom) setDomPropAlpha(record.id, alpha);
       if (tile.mesh) this.#writeMeshAlpha(tile, this.#meshAlphaFor(record, alpha, dom));
@@ -459,7 +443,7 @@ class Manager {
   setHover(id: string, hovering: boolean): void {
     const tile = cv()?.tiles?.get(id);
     const pin = tile ? readPin(tile.document) : null;
-    if (!tile?.mesh || !pin || this.#domModeFor(pin)) return;
+    if (!tile?.mesh || !pin || drawsAsDom(pin)) return;
     const rest = tile.document.texture?.tint ?? 0xffffff;
     tile.mesh.tint = hovering ? 0xfff1dc : rest;
   }
@@ -564,7 +548,9 @@ class Manager {
     const centre = { x: viewport.x + viewport.width / 2, y: viewport.y + viewport.height / 2 };
     const resolution = rendererResolution();
     const queue: { id: string; priority: number }[] = [];
-    const anyDom = this.#domMode();
+    // Whether props are drawn into the scene or over it, read once for the whole pass.
+    const policy = domPolicy();
+    const anyDom = policy.html;
     const domEntries: DomPropEntry[] = [];
     const tokens = anyDom ? visibleTokens() : [];
     /** Props bound from the cache this pass, whose arrival is decided after the alpha. */
@@ -595,7 +581,7 @@ class Manager {
       // half are mush looks broken, one that is uniformly softer looks deliberate.
       for (let i = 0; i < this.#globalDemotions; i++) tier = demote(tier);
 
-      const dom = this.#domModeFor(pin);
+      const dom = drawsAsDomUnder(policy, pin);
 
       const visible = tile.isVisible === true;
       const revealing = visible && !record.wasVisible;
@@ -650,7 +636,7 @@ class Manager {
     // Always reconcile: a GM switching the rendering setting back to canvas mid-session
     // would otherwise leave every mounted card in the overlay forever, on top of the
     // meshes now drawing the same props. An empty list clears them all.
-    syncDomTier(domEntries);
+    syncDomTier(domEntries, this.#level);
     this.#queue = queue.sort((a, b) => a.priority - b.priority);
     this.applyAlpha();
     for (const [record, tile] of arrivals) this.#arrive(record, tile, false);
@@ -1236,10 +1222,33 @@ function overlaps(tile: any, token: any): boolean {
  * the original.
  */
 export function drawsAsDom(pin: DpPinFlags): boolean {
-  if (settings.get("rendering") === "dom") return true;
-  if (rasterisationAvailable() !== false) return false;
+  return drawsAsDomUnder(domPolicy(), pin);
+}
+
+/**
+ * How this client draws props, read once per pass rather than once per prop.
+ *
+ * Two independent reasons to fall back to DOM: the GM chose the compatibility path, or
+ * the client cannot rasterise HTML at all (WebKit taints a `foreignObject` canvas).
+ * Either way `DomPropTier` takes over — it is never "no props at all". Each answer costs
+ * a settings read — core builds a fresh `Setting` document for every client-scope read —
+ * and asked per prop, that was one per prop on every LOD pass and every token move.
+ */
+interface DomPolicy {
+  /** The GM chose DOM rendering: everything is DOM. */
+  all: boolean;
+  /** HTML cannot reach a texture on this client, or everything is DOM. */
+  html: boolean;
+}
+
+function domPolicy(): DomPolicy {
+  const all = settings.get("rendering") === "dom";
+  return { all, html: all || rasterisationAvailable() === false };
+}
+
+function drawsAsDomUnder(policy: DomPolicy, pin: DpPinFlags): boolean {
   // HTML cannot reach a texture on this client, but a PDF still can.
-  return !isPdfPin(pin);
+  return policy.all || (policy.html && !isPdfPin(pin));
 }
 
 function isPdfPin(pin: DpPinFlags): boolean {
