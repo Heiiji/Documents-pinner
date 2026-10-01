@@ -42,6 +42,7 @@ import { currentLevel } from "../effects/level";
 import { mount, overlay, write } from "../apps/OverlayRoot";
 import { tileRect, type PlacedRect } from "./transform";
 import type { LodTier } from "./lod";
+import type { EffectsLevel } from "../effects/EffectRegistry";
 import type { DpPinFlags } from "../types/dp";
 
 const log = logger("props.dom");
@@ -69,7 +70,7 @@ interface DomProp {
   element: HTMLElement;
   /** The content key the element currently shows, so a re-sync is free. */
   key: string;
-  /** Bumped on every resolve, so a slow one cannot overwrite a newer card. */
+  /** The resolve this card is waiting for, so a slow one cannot overwrite a newer card. */
   generation: number;
   /** The geometry last written, so a LOD pass after a pan writes nothing. */
   placedAt: PlacedRect | null;
@@ -87,6 +88,16 @@ const RETRIES = 2;
 const props = new Map<string, DomProp>();
 
 /**
+ * Every resolve's number, across every card the tier has ever mounted.
+ *
+ * One counter for the tier, never one per card. Per card it started again at 1 for a new
+ * card under the same tile id — and a redraw of the same scene (in v14, switching the
+ * viewed Level is one) clears the cards while a resolve is in flight. The old resolve
+ * then matched the new card's first and wrote its older HTML over it.
+ */
+let generations = 0;
+
+/**
  * What the card's CONTENT depends on.
  *
  * Geometry is deliberately absent for HTML: the card fills its box and CSS re-lays it
@@ -101,7 +112,7 @@ const props = new Map<string, DomProp>();
  * re-resolves when that changes — exactly as its look demands. A PDF page is rendered
  * at a size, so its geometry is in outright.
  */
-function contentKeyOf(entry: DomPropEntry): string {
+function contentKeyOf(entry: DomPropEntry, level: EffectsLevel): string {
   const { pin, doc } = entry;
   const size = { width: doc.width, height: doc.height };
   const { fontPx, padPx } = cardMetrics(pin.display, size);
@@ -127,7 +138,7 @@ function contentKeyOf(entry: DomPropEntry): string {
     pin.display.label,
     entry.pdf ? `${size.width}x${size.height}` : "",
     entry.tier,
-    currentLevel(),
+    level,
   ].join("|");
 }
 
@@ -138,8 +149,14 @@ function contentKeyOf(entry: DomPropEntry): string {
  * items, and a caller-side diff would be one more place for the card and the placeable
  * to drift apart — which on this tier is a prop left behind on a scene it was deleted
  * from.
+ *
+ * `level` is the pass's, read once by the caller: per card it cost a settings read and a
+ * fresh `matchMedia` for every prop on the scene, every pass.
  */
-export function syncDomTier(entries: readonly DomPropEntry[]): void {
+export function syncDomTier(
+  entries: readonly DomPropEntry[],
+  level: EffectsLevel = currentLevel()
+): void {
   const live = new Set<string>();
 
   for (const entry of entries) {
@@ -152,7 +169,7 @@ export function syncDomTier(entries: readonly DomPropEntry[]): void {
     // reader costs anyway.
     if (entry.tier === "L0") continue;
     live.add(entry.id);
-    upsert(entry);
+    upsert(entry, level);
   }
 
   for (const [id, prop] of [...props]) {
@@ -162,7 +179,7 @@ export function syncDomTier(entries: readonly DomPropEntry[]): void {
   }
 }
 
-function upsert(entry: DomPropEntry): void {
+function upsert(entry: DomPropEntry, level: EffectsLevel): void {
   let prop = props.get(entry.id);
 
   let mounted = false;
@@ -193,11 +210,12 @@ function upsert(entry: DomPropEntry): void {
   applyAlpha(prop, entry.alpha);
   if (mounted) arrive(prop.element, entry);
 
-  const key = contentKeyOf(entry);
+  const key = contentKeyOf(entry, level);
   if (prop.key === key) return;
   prop.key = key;
 
-  const generation = ++prop.generation;
+  const generation = ++generations;
+  prop.generation = generation;
   const size = { width: entry.doc.width, height: entry.doc.height };
   void resolveCard(entry.pin, size, { tier: entry.tier, baked: false })
     .then((card) => {

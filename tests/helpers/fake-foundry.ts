@@ -876,6 +876,18 @@ export function installWorld(world: FakeWorld = {}): InstalledWorld {
         interface: "AUDIO.CHANNELS.INTERFACE.label",
       },
       KEYBINDING_PRECEDENCE: { PRIORITY: 0, NORMAL: 1, DEFERRED: 2 },
+      // TYPES, common/constants.d.mts:582-612. The fake canvas's grid states no `type`,
+      // which the module reads as square, as it did before it asked.
+      GRID_TYPES: { GRIDLESS: 0, SQUARE: 1, HEXODDR: 2, HEXEVENR: 3, HEXODDQ: 4, HEXEVENQ: 5 },
+      // TYPES, common/constants.d.mts:667-754: the single modes and the four-way aliases,
+      // not the eight one-corner and one-side modes, which nothing here combines.
+      GRID_SNAPPING_MODES: {
+        CENTER: 0x1,
+        EDGE_MIDPOINT: 0x2,
+        VERTEX: 0xf0,
+        CORNER: 0xf00,
+        SIDE_MIDPOINT: 0xf000,
+      },
       // TYPES, common/constants.d.mts (USER_ROLES :1258+, DOCUMENT_OWNERSHIP_LEVELS).
       USER_ROLES,
       DOCUMENT_OWNERSHIP_LEVELS: OWNERSHIP_LEVELS,

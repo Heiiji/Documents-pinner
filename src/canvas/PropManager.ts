@@ -60,13 +60,13 @@ import {
 import { resolveCard } from "../render/ContentResolver";
 import { renderPdfPage } from "../render/PdfPage";
 import { pdfSourceForPin } from "../sources/describe";
-import { bakeEffects, copyCanvas } from "../render/BakeEffects";
+import { bakeEffects, clearBakeCache, copyCanvas } from "../render/BakeEffects";
 import { dressing } from "../effects/EffectRegistry";
 import { svgDocument } from "../render/CardTemplate";
 import { inlineFonts, inlineImages } from "../render/AssetInliner";
 import { TextureCache, cacheKey } from "../render/TextureCache";
 import { currentLevel, frameCap, sampleFrame, sampledFps } from "../effects/level";
-import { findPreset } from "../effects/preset-library";
+import { findPreset, userPresets } from "../effects/preset-library";
 import {
   clearDomTier,
   invalidateDomProps,
@@ -83,11 +83,11 @@ const log = logger("props");
  * The frame time above which the scene counts as struggling.
  *
  * 45 fps rather than 60: a scene that dips below 60 on a wheel scroll is normal, and one
- * that holds under 45 for a solid second is not going to recover on its own.
+ * that samples under 45 two seconds running is not going to recover on its own.
  */
 export const DEGRADE_FRAME_MS = 1000 / 45;
 
-/** The frame time past which the guard counts a frame as slow: 3/4 of the cap's rate. */
+/** The frame time past which the guard counts a sample as slow: 3/4 of the cap's rate. */
 export function degradeFrameMs(cap: number): number {
   return cap >= 60 ? DEGRADE_FRAME_MS : 1000 / (0.75 * Math.max(1, cap));
 }
@@ -129,6 +129,10 @@ interface PropRecord {
 }
 
 class Manager {
+  constructor() {
+    settings.onRedrawSetting((key) => this.onSettingChanged(key));
+  }
+
   #records = new Map<string, PropRecord>();
   #cache = new TextureCache();
   #matrix: Mat | null = null;
@@ -173,23 +177,8 @@ class Manager {
   #peeking = false;
   /** Uniform amount every prop is demoted by, after the perf guard fires. */
   #globalDemotions = 0;
-
-  /**
-   * Whether props are drawn into the scene or over it.
-   *
-   * Two independent reasons to fall back: the client cannot rasterise at all (WebKit
-   * taints a `foreignObject` canvas), or the GM chose the compatibility path. Either
-   * way `DomPropTier` takes over — it is never "no props at all", which is what this
-   * used to mean.
-   */
-  #domMode(): boolean {
-    return rasterisationAvailable() === false || settings.get("rendering") === "dom";
-  }
-
-  /** Whether THIS prop has to be drawn as DOM. See `drawsAsDom`. */
-  #domModeFor(pin: any): boolean {
-    return drawsAsDom(pin);
-  }
+  /** What each user preset said when the props last drew from it. See `onSettingChanged`. */
+  #presets = presetSnapshot();
 
   #isPdf(pin: any): boolean {
     return isPdfPin(pin);
@@ -284,7 +273,12 @@ class Manager {
     const affected = [...this.#records.values()].filter((record) =>
       this.#referencesSource(record, uuid)
     );
+    this.#forget(affected, uuid);
+    this.#scheduleLod(DEFAULTS.editDebounce);
+  }
 
+  /** Drop what these props were drawn from, on both tiers, so the next pass redraws them. */
+  #forget(affected: PropRecord[], uuid?: string): void {
     for (const record of affected) {
       this.#restore(record);
       // Forget the content signal so the next pass builds a key this cache cannot serve.
@@ -295,7 +289,7 @@ class Manager {
 
     // Both directions: a pin on a whole JournalEntry must be invalidated by an edit to
     // one of its PAGES, whose uuid is longer than the entry's.
-    const sources = new Set<string>([uuid]);
+    const sources = new Set<string>(uuid ? [uuid] : []);
     for (const record of affected) {
       const source = this.#sourceUuidOf(record);
       if (source) sources.add(source);
@@ -308,7 +302,32 @@ class Manager {
         if (key.startsWith(`${source}|`)) this.#failedKeys.delete(key);
       }
     }
-    this.#scheduleLod(DEFAULTS.editDebounce);
+  }
+
+  /**
+   * A setting the props are drawn from changed: redraw now, not at the next pan.
+   *
+   * The rendering path, the effects level and the VRAM budget are all read by the next
+   * pass. A user preset is not — a card's key names its preset, not what the preset says —
+   * so the props wearing one that changed are dropped first. Only those: the Preset Studio
+   * saves on every committed step of a slider, the setting is the world's, and dropping
+   * every user-preset prop redrew them all on every client at each step. A preset saved,
+   * removed, or added under an id a prop already names counts as changed; a core preset
+   * never does.
+   */
+  onSettingChanged(key: settings.SettingKey): void {
+    if (key === "userPresets") {
+      const before = this.#presets;
+      const after = presetSnapshot();
+      this.#presets = after;
+      this.#forget(
+        [...this.#records.values()].filter((record) => {
+          const id = readPin(cv()?.tiles?.get(record.id)?.document)?.effect.id;
+          return id !== undefined && before.get(id) !== after.get(id);
+        })
+      );
+    }
+    this.refresh();
   }
 
   /** The source uuid a prop draws from, which is the first field of its cache key. */
@@ -364,6 +383,7 @@ class Manager {
     if (!canvas?.ready) return;
 
     const tokens = visibleTokens();
+    const policy = domPolicy();
 
     for (const record of this.#records.values()) {
       const tile = canvas.tiles?.get(record.id);
@@ -373,7 +393,7 @@ class Manager {
       // The reader dims its own prop; leaving that alone keeps the two from fighting.
       if (this.#focusedId === record.id) continue;
 
-      const dom = this.#domModeFor(pin);
+      const dom = drawsAsDomUnder(policy, pin);
       const alpha = this.#alphaFor(tile, pin, tokens);
       if (dom) setDomPropAlpha(record.id, alpha);
       if (tile.mesh) this.#writeMeshAlpha(tile, this.#meshAlphaFor(record, alpha, dom));
@@ -459,7 +479,7 @@ class Manager {
   setHover(id: string, hovering: boolean): void {
     const tile = cv()?.tiles?.get(id);
     const pin = tile ? readPin(tile.document) : null;
-    if (!tile?.mesh || !pin || this.#domModeFor(pin)) return;
+    if (!tile?.mesh || !pin || drawsAsDom(pin)) return;
     const rest = tile.document.texture?.tint ?? 0xffffff;
     tile.mesh.tint = hovering ? 0xfff1dc : rest;
   }
@@ -475,8 +495,7 @@ class Manager {
   // -------------------------------------------------------------------------
 
   #onFrame(): void {
-    const started = performance.now();
-    sampleFrame(started);
+    const sampled = sampleFrame(performance.now());
 
     const matrix = stageMatrix();
     if (!this.#matrix || !sameMat(matrix, this.#matrix)) {
@@ -489,6 +508,11 @@ class Manager {
     // Nothing to demote on a scene without props, and a notice blaming pins there — which
     // a slow scene of any kind used to get — sends a GM looking in the wrong place.
     if (!this.#autoDegrade || !this.#records.size) return;
+
+    // Once per new sample, not once per frame. The sample holds for a second, so stepping
+    // on every frame counted one slow second as sixty consecutive slow frames — and one
+    // was enough to demote every prop for the rest of the scene.
+    if (!sampled) return;
 
     // The SCENE's frame time, not ours. This used to time the six lines above it — a
     // counter increment, a matrix read and six float compares, a few microseconds against
@@ -560,7 +584,9 @@ class Manager {
     const centre = { x: viewport.x + viewport.width / 2, y: viewport.y + viewport.height / 2 };
     const resolution = rendererResolution();
     const queue: { id: string; priority: number }[] = [];
-    const anyDom = this.#domMode();
+    // Whether props are drawn into the scene or over it, read once for the whole pass.
+    const policy = domPolicy();
+    const anyDom = policy.html;
     const domEntries: DomPropEntry[] = [];
     const tokens = anyDom ? visibleTokens() : [];
     /** Props bound from the cache this pass, whose arrival is decided after the alpha. */
@@ -591,7 +617,7 @@ class Manager {
       // half are mush looks broken, one that is uniformly softer looks deliberate.
       for (let i = 0; i < this.#globalDemotions; i++) tier = demote(tier);
 
-      const dom = this.#domModeFor(pin);
+      const dom = drawsAsDomUnder(policy, pin);
 
       const visible = tile.isVisible === true;
       const revealing = visible && !record.wasVisible;
@@ -646,7 +672,7 @@ class Manager {
     // Always reconcile: a GM switching the rendering setting back to canvas mid-session
     // would otherwise leave every mounted card in the overlay forever, on top of the
     // meshes now drawing the same props. An empty list clears them all.
-    syncDomTier(domEntries);
+    syncDomTier(domEntries, this.#level);
     this.#queue = queue.sort((a, b) => a.priority - b.priority);
     this.applyAlpha();
     for (const [record, tile] of arrivals) this.#arrive(record, tile, false);
@@ -1112,6 +1138,14 @@ export function propManager(): Manager {
 /** Release everything. Called on `canvasTearDown` and when the module is disabled. */
 export function teardownProps(): void {
   manager?.stop();
+  // The decoded grain and stains, one set per seed, intensity and preset a GM tried on a
+  // PDF: bounded by editing, not by the world, and never released before this.
+  clearBakeCache();
+}
+
+/** Each user preset as it stands, by id, to tell which ones a save changed. */
+function presetSnapshot(): Map<string, string> {
+  return new Map(userPresets().map((preset) => [preset.id, JSON.stringify(preset)]));
 }
 
 /** What the DOM tier needs to play a reveal: the preset's animation and duration. */
@@ -1232,10 +1266,33 @@ function overlaps(tile: any, token: any): boolean {
  * the original.
  */
 export function drawsAsDom(pin: DpPinFlags): boolean {
-  if (settings.get("rendering") === "dom") return true;
-  if (rasterisationAvailable() !== false) return false;
+  return drawsAsDomUnder(domPolicy(), pin);
+}
+
+/**
+ * How this client draws props, read once per pass rather than once per prop.
+ *
+ * Two independent reasons to fall back to DOM: the GM chose the compatibility path, or
+ * the client cannot rasterise HTML at all (WebKit taints a `foreignObject` canvas).
+ * Either way `DomPropTier` takes over — it is never "no props at all". Each answer costs
+ * a settings read — core builds a fresh `Setting` document for every client-scope read —
+ * and asked per prop, that was one per prop on every LOD pass and every token move.
+ */
+interface DomPolicy {
+  /** The GM chose DOM rendering: everything is DOM. */
+  all: boolean;
+  /** HTML cannot reach a texture on this client, or everything is DOM. */
+  html: boolean;
+}
+
+function domPolicy(): DomPolicy {
+  const all = settings.get("rendering") === "dom";
+  return { all, html: all || rasterisationAvailable() === false };
+}
+
+function drawsAsDomUnder(policy: DomPolicy, pin: DpPinFlags): boolean {
   // HTML cannot reach a texture on this client, but a PDF still can.
-  return !isPdfPin(pin);
+  return policy.all || (policy.html && !isPdfPin(pin));
 }
 
 function isPdfPin(pin: DpPinFlags): boolean {

@@ -16,7 +16,7 @@
 
 import { DEFAULTS, MODULE_ID } from "./const";
 import { g } from "./fvtt";
-import { setLogLevel, type LogLevel } from "./log";
+import { logger, setLogLevel, type LogLevel } from "./log";
 import { DEFAULT_PRESET_ID } from "./effects/presets/core-presets";
 import type { DpAudience } from "./types/dp";
 
@@ -291,6 +291,39 @@ export async function set<K extends SettingKey>(key: K, value: SettingTypes[K]):
   }
 }
 
+/**
+ * The settings a prop is drawn from, and who hears that one changed.
+ *
+ * Without this a GM's preset edit, or a player switching the rendering path or the
+ * effects level, reached the map only at whatever LOD pass happened next — a zoom, a
+ * pan, an edit — and a preset edit not even then, since a card's key names its preset
+ * and not what the preset says. The listener is injected rather than imported for the
+ * same reason as `registerPresetMenu`'s opener: the prop manager reads this file.
+ */
+const REDRAWN_BY: ReadonlySet<SettingKey> = new Set<SettingKey>([
+  "rendering",
+  "effectsLevel",
+  "vramBudgetMb",
+  "userPresets",
+]);
+const redrawListeners = new Set<(key: SettingKey) => void>();
+
+/** Hear about a change to a setting the props are drawn from. */
+export function onRedrawSetting(listener: (key: SettingKey) => void): void {
+  redrawListeners.add(listener);
+}
+
+function redraw(key: SettingKey): void {
+  for (const listener of redrawListeners) {
+    // Inside core's settings write: a throw here must not fail the write.
+    try {
+      listener(key);
+    } catch (error) {
+      logger("settings").warn(`could not redraw the props after ${key} changed`, error);
+    }
+  }
+}
+
 /** Register every setting. Call once, at `init`. */
 export function register(): void {
   const settings = g()?.settings;
@@ -311,6 +344,7 @@ export function register(): void {
       ...(def.choices ? { choices: def.choices } : {}),
       ...(def.range ? { range: def.range } : {}),
       ...(key === "logLevel" ? { onChange: applyLogLevel } : {}),
+      ...(REDRAWN_BY.has(key) ? { onChange: () => redraw(key) } : {}),
     });
   }
 

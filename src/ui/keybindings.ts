@@ -238,7 +238,27 @@ export { bindingName };
 export function setPeek(active: boolean): void {
   document.getElementById("board")?.parentElement?.classList.toggle(PEEK_CLASS, active);
   document.getElementById("documents-pinner-overlay")?.classList.toggle(PEEK_CLASS, active);
+  // Held only while a peek is: an ordinary blur has nothing to release.
+  if (active) {
+    window.addEventListener("blur", releasePeek);
+    document.addEventListener("visibilitychange", releasePeek);
+  } else {
+    window.removeEventListener("blur", releasePeek);
+    document.removeEventListener("visibilitychange", releasePeek);
+  }
   Hooks.callAll(`${MODULE_ID}.peek`, active);
+}
+
+/**
+ * Let go of the peek when the page loses the keyboard.
+ *
+ * Alt-Tab to another application releases Alt THERE: the key-up never reaches this page,
+ * and core's keyboard, which resets its held keys when the tab is hidden, emits no key-up
+ * of its own. So every prop stayed faded on the player's return until Alt was pressed
+ * again.
+ */
+function releasePeek(): void {
+  setPeek(false);
 }
 
 declare const Hooks: any;

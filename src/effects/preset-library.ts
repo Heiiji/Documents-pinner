@@ -24,9 +24,20 @@ export function allPresets(): DpPreset[] {
   return [...CORE_PRESETS, ...userPresets()];
 }
 
+/**
+ * The last stored value validated, and what it validated to.
+ *
+ * Keyed on the stored array itself: core casts a world setting's value once, when the
+ * Setting document initialises, and again on every update — so the same array means the
+ * same presets, and a save is a new array. Without it every `findPreset` re-validated
+ * every user preset, and the LOD pass asks once per prop.
+ */
+let validated: { raw: unknown[]; presets: DpPreset[] } | null = null;
+
 export function userPresets(): DpPreset[] {
   const raw = settings.get("userPresets");
   if (!Array.isArray(raw)) return [];
+  if (validated?.raw === raw) return [...validated.presets];
 
   const out: DpPreset[] = [];
   for (const entry of raw) {
@@ -35,7 +46,8 @@ export function userPresets(): DpPreset[] {
     // still in the setting, so a later version that understands it can recover it.
     if (preset) out.push({ ...preset, author: "user" });
   }
-  return out;
+  validated = { raw, presets: out };
+  return [...out];
 }
 
 export function findPreset(id: string): DpPreset | null {

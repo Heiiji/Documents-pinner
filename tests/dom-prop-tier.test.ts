@@ -183,6 +183,33 @@ describe("syncDomTier", () => {
     expect(resolveCard).toHaveBeenCalledTimes(2);
   });
 
+  it("never lets a resolve from before a redraw land on the new card for the same tile", async () => {
+    let land = () => {};
+    vi.mocked(resolveCard).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          land = () =>
+            resolve({
+              html: '<div class="dp-card">before the redraw</div>',
+              title: "Letter",
+              readable: true,
+              contentHash: "old",
+              missing: false,
+              naturalHeight: null,
+            });
+        })
+    );
+    syncDomTier([entry()]);
+    // The same scene drawn again — a v14 Level switch — while that resolve is in flight.
+    clearDomTier();
+    syncDomTier([entry()]);
+    await settle();
+
+    land();
+    await settle();
+    expect(overlay()!.querySelector(".dp-prop")!.innerHTML).toContain("letter");
+  });
+
   it("re-positions without re-resolving when only the geometry moved", async () => {
     syncDomTier([entry()]);
     await settle();

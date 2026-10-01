@@ -97,37 +97,44 @@ export function isHeavier(a: LodTier, b: LodTier): boolean {
 // ---------------------------------------------------------------------------
 
 export interface PerfState {
-  /** Consecutive frames over budget. Reset by a single frame under it. */
+  /** Consecutive samples over budget. Reset by a single sample under it. */
   over: number;
   /** Whether the module has already degraded and told the user. */
   degraded: boolean;
 }
 
 export const PERF_BUDGET_MS = 4;
-export const PERF_FRAMES = 60;
+/**
+ * How many consecutive one-second samples must be slow before the guard fires.
+ *
+ * Samples, not frames. The guard used to step on every frame with the last sample's rate,
+ * which holds for a whole second — so one slow sample was sixty "consecutive slow frames"
+ * and fired on its own: a scene-load hitch, or a tab-away folded into the window.
+ */
+export const PERF_SAMPLES = 2;
 
 export function initialPerf(): PerfState {
   return { over: 0, degraded: false };
 }
 
 /**
- * Advance the guard by one frame.
+ * Advance the guard by one frame-rate sample.
  *
- * CONSECUTIVE frames rather than an average: one expensive frame while a texture
- * uploads is normal and must not trip anything, whereas a solid second of them is a
- * scene that will not hold its frame rate. A single good frame resets the count, so
- * the guard measures sustained cost rather than accumulating a grudge.
+ * CONSECUTIVE samples rather than an average: one slow second while a texture uploads
+ * or a scene loads is normal and must not trip anything, whereas two in a row is a scene
+ * that will not hold its frame rate. A single good sample resets the count, so the guard
+ * measures sustained cost rather than accumulating a grudge.
  */
 export function stepPerf(
   state: PerfState,
   frameMs: number,
   budgetMs = PERF_BUDGET_MS,
-  frames = PERF_FRAMES
+  samples = PERF_SAMPLES
 ): { state: PerfState; degrade: boolean } {
   if (frameMs <= budgetMs) return { state: { ...state, over: 0 }, degrade: false };
 
   const over = state.over + 1;
-  if (over < frames || state.degraded) return { state: { ...state, over }, degrade: false };
+  if (over < samples || state.degraded) return { state: { ...state, over }, degrade: false };
 
   // Degrade once and say so once. Repeating either would turn a slow scene into a
   // stream of notifications, which is worse than the slow scene.

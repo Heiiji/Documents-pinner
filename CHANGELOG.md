@@ -127,6 +127,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A glance at another browser tab no longer shrinks every prop on the map.** The frame
+  rate the module watches counted the seconds a hidden tab draws nothing as slow frames,
+  so a player back from their character sheet was told pins were costing too much, and
+  every prop dropped a detail level for the rest of the scene — the smallest vanished. A
+  pause is no longer counted, and one slow second — a scene loading, say — no longer
+  trips it either: it now takes two in a row.
+- **Effects on *Auto* no longer switch off and on by themselves.** A machine running near
+  40 fps read as slow on one pass and fast on the next, so motion stopped and started and
+  every card on the scene was redrawn at each flip. Once *Auto* has reduced the effects,
+  it now waits for the frame rate to climb clear of the line — 46 fps at the default cap —
+  before bringing them back.
+- **A text prop could go back to what it said before the scene redrew.** A card still
+  being prepared when the scene was drawn again — switching the viewed level does that —
+  could land on the new card for the same prop and stay there, with the older text, until
+  something else changed. It is dropped now.
+- **Alt-Tab no longer leaves every prop faded.** A player holding Alt to peek who switched
+  to another application let go of Alt there, where the page never heard it, so the props
+  stayed see-through on their return until Alt was pressed again. The peek now ends when
+  the window loses focus.
+- **Editing a preset in the Preset Studio now changes the props that wear it.** A saved
+  edit reached no prop on the map, on any client, until something else made it redraw — a
+  zoom across a detail level, an edit to the prop, a reload. Every client redraws them as
+  you save. Changing *Prop rendering* or *Effect level*, or lowering the *Texture memory
+  budget*, likewise takes effect at once instead of at the next pan.
+- **Placing a pin on a gridless or a hex map no longer jumps in square steps.** The ghost
+  snapped to half a square of a grid the scene does not have: on a gridless map it moved
+  in 50-pixel steps, and on a hex map it landed between the hexes, unless you held the
+  free-placement key. It now follows the pointer freely on a gridless map, and snaps to
+  the hexes' centres, corners and edge midpoints on a hex map.
 - **"Reveal all" showed a private note to the whole table.** A pin narrowed to one player
   and hidden for a beat went back to that player when revealed with `Space` or the eye —
   and to everyone when revealed from the Pinboard's bulk bar or "Reveal all". Every reveal

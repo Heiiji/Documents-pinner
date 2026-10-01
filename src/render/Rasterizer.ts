@@ -222,6 +222,9 @@ export async function rasterise(
   const pixelWidth = Math.max(1, Math.round(width * scale));
   const pixelHeight = Math.max(1, Math.round(height * scale));
 
+  // Outside the try, so a failed upload can free what it created: `Texture.from` caches by
+  // the canvas, and a texture abandoned here held up to a 2048-px canvas for the session.
+  let texture: any = null;
   try {
     const image = await decodeSvg(svg);
     const canvas = new OffscreenCanvas(pixelWidth, pixelHeight);
@@ -230,7 +233,7 @@ export async function rasterise(
 
     context.drawImage(image, 0, 0, pixelWidth, pixelHeight);
 
-    const texture = PIXI.Texture.from(canvas, {
+    texture = PIXI.Texture.from(canvas, {
       // The RENDERER's resolution, not the display's: Foundry runs its renderer at a
       // ratio the user controls, and sizing from devicePixelRatio would allocate four
       // times the VRAM for pixels Foundry never puts on screen.
@@ -252,6 +255,7 @@ export async function rasterise(
     };
   } catch (error) {
     log.warn(`rasterisation failed:`, error);
+    releaseTexture(texture);
     // One failure is a bad card; a run of them means the client cannot rasterise, and
     // the run is counted rather than read out of the error text — see FAILURE_LATCH.
     consecutiveFailures += 1;
