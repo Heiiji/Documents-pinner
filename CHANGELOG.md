@@ -127,6 +127,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A glance at another browser tab no longer shrinks every prop on the map.** The frame
+  rate the module watches counted the seconds a hidden tab draws nothing as slow frames,
+  so a player back from their character sheet was told pins were costing too much, and
+  every prop dropped a detail level for the rest of the scene — the smallest vanished. A
+  pause is no longer counted, and one slow second — a scene loading, say — no longer
+  trips it either: it now takes two in a row.
 - **"Reveal all" showed a private note to the whole table.** A pin narrowed to one player
   and hidden for a beat went back to that player when revealed with `Space` or the eye —
   and to everyone when revealed from the Pinboard's bulk bar or "Reveal all". Every reveal

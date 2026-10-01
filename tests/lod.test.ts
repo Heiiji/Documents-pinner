@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { LOD, RES_TIERS } from "../src/const";
 import {
   PERF_BUDGET_MS,
-  PERF_FRAMES,
+  PERF_SAMPLES,
   TIER_ORDER,
   demote,
   initialPerf,
@@ -139,7 +139,7 @@ describe("stepPerf", () => {
 
   it("resets on one good frame, so it measures sustained cost not a grudge", () => {
     let state = initialPerf();
-    for (let i = 0; i < PERF_FRAMES - 1; i++) state = stepPerf(state, overBudget).state;
+    for (let i = 0; i < PERF_SAMPLES - 1; i++) state = stepPerf(state, overBudget).state;
     state = stepPerf(state, 1).state;
     expect(state.over).toBe(0);
   });
@@ -147,7 +147,7 @@ describe("stepPerf", () => {
   it("degrades after a sustained run over budget", () => {
     let state = initialPerf();
     let degraded = false;
-    for (let i = 0; i < PERF_FRAMES; i++) {
+    for (let i = 0; i < PERF_SAMPLES; i++) {
       const step = stepPerf(state, overBudget);
       state = step.state;
       degraded ||= step.degrade;
@@ -158,7 +158,7 @@ describe("stepPerf", () => {
   it("degrades and warns exactly once, however long the scene stays slow", () => {
     let state = initialPerf();
     let degradations = 0;
-    for (let i = 0; i < PERF_FRAMES * 5; i++) {
+    for (let i = 0; i < PERF_SAMPLES * 5; i++) {
       const step = stepPerf(state, overBudget);
       state = step.state;
       if (step.degrade) degradations++;

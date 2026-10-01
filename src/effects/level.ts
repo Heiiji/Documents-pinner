@@ -20,24 +20,48 @@ import { cv, g } from "../fvtt";
 import * as settings from "../settings";
 import { resolveAutoLevel, type EffectsLevel } from "./EffectRegistry";
 
+/**
+ * A gap between two frames longer than this is a pause, not a slow frame.
+ *
+ * The ticker runs on `requestAnimationFrame`, which the browser stops while the tab is
+ * hidden or the window occluded. Folded into the window, two seconds on a character sheet
+ * in another tab read as two seconds of one frame each — a client holding 60 fps sampled
+ * 44, and the perf guard demoted every prop on the scene for the rest of it.
+ */
+export const PAUSE_MS = 250;
+
 /** A rolling frame-rate sample, so `auto` reflects the machine rather than a guess. */
 let fps = 60;
 let frames = 0;
 let windowStart = 0;
+let lastFrame = 0;
 
-/** Feed one frame. Called from the single ticker in `PropManager`. */
-export function sampleFrame(now: number): void {
-  if (!windowStart) windowStart = now;
+/**
+ * Feed one frame. Called from the single ticker in `PropManager`.
+ *
+ * Returns whether this frame closed a sample window, so a reader that acts on the rate
+ * acts once per new sample rather than sixty times on the same one.
+ */
+export function sampleFrame(now: number): boolean {
+  const gap = now - lastFrame;
+  lastFrame = now;
+  if (!windowStart || gap > PAUSE_MS) {
+    // A pause starts the window over; it is never averaged in.
+    windowStart = now;
+    frames = 0;
+    return false;
+  }
   frames++;
 
   const elapsed = now - windowStart;
-  if (elapsed < 1000) return;
+  if (elapsed < 1000) return false;
 
   // A rolling average rather than an instantaneous rate: one long frame while a texture
   // uploads must not be able to demote every prop on the scene.
   fps = fps * 0.6 + (frames / (elapsed / 1000)) * 0.4;
   frames = 0;
   windowStart = now;
+  return true;
 }
 
 export function sampledFps(): number {

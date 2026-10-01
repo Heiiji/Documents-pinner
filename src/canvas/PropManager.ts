@@ -83,11 +83,11 @@ const log = logger("props");
  * The frame time above which the scene counts as struggling.
  *
  * 45 fps rather than 60: a scene that dips below 60 on a wheel scroll is normal, and one
- * that holds under 45 for a solid second is not going to recover on its own.
+ * that samples under 45 two seconds running is not going to recover on its own.
  */
 export const DEGRADE_FRAME_MS = 1000 / 45;
 
-/** The frame time past which the guard counts a frame as slow: 3/4 of the cap's rate. */
+/** The frame time past which the guard counts a sample as slow: 3/4 of the cap's rate. */
 export function degradeFrameMs(cap: number): number {
   return cap >= 60 ? DEGRADE_FRAME_MS : 1000 / (0.75 * Math.max(1, cap));
 }
@@ -475,8 +475,7 @@ class Manager {
   // -------------------------------------------------------------------------
 
   #onFrame(): void {
-    const started = performance.now();
-    sampleFrame(started);
+    const sampled = sampleFrame(performance.now());
 
     const matrix = stageMatrix();
     if (!this.#matrix || !sameMat(matrix, this.#matrix)) {
@@ -489,6 +488,11 @@ class Manager {
     // Nothing to demote on a scene without props, and a notice blaming pins there — which
     // a slow scene of any kind used to get — sends a GM looking in the wrong place.
     if (!this.#autoDegrade || !this.#records.size) return;
+
+    // Once per new sample, not once per frame. The sample holds for a second, so stepping
+    // on every frame counted one slow second as sixty consecutive slow frames — and one
+    // was enough to demote every prop for the rest of the scene.
+    if (!sampled) return;
 
     // The SCENE's frame time, not ours. This used to time the six lines above it — a
     // counter increment, a matrix read and six float compares, a few microseconds against
