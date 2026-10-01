@@ -194,6 +194,89 @@ describe("a manual GM edit landing between a grant and its release", () => {
 });
 
 /**
+ * One anchor's syncs, one at a time (DESIGN A29).
+ *
+ * A sync read the pin, then awaited its document, then queued its grant. Two syncs of one
+ * anchor — two quick chip clicks, or the `ready` sweep beside a resumed edit hold — reached
+ * the ledger in whatever order those reads resolved, and the first audience could be
+ * written last.
+ */
+describe("syncs of one anchor", () => {
+  /** `fromUuid` whose FIRST answer waits for `release`; every later one is immediate. */
+  function slowFirstRead() {
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    let reads = 0;
+    (globalThis as any).foundry.utils.fromUuid = async (uuid: string) => {
+      if (reads++ === 0) await gate;
+      return uuid === "JournalEntry.j" ? journal : null;
+    };
+    return release;
+  }
+  const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+  it("end on the audience the pin was given last, however their reads resolve", async () => {
+    const { syncAnchor } = await import("../src/data/ownership-sync");
+    const release = slowFirstRead();
+
+    const first = syncAnchor(anchorA);
+    await tick();
+    setAudience(anchorA, "selected", ["ali", "ben"]);
+    const second = syncAnchor(anchorA);
+    await tick();
+    release();
+    await Promise.all([first, second]);
+
+    expect(Object.keys(ledger().holders).sort()).toEqual(["ali", "ben"]);
+    expect(journal.ownership).toEqual({ default: 0, ali: 2, ben: 2 });
+  });
+
+  it("release after the sync in flight, rather than finding nothing and letting it land", async () => {
+    const { releaseAnchor, syncAnchor } = await import("../src/data/ownership-sync");
+    const release = slowFirstRead();
+
+    const granting = syncAnchor(anchorA);
+    await tick();
+    const releasing = releaseAnchor(anchorA);
+    await tick();
+    release();
+    await Promise.all([granting, releasing]);
+
+    expect(ledger()).toBeUndefined();
+    expect(journal.ownership).toEqual({ default: 0 });
+  });
+
+  it("grant nothing once the anchor is deleted, and give back what it held", async () => {
+    const { syncAnchor } = await import("../src/data/ownership-sync");
+    const scene = (globalThis as any).game.scenes.contents[0];
+    anchorA.parent = scene;
+    await syncAnchor(anchorA);
+    expect(journal.ownership.ali).toBe(2);
+
+    // Core's delete: off the scene's collection, the document object left as it was.
+    scene.tiles.contents.splice(scene.tiles.contents.indexOf(anchorA), 1);
+    setAudience(anchorA, "selected", ["ali", "ben"]);
+    await syncAnchor(anchorA);
+
+    expect(ledger()).toBeUndefined();
+    expect(journal.ownership).toEqual({ default: 0 });
+  });
+
+  it("do not hold up another anchor's: two pins of one journal synced at once keep both", async () => {
+    const { syncAnchor } = await import("../src/data/ownership-sync");
+    setAudience(anchorB, "selected", ["ben"]);
+
+    await Promise.all([syncAnchor(anchorA), syncAnchor(anchorB)]);
+
+    expect(ledger().holders).toEqual({
+      ali: { "Scene.s1.Tile.a": 2 },
+      ben: { "Scene.s1.Tile.b": 2 },
+    });
+    expect(journal.ownership).toEqual({ default: 0, ali: 2, ben: 2 });
+  });
+});
+
+/**
  * DESIGN §10.8 keeps anchors as ordinary Tiles so other tooling can act on them, which
  * makes deleting one from the Tiles layer — or with Ctrl+Z, or from the v14 Placeables
  * sidebar — a mainline path rather than an edge case.

@@ -13,6 +13,10 @@
  * Writes are serialised per SOURCE document, not per anchor: two pins of the same
  * journal being revealed in the same gesture would otherwise each read the ledger,
  * add their own holder and write back, and the slower would erase the faster's claim.
+ * Above them, one anchor's syncs and releases run one at a time (`syncQueue`), so the
+ * audience a sync grants is the last one the pin was given, whatever order its reads
+ * resolve in. Two queues, each waiting only on the one below it; neither is the pin's own
+ * write queue, which waits on them.
  */
 
 import { DELETE_PREFIX, FLAGS, MODULE_ID } from "../const";
@@ -30,7 +34,7 @@ import {
   playerIds,
   resolveUuid,
 } from "../fvtt";
-import type { DpGrantLedger } from "../types/dp";
+import type { DpGrantLedger, DpPinFlags } from "../types/dp";
 import { grantKeysFor } from "./audience";
 import {
   keysHeldBy,
@@ -195,6 +199,41 @@ async function releaseOn(doc: any, anchor: string): Promise<void> {
 }
 
 /**
+ * The ownership keys a pin asks to hold: its audience's, or none while access is off.
+ *
+ * One answer for the two places that need it — what `syncAnchor` grants, and what the
+ * `ready` sweep checks every holder against — so the sweep can never keep a grant a sync
+ * would have taken back.
+ */
+function wantedKeys(pin: DpPinFlags): string[] {
+  return pin.audience.ownershipSync.enabled ? grantKeysFor(pin.audience, playerIds()) : [];
+}
+
+/**
+ * The queue one anchor's syncs and releases wait in.
+ *
+ * Its own, NOT the anchor's write queue (`PinStore.queueKey`): the verbs await a sync after
+ * their write, and the bulk delete releases inside its turn in the write queue, so a sync
+ * queued on the write queue would wait for the very task waiting for it — A22's deadlock,
+ * which reports nothing and never ends. A sync only ever waits on the `grants:` queues
+ * below it, and nothing in those waits on a sync.
+ */
+const syncQueue = (anchorDoc: any): string => `sync:${anchorDoc?.uuid ?? ""}`;
+
+/**
+ * Whether the anchor has been deleted since its sync was asked for.
+ *
+ * Core takes a deleted tile off its scene's collection and leaves the document object as
+ * it was, flags and all (foundry.mjs 14.368, `#handleDeleteDocuments` 81362-81375), so the
+ * payload cannot say; the scene can. A tile with no scene to ask is taken to be there.
+ */
+function anchorGone(anchorDoc: any): boolean {
+  const tiles = anchorDoc?.parent?.tiles;
+  if (typeof tiles?.get !== "function" || !anchorDoc?.id) return false;
+  return !tiles.get(anchorDoc.id, { invalid: true });
+}
+
+/**
  * Bring a source document's ownership in line with one anchor's audience.
  *
  * Retarget rather than release-then-grant, so a user present in both the old and the
@@ -205,13 +244,24 @@ async function releaseOn(doc: any, anchor: string): Promise<void> {
  *
  * `previousUuid` is the document the pin named before a retarget. Its family is swept
  * too, since the payload no longer names it and nothing else could find it.
+ *
+ * One at a time per anchor, reading the pin when its turn comes (A29). A sync read the pin
+ * and then awaited its document, so two syncs of one anchor — two quick chip clicks, or the
+ * `ready` sweep beside a resumed edit hold — reached the `grants:` queues in whatever order
+ * those reads resolved, and the first one's audience could be written last: Ali's grant
+ * landing after Ali-and-Ben's took Ben's back. A sync whose anchor was deleted before its
+ * turn grants nothing and releases what the anchor held: granting on behalf of a pin that no
+ * longer exists is a grant nothing will ever take back.
  */
 export async function syncAnchor(
   anchorDoc: any,
   previousUuid: string | null = null
 ): Promise<void> {
   if (!isGM()) return;
+  return enqueue(syncQueue(anchorDoc), () => syncNow(anchorDoc, previousUuid));
+}
 
+async function syncNow(anchorDoc: any, previousUuid: string | null): Promise<void> {
   const pin = readPin(anchorDoc);
   if (!pin) return;
 
@@ -219,7 +269,7 @@ export async function syncAnchor(
   const named = pin.source.kind === "document" ? await worldDocument(pin.source.uuid) : null;
   const own = grantable(named) ? named : null;
 
-  const keys = pin.audience.ownershipSync.enabled ? grantKeysFor(pin.audience, playerIds()) : [];
+  const keys = anchorGone(anchorDoc) ? [] : wantedKeys(pin);
   const targets = keys.length
     ? grantTargets(own, pin.source.pageId, pin.audience.ownershipSync.level)
     : [];
@@ -236,7 +286,12 @@ export async function syncAnchor(
   }
 }
 
-/** Drop every claim an anchor holds. Called when a pin is deleted or unpinned. */
+/**
+ * Drop every claim an anchor holds. Called when a pin is deleted or unpinned.
+ *
+ * In the anchor's sync queue, after any sync already in it: a release that overtook a sync
+ * still reading its document found nothing to release, and the grant landed after it.
+ */
 export async function releaseAnchor(anchorDoc: any, sourceUuid?: string | null): Promise<void> {
   if (!isGM()) return;
 
@@ -246,7 +301,9 @@ export async function releaseAnchor(anchorDoc: any, sourceUuid?: string | null):
   const uuid = sourceUuid ?? readPin(anchorDoc)?.source.uuid ?? null;
   const anchor = anchorDoc?.uuid ?? "";
 
-  for (const doc of familyOf(await worldDocument(uuid))) await releaseOn(doc, anchor);
+  return enqueue(syncQueue(anchorDoc), async () => {
+    for (const doc of familyOf(await worldDocument(uuid))) await releaseOn(doc, anchor);
+  });
 }
 
 /**
