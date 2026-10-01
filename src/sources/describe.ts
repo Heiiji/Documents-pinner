@@ -100,7 +100,8 @@ export function describeSource(source: DpSource): SourceSummary {
 /** The PDF a pin draws as a texture, or null. See `SourceSummary.pdfSrc`. */
 export function pdfSourceForPin(pin: DpPinFlags): string | null {
   if (pin.source.kind !== "document" || isPackUuid(pin.source.uuid)) return null;
-  return describeSource(pin.source).pdfSrc;
+  // The summary's own answer, without building the summary: this is the drag preview's.
+  return journalPdf(worldShown(resolveUuidSync(pin.source.uuid), pin.source.pageId));
 }
 
 // ---------------------------------------------------------------------------
@@ -158,10 +159,14 @@ export function journalPdf(shown: any): string | null {
 // By origin
 // ---------------------------------------------------------------------------
 
+/** The chosen page of a world journal, else the document itself. */
+function worldShown(named: any, pageId: string | null): any {
+  return named && pageId && named.pages?.get ? (named.pages.get(pageId) ?? named) : named;
+}
+
 function worldSummary(source: DpSource): SourceSummary {
   const named = resolveUuidSync(source.uuid);
-  const shown =
-    named && source.pageId && named.pages?.get ? (named.pages.get(source.pageId) ?? named) : named;
+  const shown = worldShown(named, source.pageId);
   if (!shown) return missingSummary(source.uuid, null);
   return {
     origin: "world",
