@@ -16,10 +16,9 @@
  */
 
 import { MODULE_ID } from "../const";
-import { g, isGM, isOurs, notify, ns } from "../fvtt";
+import { confirmDialog, g, isGM, isOurs, notify } from "../fvtt";
 import { visibleSceneRect } from "../canvas/transform";
 import { t } from "../i18n";
-import { escapeHtml } from "../html";
 import * as api from "../api";
 import * as settings from "../settings";
 import { armAt } from "../apps/PlacementGhost";
@@ -330,21 +329,11 @@ function injectSection(element: HTMLElement, section: HTMLElement): void {
 }
 
 function confirmUnpin(): Promise<boolean> {
-  return confirmAction("DP.config.unpinTitle", "DP.config.unpinBody");
+  return confirmDialog("DP.config.unpinTitle", "DP.config.unpinBody");
 }
 
 function confirmAdoptNote(): Promise<boolean> {
-  return confirmAction("DP.config.adoptNote", "DP.config.adoptNoteBody");
-}
-
-/** A yes/no dialog. A build with no DialogV2 refuses rather than acting unasked. */
-async function confirmAction(titleKey: string, bodyKey: string): Promise<boolean> {
-  const DialogV2 = ns("applications.api.DialogV2");
-  if (!DialogV2?.confirm) return false;
-  return DialogV2.confirm({
-    window: { title: t(titleKey) },
-    content: `<p>${escapeHtml(t(bodyKey))}</p>`,
-  }).catch(() => false);
+  return confirmDialog("DP.config.adoptNote", "DP.config.adoptNoteBody");
 }
 
 /** Keep a pin's label in step with a renamed source. */

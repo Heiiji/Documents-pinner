@@ -38,7 +38,7 @@
 
 import { logger } from "../log";
 import { FLAGS, MODULE_ID, SCHEMA_VERSION } from "../const";
-import { g, internal, isPrimaryGM, notify } from "../fvtt";
+import { confirmDialog, g, internal, isPrimaryGM, notify } from "../fvtt";
 import * as settings from "../settings";
 import { pdfSourceForPin } from "../sources/describe";
 import { docPositionFor } from "../canvas/transform";
@@ -301,14 +301,11 @@ export async function onCanvasReady(scene: any): Promise<void> {
  * Falls back to declining if this build has no DialogV2: a migration that cannot ask
  * must not proceed, and declining costs nothing because reads normalise anyway.
  */
-async function confirmSweep(sceneCount: number, pinCount: number): Promise<boolean> {
-  const DialogV2 = (globalThis as any).foundry?.applications?.api?.DialogV2;
-  if (!DialogV2?.confirm) return false;
-
-  const i18n = g()?.i18n;
-  return DialogV2.confirm({
-    window: { title: i18n?.localize?.("DP.migration.title") ?? "Documents Pinner" },
-    content: `<p>${i18n?.format?.("DP.migration.prompt", { sceneCount, pinCount }) ?? ""}</p>`,
-    yes: { default: true },
-  }).catch(() => false);
+function confirmSweep(sceneCount: number, pinCount: number): Promise<boolean> {
+  return confirmDialog(
+    "DP.migration.title",
+    "DP.migration.prompt",
+    { sceneCount, pinCount },
+    { yes: { default: true } }
+  );
 }

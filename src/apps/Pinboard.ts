@@ -24,10 +24,9 @@
  */
 
 import { MODULE_ID } from "../const";
-import { cv, g, notify, ns, playerIds } from "../fvtt";
+import { confirmDialog, cv, g, notify, ns, playerIds } from "../fvtt";
 import { logger } from "../log";
 import { t } from "../i18n";
-import { escapeHtml } from "../html";
 import * as api from "../api";
 import * as store from "../data/PinStore";
 import { wouldReveal } from "../data/audience";
@@ -796,15 +795,11 @@ async function onRevealAll(this: any) {
       return !!pin && wouldReveal(pin.audience, doc.hidden === true, players);
     }).length;
 
-    if (count > 1) {
-      const DialogV2 = ns("applications.api.DialogV2");
-      const confirmed = DialogV2?.confirm
-        ? await DialogV2.confirm({
-            window: { title: t("DP.board.revealAllTitle") },
-            content: `<p>${escapeHtml(t("DP.board.revealAllBody", { count }))}</p>`,
-          }).catch(() => false)
-        : false;
-      if (confirmed !== true) return;
+    if (
+      count > 1 &&
+      !(await confirmDialog("DP.board.revealAllTitle", "DP.board.revealAllBody", { count }))
+    ) {
+      return;
     }
     await applyVisibility(this, docs, true);
   } catch (error) {
@@ -836,14 +831,11 @@ async function onBulkDelete(this: any) {
 async function deleteRows(app: any, docs: any[]) {
   if (!docs.length) return;
 
-  const DialogV2 = ns("applications.api.DialogV2");
-  const confirmed = DialogV2?.confirm
-    ? await DialogV2.confirm({
-        window: { title: t("DP.board.deleteTitle") },
-        content: `<p>${escapeHtml(t("DP.board.deleteBody", { count: docs.length }))}</p>`,
-      }).catch(() => false)
-    : false;
-  if (!confirmed) return;
+  if (
+    !(await confirmDialog("DP.board.deleteTitle", "DP.board.deleteBody", { count: docs.length }))
+  ) {
+    return;
+  }
 
   // Every grant released, then ONE scene write: not `api.deletePin` per row.
   await api.deletePins(app.scene, docs);

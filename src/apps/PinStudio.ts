@@ -19,7 +19,7 @@
  */
 
 import { MODULE_ID } from "../const";
-import { cfg, g, notify, ns, playerIds } from "../fvtt";
+import { cfg, confirmDialog, g, notify, ns, playerIds } from "../fvtt";
 import { previewIntensity } from "../canvas/DomPropTier";
 import { t } from "../i18n";
 import { escapeHtml } from "../html";
@@ -589,14 +589,7 @@ function onDeletePin(this: any) {
 }
 
 async function deleteAfterAsking(app: any): Promise<void> {
-  const DialogV2 = ns("applications.api.DialogV2");
-  const confirmed = DialogV2?.confirm
-    ? await DialogV2.confirm({
-        window: { title: t("DP.studio.delete") },
-        content: `<p>${escapeHtml(t("DP.board.deleteBody", { count: 1 }))}</p>`,
-      }).catch(() => false)
-    : false;
-  if (!confirmed) return;
+  if (!(await confirmDialog("DP.studio.delete", "DP.board.deleteBody", { count: 1 }))) return;
 
   await api.deletePin(app.doc);
   app.close();
@@ -635,14 +628,10 @@ function onRetargetSource(this: any) {
   });
 }
 
-async function confirmRetarget(source: DpSource): Promise<boolean> {
-  const DialogV2 = ns("applications.api.DialogV2");
-  if (!DialogV2?.confirm) return false;
-  const name = api.labelForSource(source);
-  return DialogV2.confirm({
-    window: { title: t("DP.studio.retargetTitle") },
-    content: `<p>${escapeHtml(t("DP.studio.retargetBody", { name }))}</p>`,
-  }).catch(() => false);
+function confirmRetarget(source: DpSource): Promise<boolean> {
+  return confirmDialog("DP.studio.retargetTitle", "DP.studio.retargetBody", {
+    name: api.labelForSource(source),
+  });
 }
 
 /**

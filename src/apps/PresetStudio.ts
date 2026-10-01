@@ -15,7 +15,7 @@
  * would be worse than no meter at all.
  */
 
-import { notify, ns } from "../fvtt";
+import { confirmDialog, notify, ns } from "../fvtt";
 import { t } from "../i18n";
 import { escapeAttr, escapeHtml } from "../html";
 import * as api from "../api";
@@ -716,14 +716,7 @@ async function onDuplicate(this: any) {
 }
 
 async function onRemove(this: any) {
-  const DialogV2 = ns("applications.api.DialogV2");
-  const confirmed = DialogV2?.confirm
-    ? await DialogV2.confirm({
-        window: { title: t("DP.presets.delete") },
-        content: `<p>${escapeHtml(t("DP.presets.deleteBody"))}</p>`,
-      }).catch(() => false)
-    : false;
-  if (!confirmed) return;
+  if (!(await confirmDialog("DP.presets.delete", "DP.presets.deleteBody"))) return;
 
   await library.deletePreset(this.selectedId);
   this.selectedId = "aged-parchment";

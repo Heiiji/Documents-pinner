@@ -13,7 +13,8 @@
 
 import { DELETE_PREFIX, INTERNAL_OPTION } from "./const";
 import { logger } from "./log";
-import { tn } from "./i18n";
+import { t, tn } from "./i18n";
+import { escapeHtml } from "./html";
 import type { DpNotice } from "./types/dp";
 
 const log = logger("core");
@@ -123,6 +124,34 @@ export function notify(notice: DpNotice | string, type: "info" | "warn" | "error
   const target = notifications();
   if (target?.[type]) target[type](message);
   else log.info(message);
+}
+
+/**
+ * Ask the GM a yes/no question, and resolve whether the answer was yes.
+ *
+ * A dialog closed with its ✕ is a no, and so is a build with no `DialogV2` to ask with:
+ * an action that cannot ask does not act unasked. The body is one escaped paragraph of
+ * `bodyKey` formatted with `data`; `options` pass on to `DialogV2.confirm` — the
+ * migration's `yes: { default: true }`.
+ */
+export async function confirmDialog(
+  titleKey: string,
+  bodyKey: string,
+  data: Record<string, unknown> = {},
+  options: Record<string, unknown> = {}
+): Promise<boolean> {
+  const DialogV2 = ns("applications.api.DialogV2");
+  if (!DialogV2?.confirm) return false;
+  try {
+    const answer = await DialogV2.confirm({
+      window: { title: t(titleKey) },
+      content: `<p>${escapeHtml(t(bodyKey, data))}</p>`,
+      ...options,
+    });
+    return answer === true;
+  } catch {
+    return false;
+  }
 }
 
 /** Options every document write from this module carries, so our hooks can stand down. */
