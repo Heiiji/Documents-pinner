@@ -103,6 +103,34 @@ describe("enqueue", () => {
   it("surfaces the task's own result to its caller", async () => {
     await expect(enqueue("d", async () => 42)).resolves.toBe(42);
   });
+
+  // A duplicated scene keeps every tile's id: a pin's writes waited behind its twin's on
+  // the other scene. They queue by uuid now — each pin behind its own writes only.
+  it("does not hold a pin's write behind its twin's on a duplicated scene", async () => {
+    const day = fakeDoc();
+    const night = fakeDoc();
+    night.uuid = "Scene.night.Tile.t1";
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const write = day.update;
+    day.update = async (...args: [any, any]) => {
+      await gate;
+      return write.apply(day, args);
+    };
+
+    const first = update(day, { display: { label: "Day" } });
+    try {
+      const second = update(night, { display: { label: "Night" } }).then(() => "night");
+      // Every step of an unblocked write is a microtask, so it lands before this timeout.
+      const waited = new Promise((resolve) => setTimeout(() => resolve("waited"), 0));
+      expect(await Promise.race([second, waited])).toBe("night");
+    } finally {
+      // Released whatever happened, or every later write to this id would wait forever.
+      release();
+      await first;
+    }
+    expect(currentPin(day).display.label).toBe("Day");
+  });
 });
 
 describe("update", () => {

@@ -993,9 +993,9 @@ export async function unpin(anchorDoc: any): Promise<void> {
  * players may be reading at that moment. Only the source moves, and the ownership grant
  * that follows it.
  *
- * **Never wrap this in `enqueue`.** `store.update` queues itself on the same anchor id,
+ * **Never wrap this in `enqueue`.** `store.update` queues itself on the same anchor,
  * and `enqueue` chains a task after the tracked promise it has already registered — so an
- * outer task awaiting an inner one on the same id awaits its own completion. Neither ever
+ * outer task awaiting an inner one on the same anchor awaits its own completion. Neither ever
  * settles: no error, no timeout, the button simply does nothing forever. `fitToContent`
  * is the shape to copy — a plain async function whose callees queue themselves.
  *

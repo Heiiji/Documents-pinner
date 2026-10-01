@@ -44,7 +44,7 @@ import { isPdfPin } from "../sources/describe";
 import { docPositionFor } from "../canvas/transform";
 import { freezeMetrics, validatePin } from "./pin-schema";
 import { rawPinFlag } from "./PinData";
-import { enqueueAll, payloadWrite } from "./PinStore";
+import { enqueueAll, payloadWrite, queueKey } from "./PinStore";
 import type { DpPinFlags } from "../types/dp";
 
 /** The payload version from which a document's point is stored as the tile's centre. */
@@ -192,10 +192,7 @@ export function pendingCount(scene: any): number {
 export async function migrateScene(scene: any): Promise<number> {
   const pins = (scene?.tiles?.contents ?? []).filter((tile: any) => rawPinFlag(tile) !== null);
   if (!pins.length) return 0;
-  return enqueueAll(
-    pins.map((tile: any) => tile.id),
-    () => writeMigration(scene)
-  );
+  return enqueueAll(pins.map(queueKey), () => writeMigration(scene));
 }
 
 /** Planned from the scene as it is once the queue reaches it, not as it was when asked. */
