@@ -208,9 +208,8 @@ describe("the faces the rasteriser carries", () => {
       Amiri: { editor: true, fonts: [{ urls: ["fonts/amiri.woff2"] }] },
     };
     const fetched = stubFetch();
-    const { clearInliner, inlineFonts, registeredFontFamilies } =
-      await import("../src/render/AssetInliner");
-    clearInliner();
+    // A fresh module, and with it an empty font cache: `beforeEach` resets the registry.
+    const { inlineFonts, registeredFontFamilies } = await import("../src/render/AssetInliner");
 
     const css = await inlineFonts();
     expect(css).toContain('@font-face{font-family:"Special Elite"');

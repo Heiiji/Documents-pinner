@@ -35,7 +35,7 @@ import {
   tileRect,
 } from "../canvas/transform";
 import { resolveCard, type ResolvedCard } from "../render/ContentResolver";
-import { propManager } from "../canvas/PropManager";
+import { drawsAsDom, propManager } from "../canvas/PropManager";
 import { describeSource } from "../sources/describe";
 import { leave, mount, write } from "./OverlayRoot";
 import type { DpPinFlags } from "../types/dp";
@@ -374,9 +374,20 @@ function place(node: HTMLElement, next: Placed): void {
   });
 }
 
+/**
+ * Dim the mesh under the reader, and bring it back after.
+ *
+ * Not for a prop drawn as a DOM card: its mesh carries only the placeholder book and is
+ * held at zero, so there is nothing under the reader to dim — and the restore wrote
+ * `doc.alpha` back, which put the book on the map, stretched across the letter, the
+ * moment the reader closed (DESIGN A29). A pin's icon and a canvas-tier page are what
+ * their meshes show, and still dim.
+ */
 function setMeshDim(doc: any, dim: boolean): void {
   const mesh = doc?.object?.mesh;
   if (!mesh) return;
+  const pin = readPin(doc);
+  if (pin?.mode === "prop" && drawsAsDom(pin)) return;
   mesh.alpha = dim ? 0.15 : (doc.alpha ?? 1);
 }
 

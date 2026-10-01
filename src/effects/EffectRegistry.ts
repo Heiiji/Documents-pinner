@@ -11,7 +11,12 @@
  * so tint, grain, stains, edge shape, frame, shadow and static scanlines are all
  * simply CSS at rasterisation time: they cost nothing per frame, they survive a future
  * PIXI major untouched, and they need no shader at all. Only genuine MOTION needs
- * anything else, and only the focused reader — one element — ever runs it.
+ * anything else, and it is never baked. It runs on live DOM cards — every full-size prop
+ * the DOM tier draws, which is every text prop while HTML cannot reach a texture (A10),
+ * and the placement ghost — and stops at the coarse rung, at `reduced`, for a pin set
+ * still, and in the reader, which is for reading. So it is built to cost a composite and
+ * never a repaint: every animation moves `opacity` or `translate`, and the scanline roll
+ * runs on a layer of its own rather than on the card's texture stack (A29).
  *
  * That is also why every preset keeps its identity under `reduced`. The static half is
  * the whole look; motion is a garnish on top. If reduced motion produced grey boxes,
@@ -66,18 +71,21 @@ export interface EffectDressing {
 }
 
 /**
- * The effect's strength for a tier.
+ * The share of a pin's intensity a rung draws its effect at.
  *
  * Half at the coarse rung rather than none: an effect that switched off at a distance
  * would make props visibly change identity as a GM zoomed out, which reads as a bug.
+ *
+ * Exported for the texture cache key, which has to tell a texture baked at half strength
+ * from one baked at full (`PropManager.#keyFor`).
  */
-function tierIntensity(tier: LodTier, intensity: number): number {
+export function tierFactor(tier: LodTier): number {
   switch (tier) {
     case "L2a":
-      return intensity * 0.5;
+      return 0.5;
     case "L2b":
     case "L3":
-      return intensity;
+      return 1;
     default:
       return 0;
   }
@@ -167,7 +175,7 @@ function freeze(vars: CssVars): CssVars {
 }
 
 export function dressing(context: EffectContext): EffectDressing {
-  const attrs = {
+  const attrs: Record<string, string> = {
     ...presetToDataAttrs(context.preset),
     "data-dp-tier": context.tier,
     "data-dp-level": context.level,
@@ -178,7 +186,7 @@ export function dressing(context: EffectContext): EffectDressing {
   }
 
   let vars: CssVars = {
-    ...presetToCssVars(context.preset, tierIntensity(context.tier, context.intensity)),
+    ...presetToCssVars(context.preset, context.intensity * tierFactor(context.tier)),
     ...proceduralLayers(context),
   };
 
@@ -189,7 +197,30 @@ export function dressing(context: EffectContext): EffectDressing {
   // same static rendition, which is why a baked prop and a reduced one look alike.
   if (context.baked || context.level === "reduced") vars = freeze(vars);
 
+  const scan = scanlines(vars, context);
+  if (scan) attrs["data-dp-scan"] = scan;
+
   return { vars, attrs, style: toStyle(vars) };
+}
+
+/**
+ * What the card's scanlines do: roll, stay still, or — with nothing to draw — neither.
+ *
+ * Decided here, where the rung, the level, the freeze and the pin's own motion are all
+ * known, and carried as `data-dp-scan` to `CardTemplate`, which gives a rolling card the
+ * layer that rolls them (styles/fx/effects.css). Every other card draws its scanlines
+ * exactly as before, as the top layer of `::before`. Only on a looping preset, past the
+ * coarse rung, at a speed that moves: the coarse rung is stopped by the stylesheet anyway,
+ * and a layer that would never be shown is not worth emitting.
+ */
+function scanlines(vars: CssVars, context: EffectContext): "roll" | "still" | null {
+  const image = vars["--dp-scan-img"];
+  if (!image || image === "none") return null;
+  const rolls =
+    context.preset.motion === "loop" &&
+    context.tier !== "L2a" &&
+    Number.parseFloat(vars["--dp-scan-dur"] ?? "0") > 0;
+  return rolls ? "roll" : "still";
 }
 
 export function toStyle(vars: CssVars): string {

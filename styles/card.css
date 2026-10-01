@@ -81,9 +81,9 @@
 }
 
 /*
- * The overlay's boxes, declared here because `card.css` is the stylesheet the rasteriser
- * inlines — so an overlay can never push the sheet around even where `fx/effects.css`
- * does not exist. Everything that PAINTS is in that file.
+ * The overlay's boxes and the rolling scanlines', declared here beside the sheet they must
+ * never push around: out of flow whatever else is loaded. Everything that PAINTS them is in
+ * `fx/effects.css`.
  */
 .dp-card__hud {
   position: absolute;
@@ -91,7 +91,8 @@
   pointer-events: none;
 }
 
-.dp-card__hud-sweep {
+.dp-card__hud-sweep,
+.dp-card__scan {
   position: absolute;
 }
 

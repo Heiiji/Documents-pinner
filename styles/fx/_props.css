@@ -195,13 +195,13 @@
  * `.dp-card` is the element every tier actually renders, in the SVG and in the DOM alike.
  */
 /*
- * `*` does not match a pseudo-element, and the scan roll and the glow pulse live on
- * `::before` and `::after` — so this net had a hole exactly where the motion is. The
- * gates in `effects.css` carry the real stop; these two lines are the belt.
+ * `*` does not match a pseudo-element, and the glow pulse lives on `::after` — so this net
+ * had a hole exactly where the motion is. The gates in `effects.css` carry the real stop;
+ * these lines are the belt. The scanline roll needs none: its own gate already refuses an
+ * overlay at `reduced` or `off`, and `::before` no longer animates at all.
  */
 [data-dp-level="reduced"] .dp-card,
 [data-dp-level="reduced"] .dp-card *,
-[data-dp-level="reduced"] .dp-card::before,
 [data-dp-level="reduced"] .dp-card::after {
   animation: none !important;
   transition: none !important;

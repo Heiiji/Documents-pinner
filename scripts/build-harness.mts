@@ -160,7 +160,7 @@ const page = `<!doctype html>
   /* The cascade sentinel: UNLAYERED, so it must beat the dp.ui layer's own rule. */
   .dp-tooltip { color: #00ff88; }
   .controls { display: flex; gap: .6rem; align-items: center; margin: .4rem 0 1rem; }
-  .frozen .dp-card, .frozen .dp-card::before, .frozen .dp-card::after,
+  .frozen .dp-card, .frozen .dp-card::after, .frozen .dp-card__scan,
   .frozen .dp-card__hud-sweep {
     animation-play-state: paused !important;
     animation-delay: -500ms !important;

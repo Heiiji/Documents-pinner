@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
+import { dressing } from "../src/effects/EffectRegistry";
 import { cardHtml, paperOf, svgDocument } from "../src/render/CardTemplate";
+import { getCorePreset } from "./helpers/presets";
 import { textureBytes, textureFromCanvas, tierFor } from "../src/render/Rasterizer";
 import { TextureCache, cacheKey, hashContent, plan } from "../src/render/TextureCache";
 
@@ -72,6 +74,37 @@ describe("cardHtml", () => {
 
   it("carries the effect id so the CSS renditions can key off it", () => {
     expect(card({ effectId: "glitch" })).toContain('data-dp-fx="glitch"');
+  });
+
+  /**
+   * The rolling scanlines' own layer (A29). Emitted only where the dressing says they roll,
+   * so every still card — a texture above all, which cannot animate — is the markup it was.
+   */
+  it("carries the scanlines' rolling layer only where they roll", () => {
+    const crt = getCorePreset("crt-scanlines")!;
+    const dressed = (over: Record<string, any> = {}) =>
+      dressing({
+        preset: crt,
+        intensity: 1,
+        seed: 1,
+        tier: "L2b",
+        level: "full",
+        baked: false,
+        ...over,
+      });
+    const withFx = (d: ReturnType<typeof dressed>) =>
+      card({ effectId: crt.id, effectStyle: d.style, effectAttrs: d.attrs });
+
+    expect(withFx(dressed())).toContain('<i class="dp-card__scan" aria-hidden="true"></i>');
+    for (const still of [
+      { level: "reduced" },
+      { tier: "L2a" },
+      { baked: true },
+      { motion: "none" },
+    ]) {
+      expect(withFx(dressed(still)), JSON.stringify(still)).not.toContain("dp-card__scan");
+    }
+    expect(card()).not.toContain("dp-card__scan");
   });
 });
 

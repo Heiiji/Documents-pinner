@@ -1,11 +1,14 @@
 /**
- * The only stateful singleton in the module.
+ * The prop manager: the one owner of every prop on the scene.
  *
  * IMPURE. Owns everything that has to exist exactly once: the per-prop records, ONE
- * ticker callback, ONE shared uniform group, the texture LRU, the generation queue and
- * the LOD state machine. Every other module in the project is stateless, and the
- * reason is here — this is the file where a second copy of any of these would show up
- * as doubled work per frame that nobody could attribute to anything.
+ * ticker callback, the texture LRU, the generation queue and the LOD state machine that
+ * also tells the DOM tier what to draw. This is the file where a second copy of any of
+ * these would show up as doubled work per frame that nobody could attribute to anything.
+ *
+ * There is no shared uniform group, though §6.2 asks for one: nothing on this tier is a
+ * shader. A baked effect is pixels in the texture (DESIGN A3) and the mesh is core's own,
+ * so there is no uniform for a group to share (DESIGN A29).
  *
  * The frame path is the part to be careful with:
  *
@@ -60,7 +63,7 @@ import { resolveCard } from "../render/ContentResolver";
 import { renderPdfPage } from "../render/PdfPage";
 import { isPdfPin, pdfPageOf, pdfSourceForPin } from "../sources/describe";
 import { bakeEffects, clearBakeCache, copyCanvas } from "../render/BakeEffects";
-import { dressing } from "../effects/EffectRegistry";
+import { dressing, tierFactor } from "../effects/EffectRegistry";
 import { svgDocument } from "../render/CardTemplate";
 import { inlineFonts, inlineImages } from "../render/AssetInliner";
 import { TextureCache, cacheKey } from "../render/TextureCache";
@@ -183,6 +186,17 @@ class Manager {
   #globalDemotions = 0;
   /** What each user preset said when the props last drew from it. See `onSettingChanged`. */
   #presets = presetSnapshot();
+  /**
+   * The alpha each prop's mesh was last sent towards, by tile id.
+   *
+   * `#writeMeshAlpha` decided "unchanged" against the mesh's CURRENT alpha, which in the
+   * middle of an animation is wherever the animation has got to. So every later
+   * `applyAlpha` — the next texture bind, any token moving — found a running reveal
+   * changed and replaced it, under the one name all three alpha animations share, with a
+   * 120 ms ease to the very value it was already heading for: a one-second reveal cut to a
+   * blink. Forgotten with the record.
+   */
+  #alphaTargets = new Map<string, number>();
 
   #isPdf(pin: DpPinFlags): boolean {
     return isPdfPin(pin);
@@ -221,6 +235,7 @@ class Manager {
 
     for (const record of this.#records.values()) this.#restore(record);
     this.#records.clear();
+    this.#alphaTargets.clear();
     this.#cache.clear();
     this.#queue = [];
     this.#failedKeys.clear();
@@ -259,6 +274,7 @@ class Manager {
       if (live.has(id)) continue;
       this.#restore(record);
       this.#records.delete(id);
+      this.#alphaTargets.delete(id);
     }
 
     this.#scheduleLod(0);
@@ -412,11 +428,29 @@ class Manager {
    * hold or an arrival, and those belong to `#arrive`; everything in between eases at
    * the state duration under the one alpha channel, so a peek during a reveal simply
    * takes over and the release eases back.
+   *
+   * A mesh already moving towards this same target is left to arrive: a reveal or a
+   * draw-in is not a state change, and replacing it with the state ease cut it short. Only
+   * while it moves — once it has arrived, core's own state refresh may have written over
+   * it, and the comparison with the mesh puts it back. A value written directly stops
+   * whatever was still moving under the name, or its next tick would carry the mesh off
+   * the value just written: a hold during a reveal faded the placeholder in regardless.
    */
   #writeMeshAlpha(tile: any, target: number): void {
     const mesh = tile.mesh;
-    const from = mesh.alpha ?? 1;
+    const name = alphaAnimation(tile.id);
     const CanvasAnimation = ns("canvas.animation.CanvasAnimation");
+    const heading = this.#alphaTargets.get(tile.id);
+    if (
+      heading !== undefined &&
+      Math.abs(heading - target) < 0.01 &&
+      CanvasAnimation?.getAnimation?.(name)
+    ) {
+      return;
+    }
+    this.#alphaTargets.set(tile.id, target);
+
+    const from = mesh.alpha ?? 1;
     if (
       this.#level !== "full" ||
       !CanvasAnimation?.animate ||
@@ -424,12 +458,13 @@ class Manager {
       target <= 0 ||
       Math.abs(from - target) < 0.01
     ) {
+      CanvasAnimation?.terminateAnimation?.(name);
       mesh.alpha = target;
       return;
     }
     void CanvasAnimation.animate([{ parent: mesh, attribute: "alpha", to: target }], {
       duration: MOTION.state,
-      name: `${MODULE_ID}.alpha.${tile.id}`,
+      name,
     });
   }
 
@@ -608,13 +643,20 @@ class Manager {
         width: tile.document.width,
         height: tile.document.height,
       });
+      // Asked once: `isVisible` is the audience test, with a line-of-sight test behind it
+      // for a `discovered` pin, and it was asked twice per prop per pass.
+      const visible = tile.isVisible === true;
+      const focused = this.#focusedId === record.id;
       let tier = lodFor({
         apparentWidth: apparentWidth(matrix, tile.document.width),
         apparentTypeSize: metrics.fontPx * scaleOf(matrix),
         onScreen: rectsIntersect(bounds, viewport),
-        visible: tile.isVisible === true,
-        focused: this.#focusedId === record.id,
-        readable: api.canUserOpen(tile.document, g()?.user?.id ?? ""),
+        visible,
+        focused,
+        // Only the focused prop can be on the reader's rung, so only it is asked whether
+        // this user may read it — a source lookup and a permission test that ran for every
+        // prop on the scene on every pass to answer a question nobody else was asking.
+        readable: focused && api.canUserOpen(tile.document, g()?.user?.id ?? ""),
       });
 
       // The perf guard demotes uniformly: a scene where half the props are sharp and
@@ -623,7 +665,6 @@ class Manager {
 
       const dom = drawsAsDomUnder(policy, pin);
 
-      const visible = tile.isVisible === true;
       const revealing = visible && !record.wasVisible;
       record.wasVisible = visible;
       if (revealing) this.#onReveal(record, pin, dom, sounds);
@@ -640,11 +681,15 @@ class Manager {
           doc: tile.document,
           pin,
           tier,
-          focused: this.#focusedId === record.id,
+          focused,
           alpha: this.#alphaFor(tile, pin, tokens),
           pdf: this.#isPdf(pin),
           revealing,
-          reveal: revealOf(pin),
+          // Looked up when the card arrives revealing, which is the one time it is read:
+          // a preset lookup for every card on every pass, for a field read once a reveal.
+          get reveal() {
+            return revealOf(pin);
+          },
           controlled: tile.controlled === true,
         });
         continue;
@@ -660,7 +705,7 @@ class Manager {
         Math.max(tile.document.width, tile.document.height) * scaleOf(matrix),
         resolution
       );
-      const key = this.#keyFor(tile, pin, longEdge, record.contentHash);
+      const key = this.#keyFor(tile, pin, tier, longEdge, record.contentHash);
 
       record.lastKeyFailed = this.#failedKeys.has(key);
 
@@ -746,6 +791,7 @@ class Manager {
 
     const duration = Math.max(0, preset?.reveal.durationMs ?? MOTION.reveal);
     mesh.alpha = 0;
+    this.#alphaTargets.set(tile.id, target);
     void CanvasAnimation.animate([{ parent: mesh, attribute: "alpha", to: target }], {
       duration,
       // `materialise` and `fade` were the same linear alpha ramp, so half the shipped
@@ -754,7 +800,7 @@ class Manager {
       // materialise eases in and out and reads as something resolving rather than
       // something being turned up.
       easing: animation === "materialise" ? CanvasAnimation.easeInOutCosine : undefined,
-      name: `${MODULE_ID}.alpha.${tile.id}`,
+      name: alphaAnimation(tile.id),
     });
   }
 
@@ -772,7 +818,13 @@ class Manager {
    * document. `#generate` writes the real hash back after resolving, so the first draw
    * costs one provisional key and every later pass agrees with the cache.
    */
-  #keyFor(tile: any, pin: DpPinFlags, longEdge: number, contentHash: string): string {
+  #keyFor(
+    tile: any,
+    pin: DpPinFlags,
+    tier: LodTier,
+    longEdge: number,
+    contentHash: string
+  ): string {
     const doc = tile.document;
     // The type size and the pad are drawn INTO the pixels, so they are in the key for the
     // same reason the preset is. A prop whose metrics are stored no longer changes its
@@ -786,9 +838,16 @@ class Manager {
       resTier: longEdge,
       // The pin's own typeface is drawn into the pixels like the paper; a preset's own is
       // covered by its id.
+      //
+      // So is the rung's share of the intensity. The coarse rung always asks for 512 px,
+      // and a full one 320-512 px across at resolution 1 snaps to 512 too — so the two
+      // shared a texture baked at half strength or at full, whichever drew first. The
+      // factor, not the rung: L3 bakes exactly what L2b does, and focusing a prop must not
+      // redraw it. The factor singles out the coarse rung, which is also the only one the
+      // stylesheet draws differently, so it separates everything the rung changes.
       presetBake:
-        `${pin.effect.id}:${pin.effect.intensity}:${pin.effect.seed}:${pin.display.paper}` +
-        `:${pin.display.font ?? ""}:${this.#level}`,
+        `${pin.effect.id}:${pin.effect.intensity}x${tierFactor(tier)}:${pin.effect.seed}` +
+        `:${pin.display.paper}:${pin.display.font ?? ""}:${this.#level}`,
       // The chosen page goes in the docHash and NEVER in `uuid`: `TextureCache.keysFor`
       // prefix-matches `${uuid}|`, so folding it into the uuid would break `invalidate`
       // for every prop on the scene. It has to be here, though — the provisional key
@@ -868,19 +927,20 @@ class Manager {
       record.tier !== "L0" &&
       record.tier !== "L1";
 
+    // The rung this draw is for, held: the LOD pass may move the record while it awaits,
+    // and the key has to name the strength the pixels were actually baked at.
+    const tier = record.tier;
     const size = { width: tile.document.width, height: tile.document.height };
     const longEdge = textureLongEdge(
-      record.tier,
+      tier,
       Math.max(size.width, size.height) * scaleOf(stageMatrix()),
       rendererResolution()
     );
     if (!longEdge) return;
 
-    const provisional = this.#keyFor(tile, pin, longEdge, record.contentHash);
+    const provisional = this.#keyFor(tile, pin, tier, longEdge, record.contentHash);
     if (this.#cache.has(provisional)) {
-      this.#bind(record, tile, this.#cache.get(provisional), provisional);
-      this.applyAlpha();
-      this.#arrive(record, tile, false);
+      this.#land(record, tile, provisional, this.#cache.get(provisional));
       return;
     }
 
@@ -892,32 +952,37 @@ class Manager {
       const rendered = await renderPdfPage(pdfSrc, pdfPageOf(pin), longEdge);
       if (!alive()) return;
 
-      const key = this.#keyFor(tile, pin, longEdge, `pdf:${pdfPageOf(pin)}`);
+      const key = this.#keyFor(tile, pin, tier, longEdge, `pdf:${pdfPageOf(pin)}`);
       const cachedPdf = this.#cache.get(key);
       if (cachedPdf) {
-        this.#bind(record, tile, cachedPdf, key);
-        this.applyAlpha();
-        this.#arrive(record, tile, false);
+        this.#land(record, tile, key, cachedPdf);
         return;
       }
 
-      // The effects, painted on. A PDF has no card for CSS to reach, so the static half
-      // of the preset is composited onto a COPY of the page — the page cache must never
-      // be painted over, or the next preset would inherit this one's stains.
-      let surface = rendered?.canvas ?? null;
+      // Always a COPY of the page, never the page cache's own canvas. The effects are
+      // painted onto it, and the page cache must never be painted over, or the next preset
+      // would inherit this one's stains. And with no effects to paint — a preset since
+      // deleted, a browser where baking taints — the texture is still made from a copy:
+      // `PIXI.Texture.from` caches by canvas (DESIGN §6.2), so two props of one page at one
+      // size were handed one texture under two cache keys, and evicting either destroyed
+      // the texture the other was still drawing.
+      const surface = rendered ? copyCanvas(rendered.canvas) : null;
       const preset = findPreset(pin.effect.id);
+      let baked = false;
       if (surface && preset && !bakedTaints) {
+        baked = true;
+        // A PDF has no card for CSS to reach, so the static half of the preset is
+        // composited onto the page with Canvas2D (DESIGN A16).
         const dressed = dressing({
           preset,
           intensity: pin.effect.intensity,
           seed: pin.effect.seed,
-          tier: record.tier,
+          tier,
           level: this.#level,
           // A texture cannot animate, so this is the static rendition by construction —
           // which is exactly the set of layers Canvas2D can paint.
           baked: true,
         });
-        surface = copyCanvas(surface);
         await bakeEffects(surface, dressed.vars, dressed.attrs);
         if (!alive()) return;
       }
@@ -928,7 +993,7 @@ class Manager {
       // Chromium does not — and a tainted canvas cannot be uploaded. Fall back to the page
       // exactly as pdf.js drew it, which is known to upload, rather than losing the prop
       // for the sake of some stains. Latched: the answer is a property of the browser.
-      if (!result && rendered && surface !== rendered.canvas) {
+      if (!result && rendered && baked) {
         if (!bakedTaints) {
           bakedTaints = true;
           log.warn("effects cannot be baked on this browser; drawing PDF pages unadorned");
@@ -945,27 +1010,21 @@ class Manager {
       }
 
       record.contentHash = `pdf:${pdfPageOf(pin)}`;
-      this.#cache.set(key, result.texture, result.bytes);
-      this.#bind(record, tile, result.texture, key);
-      this.applyAlpha();
-      this.#arrive(record, tile, true);
-      this.#trim();
+      this.#land(record, tile, key, result.texture, result);
       return;
     }
 
-    const card = await resolveCard(pin, size, { tier: record.tier, baked: true });
+    const card = await resolveCard(pin, size, { tier, baked: true });
     if (!alive()) return;
 
     // The real content signal, now that the card exists. Written back so the next LOD
     // pass builds the same key synchronously and hits the cache.
     record.contentHash = card.contentHash;
-    const key = this.#keyFor(tile, pin, longEdge, card.contentHash);
+    const key = this.#keyFor(tile, pin, tier, longEdge, card.contentHash);
 
     const cached = this.#cache.get(key);
     if (cached) {
-      this.#bind(record, tile, cached, key);
-      this.applyAlpha();
-      this.#arrive(record, tile, false);
+      this.#land(record, tile, key, cached);
       return;
     }
     if (this.#failedKeys.has(key)) return;
@@ -997,17 +1056,29 @@ class Manager {
 
     log.debug(
       `drew ${tile.id} at ${result.width}x${result.height} (${Math.round(result.bytes / 1024)} kB, ` +
-        `tier ${record.tier}); cache now ${this.#cache.size} textures, ` +
+        `tier ${tier}); cache now ${this.#cache.size} textures, ` +
         `${Math.round(this.#cache.bytes / 1024 / 1024)} MB`
     );
-    this.#cache.set(key, result.texture, result.bytes);
-    this.#bind(record, tile, result.texture, key);
-    // The mesh was held invisible while there was only a placeholder on it; now that the
-    // prop's own texture is bound it has something worth showing. `#recomputeLod` runs
-    // this before the queue drains, so the bind has to say so itself.
+    this.#land(record, tile, key, result.texture, result);
+  }
+
+  /**
+   * Put a texture on a prop at the end of a generate, and let it arrive.
+   *
+   * Five exits of `#generate` did this by hand. The order is the point: the bind; then the
+   * alpha, because the mesh was held at zero while it had only the placeholder and
+   * `#recomputeLod` applied the alpha before this queue drained, so the bind has to say
+   * so itself; then the arrival, which animates to the alpha just written. A texture this
+   * generate DREW — `drawn`, with its size — is new to the cache and to the screen: it is
+   * stored first, plays the draw-in rather than appearing, and may push the cache over
+   * its budget. One found in the cache is simply there.
+   */
+  #land(record: PropRecord, tile: any, key: string, texture: any, drawn?: { bytes: number }): void {
+    if (drawn) this.#cache.set(key, texture, drawn.bytes);
+    this.#bind(record, tile, texture, key);
     this.applyAlpha();
-    this.#arrive(record, tile, true);
-    this.#trim();
+    this.#arrive(record, tile, !!drawn);
+    if (drawn) this.#trim();
   }
 
   /**
@@ -1031,9 +1102,10 @@ class Manager {
     if (!CanvasAnimation?.animate) return;
 
     mesh.alpha = 0;
+    this.#alphaTargets.set(tile.id, target);
     void CanvasAnimation.animate([{ parent: mesh, attribute: "alpha", to: target }], {
       duration: MOTION.enter,
-      name: `${MODULE_ID}.alpha.${tile.id}`,
+      name: alphaAnimation(tile.id),
     });
   }
 
@@ -1150,6 +1222,14 @@ export function teardownProps(): void {
 /** Each user preset as it stands, by id, to tell which ones a save changed. */
 function presetSnapshot(): Map<string, string> {
   return new Map(userPresets().map((preset) => [preset.id, JSON.stringify(preset)]));
+}
+
+/**
+ * The one name every alpha animation of a prop's mesh runs under — the reveal, the draw-in
+ * and the state ease — so that core's `CanvasAnimation` ends one when the next begins.
+ */
+function alphaAnimation(id: string): string {
+  return `${MODULE_ID}.alpha.${id}`;
 }
 
 /** What the DOM tier needs to play a reveal: the preset's animation and duration. */
