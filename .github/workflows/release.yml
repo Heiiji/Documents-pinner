@@ -10,10 +10,6 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
-    # Job-level so the conditional skip below can read it; a step's own `env:` block
-    # is not visible to that step's `if:` expression.
-    env:
-      FOUNDRY_KEY: ${{ secrets.FOUNDRY_KEY }}
     steps:
       - uses: actions/checkout@v5
 
@@ -100,7 +96,8 @@ jobs:
             -x "*.DS_Store"
 
       - name: GitHub release
-        uses: softprops/action-gh-release@v2
+        # A commit, not a tag: this step holds `contents: write`, and a tag can be moved.
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           files: |
             module.json
@@ -110,17 +107,22 @@ jobs:
       # Optional: publish to the Foundry package registry. Skipped automatically when
       # the FOUNDRY_KEY secret is not configured, so forks and first releases work.
       - name: Publish to the Foundry package registry
-        if: ${{ env.FOUNDRY_KEY != '' }}
         env:
+          # On this step alone: at job level it was in the environment of `npm ci`, the
+          # tests and the build. The skip is in the script for the same reason.
+          FOUNDRY_KEY: ${{ secrets.FOUNDRY_KEY }}
           VERSION: ${{ steps.version.outputs.value }}
           MODULE_ID: ${{ steps.manifest.outputs.id }}
           COMPATIBILITY: ${{ steps.manifest.outputs.compatibility }}
           REPO: ${{ github.repository }}
         run: |
+          if [ -z "$FOUNDRY_KEY" ]; then
+            echo "FOUNDRY_KEY is not set: not published to the Foundry registry."
+            exit 0
+          fi
           payload=$(node -e '
             const { VERSION, MODULE_ID, COMPATIBILITY, REPO } = process.env;
             console.log(JSON.stringify({
-              dry_run: false,
               id: MODULE_ID,
               release: {
                 version: VERSION,
@@ -134,4 +136,4 @@ jobs:
             -H "Content-Type: application/json" \
             -H "Authorization: $FOUNDRY_KEY" \
             -d "$payload" \
-            https://api.foundryvtt.com/_api/packages/release_version
+            https://foundryvtt.com/_api/packages/release_version/
