@@ -5,6 +5,13 @@ click, or as a full-size **readable prop lying on the scene**.
 
 Per-pin visibility the GM changes in one click. Foundry VTT **v14+**.
 
+![A letter, a wanted poster and a found object lying on the map, as the GM sees them](docs/media/01-scene.jpg)
+
+| | |
+|---|---|
+| ![The Pinboard: every pin on the scene, who sees it, and the next one to reveal](docs/media/02-pinboard.jpg) | ![Pin Studio: paper, typeface, text size and effect of one prop](docs/media/03-pin-studio.jpg) |
+| ![Placing: a ghost of the real prop follows the cursor](docs/media/04-placing.jpg) | ![A player reading the letter in place; the pins hidden from them are not there](docs/media/06-player-reading.jpg) |
+
 > **Beta.** Text props are drawn as an HTML layer over the canvas, not into it, so they
 > are **not lit, fogged or occluded** and do not sort behind tokens. That was the plan, and
 > it was not possible: an SVG containing a `foreignObject`, decoded the way the module
@@ -29,17 +36,19 @@ Enable it in **Manage Modules**. Nothing else to configure.
 
 ## Browsers
 
-Foundry's desktop app is Chromium 144, so nothing here constrains it. In a browser this
-module needs **Chrome or Edge 120+, or Firefox 129+** — Firefox ESR 140 yes, ESR 128 no.
+**Whatever runs Foundry v14 runs this module.** Foundry's desktop app is far ahead of
+anything used here (14.370 ships Chromium 156), and in a browser Foundry v14 itself asks
+for Chromium 146 or Firefox 138. The module's own floor is lower: **Chrome or Edge 120+,
+or Firefox 129+**.
 
 Those two numbers are the newest CSS features the module actually uses: unprefixed
 `mask-image`, which is what a torn or burnt edge is made of, and `@starting-style`, which
 is what makes the reader settle rather than appear. `tests/css-baseline.test.ts` fails if a
 stylesheet ever reaches past them, so the claim cannot quietly go stale.
 
-**Firefox is checked by hand each release** against a live world and against
+**Firefox is checked by hand**, against a live world and against
 `tests/harness/effects.html`, a page that mounts every effect under the real stylesheet in
-two engines side by side. Safari is deliberately not claimed: nobody has measured it since
+two engines side by side — not for every release: 0.4.2 was verified in Chromium only. Safari is deliberately not claimed: nobody has measured it since
 the finding in [`docs/DESIGN.md`](docs/DESIGN.md) A17, and stating a number nobody has run
 would be worse than saying nothing.
 
@@ -51,8 +60,8 @@ ghost of the real prop follows the cursor; click to place.
 **A new pin is visible to players the moment it lands.** That is the default of the
 *Default visibility* setting. Press `V` while placing to put this one down hidden, or set
 *Default visibility* to *Hidden until revealed* so every pin waits for you. With *Grant
-document access on reveal* on, a visible pin also puts its document in the players'
-sidebar — so if you prepare scenes while players are connected, change the default first.
+document access on reveal* on, a visible pin also lets the players open its document —
+so if you prepare scenes while players are connected, change the default first.
 
 | Placing | |
 |---|---|
@@ -126,16 +135,19 @@ compendium's from two letters — with a chip to show one kind alone.
 
 Also: a header button on journal, actor and item sheets, the Notes scene controls,
 context menus in the sidebar and in compendium windows, a checkbox on any tile's config
-sheet to adopt it, and a button on a map note to convert it.
+sheet to adopt it, and a button on a map note to convert it — into a pin that starts
+hidden.
 
 **Two surfaces for visibility.** The HUD on a selected pin answers *this one, now*; the
 Pinboard answers *the whole scene*, with bulk select and a hand-sorted order that doubles
 as your reveal script. Avatar chips read: filled = can see it, hollow = cannot, key glyph
 = can see it but cannot open it.
 
-Optionally, revealing also raises the document's ownership so it lands in the player's
-sidebar. Un-revealing restores the previous permissions exactly, including when you edited
-them by hand in between.
+Optionally, revealing also raises the document's ownership so the players can open it. A
+journal pinned whole, or an item, then lands in their sidebar; **a single page is shared
+alone** — it opens from its pin, and its journal, its other pages and the map notes that
+point at them stay hidden. Un-revealing restores the previous permissions exactly,
+including when you edited them by hand in between.
 
 ## Settings
 
@@ -198,10 +210,10 @@ map for any visible pin, as its label says.
    module probes for this at startup and draws props as an HTML layer over the canvas instead, dimmed by the scene's global darkness level and by
    nothing else — except on the Projection stock, which is light and stays bright. So a
    revealed text prop shows through fog a player has not explored: reveal it when they
-   reach it — Pin Studio's Audience tab says so. *That probe now passes on current Chrome
-   and Firefox* — see [`docs/DESIGN.md`](docs/DESIGN.md) A21 — so the tier may be
-   reachable again; nothing has been changed on that until the whole pipeline is measured
-   in a real world, not just the probe.
+   reach it — Pin Studio's Audience tab says so. *The taint turned out to come from how
+   the module decodes that SVG, not from the SVG itself* — see
+   [`docs/DESIGN.md`](docs/DESIGN.md) A29 — so the tier may be reachable after all;
+   nothing changes until the whole pipeline has been measured in a real world.
 6. Deleting a pinned document leaves the pin showing a placeholder — never auto-deleted.
 7. A compendium document can be pinned, and shows to the players whose role can open
    that compendium — Observer for their role. Anyone else sees a placeholder that says
@@ -232,6 +244,58 @@ map for any visible pin, as its label says.
     and the Pinboard's level filter groups pins by elevation. Level support waits until it
     has been checked in a live world.
 
+## What it stores, and removing it
+
+- **A pin is a Tile** carrying `flags.documents-pinner.pin`. Nothing else is written on a scene.
+- **A document a reveal shared** has its ownership raised, and carries
+  `flags.documents-pinner.grants`: the record of what the module raised, so that un-revealing
+  or deleting the pin gives back exactly that and nothing you set by hand.
+- ***Import & pin*** makes a "Documents Pinner" folder per document type, holding the copies.
+- **World settings** hold the three defaults and the presets you made; everything else is a
+  client setting in your browser. No socket, no user flags, no files.
+
+**Before you disable the module for good**, give back the access it granted: run
+`game.modules.get("documents-pinner").api.releaseAllAccess()` from a macro or the console —
+it says how many documents it gave back — or delete the pins (Pinboard, select all, delete,
+on each scene), which does the same pin by pin. Then hide or delete the pins themselves:
+disabled, they stay as plain tiles, and a pin shown to some players only becomes visible to
+everyone, since Foundry itself only knows hidden or not.
+
+## For macro and module authors
+
+```js
+const api = game.modules.get("documents-pinner").api; // set at `ready`
+Hooks.once("documents-pinner.ready", (api) => {});     // if yours runs first
+
+const source = api.sourceFromDocument(game.journal.getName("The Duke's Letter"));
+const tile = await api.pinAt(canvas.scene, source, { x: 1200, y: 800, audienceKind: "hidden" });
+await api.toggleVisibility(tile); // reveal it, to the players it remembers
+```
+
+A pin is its `TileDocument`; every verb takes one. Writing is the GM's: for a player those
+verbs do nothing, or Foundry refuses them.
+
+| | |
+|---|---|
+| `pinAt(scene, source, {x, y, mode?, audienceKind?, width?, height?, rotation?, effectId?})` | create a pin; resolves to its tile, or `null` |
+| `sourceFromDocument(doc)` · `sourceFromNote(note)` | the `source` of a journal, page, actor or item · of a map note |
+| `adoptTile(tile, source)` · `adoptNote(note)` | turn a tile into a pin · replace a map note with one |
+| `all(scene)` · `read(tile)` | the scene's pins, in reveal order · a tile's pin data, or `null` |
+| `canUserSee(tile, userId)` · `canUserOpen(tile, userId)` | who a pin is for · who could open what it shows |
+| `toggleVisibility(tile)` · `cycleAudience(tile)` · `setUserVisible(tile, userId, visible)` · `soloUser(tile, userId)` | change who sees it; the document access follows |
+| `revealNext(scene)` · `spotlight(tile)` · `flash(tile)` · `locate(tile)` | the Pinboard's verbs |
+| `setMode(tile, "pin" \| "prop")` · `fitToContent(tile)` · `resize(tile, {width, height})` · `resetSize(tile)` | shape and size |
+| `patch(tile, changes)` | a partial update of the pin data, validated |
+| `openLocally(tile)` · `showToAudience(tile)` | open it here · on its audience's screens |
+| `unpin(tile)` · `deletePin(tile)` | back to a plain tile · delete it; both give back the access it granted |
+| `releaseAllAccess()` | give back every access the module granted, in the whole world; resolves to how many documents |
+
+Hooks: `documents-pinner.ready (api)`, `documents-pinner.readerOpened (tile)`,
+`documents-pinner.readerClosed ()`. Anything else on the object or under that prefix is the
+module talking to itself, and **until 1.0 any of it may change** — the changelog will say.
+To style it, the theme tokens are `--dp-paper`, `--dp-ink`, `--dp-edge` and `--dp-accent`,
+on `.dp-scope` and `.dp-card-root`.
+
 ## Development
 
 ```bash
@@ -260,6 +324,8 @@ d'une petite **icône** sur laquelle les joueurs cliquent, ou d'un **accessoire 
 
 Une visibilité que le MJ change en un clic. Foundry VTT **v14+**.
 
+![Une lettre, un avis de recherche et une trouvaille posés sur la carte, vus par le MJ](docs/media/01-scene.jpg)
+
 > **Bêta.** Les accessoires de texte sont dessinés en HTML par-dessus le canevas,
 > pas dedans : ils ne sont donc **ni éclairés, ni embrumés, ni occultés**, et ne passent pas
 > derrière les pions. C'était le plan, et ce ne l'était pas : un SVG contenant un
@@ -282,9 +348,10 @@ Activez-le dans **Gérer les modules**. Rien d'autre à configurer.
 
 ## Navigateurs
 
-L'application de bureau de Foundry est Chromium 144 : rien ici ne la contraint. Dans un
-navigateur, ce module demande **Chrome ou Edge 120+, ou Firefox 129+** — Firefox ESR 140
-oui, ESR 128 non.
+**Ce qui fait tourner Foundry v14 fait tourner ce module.** L'application de bureau de
+Foundry est très en avance sur tout ce qui est utilisé ici (la 14.370 embarque Chromium
+156), et dans un navigateur Foundry v14 demande lui-même Chromium 146 ou Firefox 138. Le
+plancher du module est plus bas : **Chrome ou Edge 120+, ou Firefox 129+**.
 
 Ces deux nombres sont les fonctionnalités CSS les plus récentes que le module utilise
 réellement : `mask-image` sans préfixe, dont sont faits les bords déchirés ou brûlés, et
@@ -292,9 +359,10 @@ réellement : `mask-image` sans préfixe, dont sont faits les bords déchirés o
 `tests/css-baseline.test.ts` échoue si une feuille de style dépasse ces versions, pour que
 l'affirmation ne devienne pas silencieusement fausse.
 
-**Firefox est vérifié à la main à chaque version**, sur un monde réel et sur
+**Firefox est vérifié à la main**, sur un monde réel et sur
 `tests/harness/effects.html`, une page qui monte tous les effets sous la vraie feuille de
-style dans les deux moteurs, côte à côte. Safari n'est délibérément pas revendiqué :
+style dans les deux moteurs, côte à côte — pas à chaque version : la 0.4.2 n'a été vérifiée
+que dans Chromium. Safari n'est délibérément pas revendiqué :
 personne ne l'a mesuré depuis la découverte décrite dans
 [`docs/DESIGN.md`](docs/DESIGN.md) A17, et annoncer un nombre que personne n'a essayé
 serait pire que de ne rien dire.
@@ -308,9 +376,8 @@ sur la carte. Un fantôme de l'accessoire réel suit le curseur ; cliquez pour p
 défaut du réglage *Visibilité par défaut*. Appuyez sur `V` pendant le placement pour poser
 celle-ci masquée, ou réglez *Visibilité par défaut* sur *Masquée jusqu'à révélation* pour
 que chaque épingle vous attende. Avec *Accorder l'accès au document lors de la révélation*
-activé, une épingle visible place aussi son document dans la barre latérale des joueurs :
-si vous préparez vos scènes pendant que des joueurs sont connectés, changez d'abord ce
-réglage.
+activé, une épingle visible permet aussi aux joueurs d'ouvrir son document : si vous
+préparez vos scènes pendant que des joueurs sont connectés, changez d'abord ce réglage.
 
 | Placement | |
 |---|---|
@@ -392,16 +459,19 @@ montrer qu'un type.
 Également : un bouton dans l'en-tête des fiches de journal, d'acteur et d'objet, les
 contrôles de scène Notes, les menus contextuels de la barre latérale et des fenêtres de
 compendium, une case sur la fiche de n'importe quelle tuile pour l'adopter, et un bouton
-sur une note de carte pour la convertir.
+sur une note de carte pour la convertir — en une épingle qui commence masquée.
 
 **Deux surfaces pour la visibilité.** Le HUD d'une épingle sélectionnée répond *celle-ci,
 maintenant* ; le tableau de bord répond *toute la scène*, avec sélection groupée et un ordre
 trié à la main qui tient lieu de script de révélation. Les pastilles se lisent ainsi :
 pleine = peut la voir, creuse = ne peut pas, glyphe de clé = peut la voir mais pas l'ouvrir.
 
-En option, révéler élève aussi les permissions du document pour qu'il apparaisse dans la
-barre latérale du joueur. Annuler la révélation restaure exactement les permissions
-précédentes, y compris si vous les avez modifiées à la main entre-temps.
+En option, révéler élève aussi les permissions du document pour que les joueurs puissent
+l'ouvrir. Un journal épinglé en entier, ou un objet, apparaît alors dans leur barre
+latérale ; **une page seule est partagée seule** — elle s'ouvre depuis son épingle, et son
+journal, ses autres pages et les notes de carte qui les désignent restent cachés. Annuler la
+révélation restaure exactement les permissions précédentes, y compris si vous les avez
+modifiées à la main entre-temps.
 
 ## Réglages
 
@@ -471,10 +541,10 @@ joueur pour toute épingle visible, comme son libellé l'indique.
    rien d'autre — sauf sur le support Projection, qui est de la lumière et reste vif. Un
    accessoire de texte révélé se voit donc à travers un brouillard que le joueur n'a pas
    exploré : révélez-le quand ils l'atteignent — l'onglet Audience du Studio le rappelle.
-   *Ce test réussit désormais sur Chrome et Firefox actuels* — voir
-   [`docs/DESIGN.md`](docs/DESIGN.md) A21 — la voie est donc peut-être rouverte ; rien
-   n'a été changé tant que toute la chaîne n'aura pas été mesurée dans un vrai monde, et
-   pas seulement le test.
+   *La contamination venait en fait de la façon dont le module décode ce SVG, pas du SVG
+   lui-même* — voir [`docs/DESIGN.md`](docs/DESIGN.md) A29 — la voie est donc peut-être
+   rouverte ; rien ne change tant que toute la chaîne n'a pas été mesurée dans un vrai
+   monde.
 6. Supprimer un document épinglé laisse l'épingle sur un substitut — jamais supprimée
    automatiquement.
 7. Un document de compendium peut être épinglé, et s'affiche pour les joueurs dont le
@@ -512,6 +582,43 @@ joueur pour toute épingle visible, comme son libellé l'indique.
     du module ne connaissent pas encore les niveaux, et le filtre de niveau du tableau de
     bord regroupe les épingles par élévation. Leur prise en charge attend d'avoir été vérifiée
     dans un vrai monde.
+
+## Ce qu'il enregistre, et comment le retirer
+
+- **Une épingle est une tuile** qui porte `flags.documents-pinner.pin`. Rien d'autre n'est
+  écrit sur une scène.
+- **Un document partagé par une révélation** voit ses permissions élevées, et porte
+  `flags.documents-pinner.grants` : le registre de ce que le module a élevé, pour que masquer
+  ou supprimer l'épingle rende exactement cela, et rien de ce que vous avez réglé à la main.
+- ***Importer et épingler*** crée un dossier « Documents Pinner » par type de document, qui
+  contient les copies.
+- **Les réglages du monde** contiennent les trois valeurs par défaut et vos préréglages ; tout
+  le reste est un réglage client, dans votre navigateur. Ni socket, ni drapeau d'utilisateur,
+  ni fichier.
+
+**Avant de désactiver le module pour de bon**, rendez l'accès qu'il a accordé : lancez
+`game.modules.get("documents-pinner").api.releaseAllAccess()` depuis une macro ou la console
+— il dit combien de documents il a rendus — ou supprimez les épingles (tableau de bord, tout
+sélectionner, supprimer, sur chaque scène), ce qui fait la même chose épingle par épingle.
+Masquez ou supprimez ensuite les épingles elles-mêmes : désactivé, elles restent de simples
+tuiles, et une épingle montrée à quelques joueurs seulement devient visible de tous, Foundry
+ne connaissant que masqué ou non.
+
+## Pour les auteurs de macros et de modules
+
+```js
+const api = game.modules.get("documents-pinner").api; // défini à `ready`
+Hooks.once("documents-pinner.ready", (api) => {});     // si le vôtre passe avant
+
+const source = api.sourceFromDocument(game.journal.getName("La lettre du duc"));
+const tile = await api.pinAt(canvas.scene, source, { x: 1200, y: 800, audienceKind: "hidden" });
+await api.toggleVisibility(tile); // la révéler, aux joueurs dont elle se souvient
+```
+
+Une épingle, c'est son `TileDocument` ; chaque verbe en prend un. Écrire revient au MJ : pour
+un joueur ces verbes ne font rien, ou Foundry les refuse. Le tableau des verbes et des hooks est dans la partie anglaise,
+[plus haut](#for-macro-and-module-authors) ; **avant la 1.0, tout peut encore changer** — le
+journal des modifications le dira.
 
 ## Développement
 

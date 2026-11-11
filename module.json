@@ -1,11 +1,11 @@
 {
   "id": "documents-pinner",
   "title": "Documents Pinner",
-  "description": "Pin a journal, a page, an actor, an item or an image \u2014 from your world or a compendium \u2014 onto the map, as a small icon players click or as a full-size readable prop lying on the scene. Per-pin visibility the GM controls in one click, and subtle immersive effects.",
+  "description": "Pin a journal, a page, an actor, an item or an image — from your world or a compendium — onto the map, as a small icon players click or as a full-size readable prop lying on the scene. Per-pin visibility the GM controls in one click, and subtle immersive effects.",
   "version": "0.0.0",
   "compatibility": {
     "minimum": "14",
-    "verified": "14.365"
+    "verified": "14.370"
   },
   "authors": [
     {
@@ -27,15 +27,45 @@
     },
     {
       "lang": "fr",
-      "name": "Fran\u00e7ais",
+      "name": "Français",
       "path": "lang/fr.json"
+    }
+  ],
+  "media": [
+    {
+      "type": "cover",
+      "url": "https://raw.githubusercontent.com/Heiiji/Documents-pinner/main/docs/media/01-scene.jpg"
+    },
+    {
+      "type": "screenshot",
+      "url": "https://raw.githubusercontent.com/Heiiji/Documents-pinner/main/docs/media/01-scene.jpg"
+    },
+    {
+      "type": "screenshot",
+      "url": "https://raw.githubusercontent.com/Heiiji/Documents-pinner/main/docs/media/02-pinboard.jpg"
+    },
+    {
+      "type": "screenshot",
+      "url": "https://raw.githubusercontent.com/Heiiji/Documents-pinner/main/docs/media/03-pin-studio.jpg"
+    },
+    {
+      "type": "screenshot",
+      "url": "https://raw.githubusercontent.com/Heiiji/Documents-pinner/main/docs/media/04-placing.jpg"
+    },
+    {
+      "type": "screenshot",
+      "url": "https://raw.githubusercontent.com/Heiiji/Documents-pinner/main/docs/media/05-player-view.jpg"
+    },
+    {
+      "type": "screenshot",
+      "url": "https://raw.githubusercontent.com/Heiiji/Documents-pinner/main/docs/media/06-player-reading.jpg"
     }
   ],
   "relationships": {
     "systems": [],
     "requires": []
   },
-  "license": "MIT",
+  "license": "https://github.com/Heiiji/Documents-pinner/blob/main/LICENSE",
   "readme": "https://github.com/Heiiji/Documents-pinner/blob/main/README.md",
   "changelog": "https://github.com/Heiiji/Documents-pinner/blob/main/CHANGELOG.md",
   "bugs": "https://github.com/Heiiji/Documents-pinner/issues",

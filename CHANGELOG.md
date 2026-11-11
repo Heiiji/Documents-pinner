@@ -9,6 +9,99 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Nothing yet.
 
+## [0.4.2] — 2026-11-11
+
+A review before the module is listed on Foundry's package directory, and the first sitting
+in a live Foundry 14.370 world since 0.3. One thing changes for a GM: **revealing a single
+page no longer touches its journal** (see Security). The rest is what the review and the
+sitting found.
+
+### Security
+
+- **A pinned text could run a script on every screen that drew it.** A card removes
+  anything executable from the page it shows, but kept Foundry's own editor element, which
+  turns one of its attributes back into live markup the moment it is displayed. A player
+  who could edit a pinned document — their character's biography, a shared page — could
+  have used it against the GM. A card now keeps only the three elements Foundry's text
+  enrichment produces, and drops SVG animation, links from a card's fields to an open
+  sheet's form, and `ping`.
+- **Revealing one page showed the players the journal's map notes.** A page's reveal put
+  Limited access on its whole journal, meant to list the journal in the players' sidebar.
+  It never did — Foundry lists a journal at Observer — and at Limited, Foundry shows a map
+  note: every note pointing at that journal, or at a page that inherits from it, appeared
+  on the players' maps. A page is now shared alone and opens from its pin; pin a journal
+  whole to put it in the sidebar. The Limited access earlier versions left on journals is
+  taken back when a GM next loads the world, and says so.
+- **Converting a map note published it.** The new pin took the world's default, visible to
+  everyone with the document shared, while the dialog said the journal was untouched. A
+  converted note starts hidden.
+- **An imported preset could make every client fetch a web address** through its surface
+  texture. A texture is a file on your own server, as a reveal sound already had to be.
+- **A notification quotes names as text.** A document's name, or a value out of an imported
+  preset, was drawn as markup in the warning that quoted it.
+- A grant is only ever made on a journal, a page, an actor or an item, and only for a tile
+  a GM created.
+
+### Added
+
+- **A way out.** `game.modules.get("documents-pinner").api.releaseAllAccess()` gives back
+  every access the module has granted, in the whole world, and says how many documents that
+  was — for a GM about to disable the module, where nothing would ever take a grant back.
+- Screenshots, in the README and for the package listing.
+
+### Removed
+
+- The working prompts the module was built from (`docs/*-PROMPT.md`), which carried local
+  paths and belonged to no reader of this repository.
+
+### Fixed
+
+- **`/pin` did nothing on Foundry 14.** Its chat box is a rich-text editor and sends the
+  command wrapped in markup, which the module did not recognise: Foundry answered "/pin is
+  not a valid chat message command".
+- **Titles and headings were near-white on parchment in Foundry's dark theme**, and in the
+  game system's display font whatever typeface the prop had been given. They are written in
+  the paper's ink and face.
+- **A map with many props stuttered when panned or zoomed.** Every card was painted again
+  on every frame. Measured in a live world with forty props: 21 ms a frame panning and
+  26 ms zooming before, 7 ms after.
+- **A slow moment could make small props disappear for the rest of the scene.** The
+  "reduce detail automatically" guard lowered every prop a level, and for a small text prop
+  the level below is not drawn at all — and for a PDF it is the placeholder book. It only
+  softens detail now.
+- **`/pin` left the chat box eating the ghost's keys.** With a placement armed, E, V, R, F
+  and Space were taken from whatever you were typing — and changed the pin's effect, shape
+  and audience while they were at it — and Ctrl+V toggled the audience instead of pasting.
+  Arming a placement now takes the focus out of the text field, a letter typed in one stays
+  there, and Ctrl and ⌘ chords are left to the browser. Escape still cancels from anywhere.
+- **A Pin Studio detached into its own window stored wrong values**: checkboxes could not be
+  changed, the intensity slider went to full, an emptied PDF page became page 1.
+- **Space on a Pinboard opened a second time paused the game.** The board took the keyboard
+  only the first time it was opened.
+- **Alt+Shift+F with a Pinboard row focused flashed the pin instead of fitting it**, and the
+  board took Ctrl+F, Ctrl+L and Ctrl+O from the browser.
+- **A permission you changed by hand while the module was disabled could be lowered.** Made
+  an owner in the meantime, a player was put back at the pin's level by the next change to
+  its audience, and lost their entry when the pin was hidden. The edit is kept, as one made
+  with the module enabled always was.
+- **Going back to an older version of the module rewrote the pins a newer one had saved**,
+  dropping what the older one did not know. They are read as well as it can and left alone.
+- An effect's name on a Pinboard row was cut at both ends ("ealed & W"); a warning was
+  logged on every load of a world ("could not store setting schemaVersion"); and every pin
+  was called "Book" in Foundry 14.370's Placeables list — a new pin is named after its
+  document.
+- The row menu stayed on the Pinboard after a delete you cancelled; the reader announced
+  "Tom &amp;amp; Jerry" to a screen reader; a pin icon with a stray `%` in its file name kept
+  Pin Studio from opening.
+- For macros: `deletePin` deleted any tile it was handed, pin or not, and `openLocally`
+  opened a pin hidden from the player calling it.
+
+### Changed
+
+- The README says what the module stores, how to remove it cleanly, and what a macro or
+  another module can call.
+- Verified on Foundry 14.370.
+
 ## [0.4.1] — 2026-10-01
 
 A performance and code-quality audit of 0.4.0, and everything it found. Some of it was in
@@ -1102,7 +1195,8 @@ occluded. The module detects this at startup rather than failing visibly.
 
 The full list is in the README and in `docs/DESIGN.md` §10.
 
-[Unreleased]: https://github.com/Heiiji/Documents-pinner/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/Heiiji/Documents-pinner/compare/v0.4.2...HEAD
+[0.4.2]: https://github.com/Heiiji/Documents-pinner/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/Heiiji/Documents-pinner/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/Heiiji/Documents-pinner/compare/v0.3.3...v0.4.0
 [0.3.3]: https://github.com/Heiiji/Documents-pinner/compare/v0.3.2...v0.3.3

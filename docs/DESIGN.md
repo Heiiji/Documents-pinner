@@ -87,7 +87,7 @@ Two costs, both cheap to pay:
 | Pin visible to a subset | our `audience.canSee` via `PinnedTile#isVisible` | client (core parity) |
 | Prop content reaching a player | each client enriches from its own copy | client |
 | GM secrets inside a page, or an actor's or item's text | `enrichHTML({ secrets: doc.isOwner })` + post-filter | **content removed** |
-| Document appears in the sidebar | ownership ledger (§4) | **server** |
+| Document opens for the player — and, for a journal pinned whole or an item, appears in the sidebar (A30) | ownership ledger (§4) | **server** |
 | Writing a pin's configuration | GM only; players never write | **server** |
 
 **Stated plainly, and repeated in the README:** visibility is enforced *at parity with
@@ -2174,6 +2174,66 @@ deleted document object, flags and all (81362-81375), so the scene is asked, not
   alpha on a hover, until the next alpha pass.
 - A scene imported in the middle of a session is offered for migration in the next one; it is
   still migrated silently when viewed.
+
+---
+
+### A30 — The review before the listing, and the first live sitting since 0.3 (2026-11-11)
+
+A review of the whole module before it is submitted to Foundry's package directory — security,
+the canvas's hot path, data and sources, the applications and the public surface — then a
+sitting in a live world: Foundry **14.370** (Electron 45, Chromium 156), dnd5e 6.0.6, dark
+theme, a GM and a player seat. The review read core's source; the sitting is what decided.
+
+#### What the sitting settled
+
+| Question | Answer, as observed | What changed |
+|---|---|---|
+| A23's unverified half: does LIMITED on a journal list it in a player's sidebar? | **No.** `JournalEntry#visible` asks OBSERVER; the journal stayed out of the sidebar. | — |
+| What does that LIMITED do instead? | A Map Note is visible at LIMITED on `page ?? entry` (`Note#isVisible`): both notes of the test journal appeared on the player's map. | `journalGrantTargets` grants **the page alone**. The player opens it from its pin: the journal's sheet has `viewPermission` NONE and showed that page and no other. The `ready` sweep narrows what 0.3.4–0.4.1 left on journals (a holder on a document its anchor no longer targets). §3's "appears in the sidebar" holds for a journal pinned whole, an item, and an actor at the system's discretion — not for a page. |
+| Is core's `<prose-mirror value>` a real gadget? | **Yes.** Attached to the document, it wrote its `value` attribute as `innerHTML` and the handler ran. Core stores the payload unchanged, written by a player on a document they own. Core's own journal sheet did not run it. | `scrub` keeps only the custom elements enrichment emits (`document-embed`, `enriched-content`, `secret-block`). A game system's own custom elements go with the rest: a card is not their host. |
+| Does the DOM tier repaint every card on every frame of a pan? | **Yes.** Forty props: 21 ms a frame panning, 26 ms zooming (an M4 Max, 120 Hz). | `syncTransform` promotes the overlay (`will-change: transform`) while the view moves and lets go 150 ms after it rests: 7 ms a frame, both ways. Not left on — a promoted layer is not painted again when its scale changes, and cards zoomed into stayed sharp only because it is released. §6.2 gains this as a rule: **the overlay is on its own compositor layer whenever its transform is changing.** |
+| `/pin` | Never recognised: v14's chat box is a rich-text editor and hands the hook `<p>/pin …</p>`. Core refused it as an invalid command. | The hook reads the text of the markup, as core's own parser does. |
+| Headings on a card, dark theme | Near-white on parchment, in the system's display face: core styles `h1`–`h6` directly. | The title and the page's headings inherit the paper's ink and face. |
+| Core's Placeables list | Every pin was "Book": 14.370 names an unnamed tile after its texture's file. | A pin's tile is named after its document when placed. |
+| First load of a world | `schemaVersion` was never stored: core draws the first canvas before `ready` and refuses a world setting until then. | The write waits for `ready`. |
+
+#### What the review changed without needing the sitting
+
+- **The ledger rebases an edit it never heard of** (`planGrant`): a permission changed by hand
+  while the module was disabled was lowered to the pin's level by the next sync and deleted by
+  the release — invariants 1 and 2, broken by the one state §4 did not consider, a ledger with
+  nobody listening.
+- **The perf guard softens, and never hides** (`lod.soften`): one step under `L2a` is the
+  placeholder book for a PDF, and under that no card at all.
+- **A way out** (`releaseAll`, `api.releaseAllAccess`): every holder of every ledger released
+  under the ledger's own rules. Disabled, nothing would ever take a grant back.
+- **A converted Map Note starts hidden**; a grant is made only on a document an adapter
+  answers for, and only for a tile a GM created; a preset's texture is a file on this server,
+  as its sound is; a notification quotes names as text; a payload from a newer version is
+  read and left alone by the migration.
+- Keys: the ghost leaves a text field its letters and takes the focus when armed; the
+  Pinboard takes the keyboard each time it opens and leaves chords alone; a detached Pin
+  Studio reads its inputs by tag.
+
+#### Seen in the same sitting, without a change
+
+A PDF page drawn into the scene, its second page chosen from the payload, for the GM and for
+a player; with the frame rate held under the guard's line (a browser pane left in the
+background), the PDF softened and stayed its page. A compendium journal pinned from its pack
+— no world copy, no grant, the tile named — read by a player whose role opens the pack, its
+secret section removed. An Alt-drop of an item on the canvas, through core's own drop
+handler, arming the ghost, and the click that places it.
+
+#### Still not seen live
+
+*Import & pin*; a drag with a real mouse; Firefox and Safari; a detached window; the `ready`
+sweep on a world that 0.4.1 actually wrote; two GMs; the canvas tier for text. The checklist
+below still stands for those, on 14.370 now.
+
+**Left open, on purpose:** a grant can lower the effective level of a page that inherits a
+higher one from its journal (restored exactly on release); Ctrl+Z of an audience change leaves
+the grant until the next `ready` sweep; the sweep runs at `ready` only; saving a preset
+rewrites the stored library from its validated form; the public API is not frozen before 1.0.
 
 ---
 
