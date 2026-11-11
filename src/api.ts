@@ -38,7 +38,7 @@ import {
   naturalSize,
   type PinPatch,
 } from "./data/pin-schema";
-import { releaseAnchor, syncAnchor } from "./data/ownership-sync";
+import { releaseAll, releaseAnchor, syncAnchor } from "./data/ownership-sync";
 import { findPreset } from "./effects/preset-library";
 import { resolveCard } from "./render/ContentResolver";
 import * as settings from "./settings";
@@ -194,6 +194,9 @@ export async function pinAt(scene: any, source: DpSource, at: PinPlacement): Pro
     elevation: at.elevation ?? 0,
     sort: nextSort(scene),
     texture: anchorTexture(source),
+    // ponytail: named once, when placed. A document renamed afterwards leaves the old name
+    // in core's Placeables list; follow it from `onSourceRenamed` if that ever matters.
+    name: labelFor(pin),
   });
 
   if (anchor) {
@@ -638,6 +641,9 @@ export async function showToAudience(anchorDoc: any): Promise<void> {
 export async function openLocally(anchorDoc: any): Promise<void> {
   const pin = readPin(anchorDoc);
   if (!pin) return;
+  // The pin's audience is the authority on who reads it, and only the hit layer asked: a
+  // macro calling this for a player opened a pin hidden from them.
+  if (!isGM() && !canUserSee(anchorDoc, g()?.user?.id)) return;
 
   if (readsInPlace(pin)) {
     Hooks.call(`${MODULE_ID}.openReader`, anchorDoc);
@@ -879,16 +885,29 @@ export async function locate(anchorDoc: any): Promise<void> {
 
 /** Delete a pin, releasing its ownership claim first so no grant is orphaned. */
 export async function deletePin(anchorDoc: any): Promise<void> {
-  if (!isGM()) return;
+  // A pin, as every other verb asks: this one deleted whatever tile it was handed.
+  if (!isGM() || !readPin(anchorDoc)) return;
   // In the pin's own write queue, after every write already in it, as the bulk delete is
   // (A29): released first, outside it, a chip click still landing was written after the
   // release, and its sync granted on behalf of a pin about to be deleted.
   await store.remove(anchorDoc, () => releaseAnchor(anchorDoc));
 }
 
+/**
+ * Give back every access the module has granted, in the whole world, and say how many
+ * documents that was. For a GM about to disable the module for good: disabled, nothing
+ * would ever take a grant back. Pins are left as they are.
+ */
+export async function releaseAllAccess(): Promise<number> {
+  if (!isGM()) return 0;
+  const count = await releaseAll();
+  notify({ key: "DP.notice.accessReleased", data: { count } }, "info");
+  return count;
+}
+
 /** Turn an anchor back into an ordinary tile, keeping the tile itself. */
 export async function unpin(anchorDoc: any): Promise<void> {
-  if (!isGM()) return;
+  if (!isGM() || !readPin(anchorDoc)) return;
   await releaseAnchor(anchorDoc);
   await store.unpin(anchorDoc);
 }
@@ -990,6 +1009,10 @@ export async function adoptNote(noteDoc: any, source?: DpSource | null): Promise
     // this module over a plain map note, and a GM whose default is "prop" converting a
     // note and getting another small icon has no way to tell that anything happened.
     mode: settings.get("defaultMode"),
+    // Hidden, whatever the world's default: a note the players could not see, converted,
+    // was a pin revealed to everyone, with the document's access granted — while the
+    // dialog said the journal was untouched. The GM reveals it, in one click, when it is time.
+    audienceKind: "hidden",
   });
   if (!anchor) return null;
 
@@ -1040,6 +1063,7 @@ export function publicApi() {
     resize,
     deletePin,
     unpin,
+    releaseAllAccess,
     labelFor,
     resolveSource,
     sourceFromDropData,

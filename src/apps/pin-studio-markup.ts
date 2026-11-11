@@ -309,7 +309,7 @@ function iconField(doc: any, pin: DpPinFlags, options: StudioOptions): string {
     ...(options.icons ?? []).filter((icon) => icon.src !== PLACEHOLDER_TEXTURE),
   ];
   if (!choices.some((icon) => icon.src === current)) {
-    const file = decodeURIComponent(String(current).split("/").pop() ?? current);
+    const file = fileName(String(current));
     choices.push({ label: t("DP.studio.iconCustom", { file }), src: current });
   }
   const items = choices
@@ -759,8 +759,10 @@ export function formToPatch(entries: [string, unknown][]): Record<string, any> {
 
 /** Read a form element's value with the type the schema expects. */
 export function valueOf(element: HTMLInputElement | HTMLSelectElement): unknown {
-  if (element instanceof HTMLInputElement) {
-    if (element.type === "checkbox") return element.checked;
+  // By tag, not `instanceof`: a detached Studio's inputs belong to the other window, whose
+  // `HTMLInputElement` is not this one (`focus-restore` has the same trap).
+  if (element.tagName === "INPUT") {
+    if (element.type === "checkbox") return (element as HTMLInputElement).checked;
     // An emptied number input is "no value", not zero. `source.pdfPage` is nullable and
     // the schema clamps to one, so `Number("")` would store page 1 — a page the GM never
     // chose — the moment they cleared the field to type another number.

@@ -78,6 +78,27 @@ describe("the Pinboard's keyboard surface", () => {
     expect(document.activeElement).toBe(rows()[0]);
   });
 
+  it("takes the keyboard again when it is opened a second time", async () => {
+    await board.close();
+    (document.activeElement as HTMLElement | null)?.blur();
+    await board.render();
+    await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
+
+    // Otherwise Space on the reopened board is core's pause, for the whole table.
+    expect(document.activeElement).toBe(rows()[0]);
+  });
+
+  it("leaves a chord alone: Alt+Shift+F is the fit binding's, Ctrl+F the browser's", () => {
+    const chord = (init: KeyboardEventInit) => {
+      const event = new KeyboardEvent("keydown", { bubbles: true, cancelable: true, ...init });
+      rows()[0].dispatchEvent(event);
+      return event.defaultPrevented;
+    };
+    expect(chord({ key: "F", altKey: true, shiftKey: true })).toBe(false);
+    expect(chord({ key: "f", ctrlKey: true })).toBe(false);
+    expect(chord({ key: "f" })).toBe(true);
+  });
+
   it("moves the focus one row down and takes the DOM focus with it", async () => {
     await press("ArrowDown");
 

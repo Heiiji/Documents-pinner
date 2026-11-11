@@ -47,6 +47,8 @@ import { rawPinFlag } from "./PinData";
 import { enqueueAll, payloadWrite, queueKey } from "./PinStore";
 import type { DpPinFlags } from "../types/dp";
 
+declare const Hooks: any;
+
 /** The payload version from which a document's point is stored as the tile's centre. */
 const CENTRE_VERSION = 3;
 
@@ -94,6 +96,10 @@ export function planMigration(
   for (const tile of tiles) {
     const stored = tile?.flags?.[MODULE_ID]?.[FLAGS.PIN];
     if (stored === null || stored === undefined) continue;
+    // Written by a newer version of the module: this one reads it as best it can and
+    // leaves it as it is. Migrating it stamped it with this version and dropped every
+    // field this version does not know — a downgrade that could not be undone.
+    if (Number(stored.v) > SCHEMA_VERSION) continue;
 
     const validated = validatePin(stored).pin;
     const size = propSizeOf(tile, validated);
@@ -284,6 +290,11 @@ export async function onCanvasReady(scene: any): Promise<void> {
   const outstanding = scenesNeedingMigration(scene);
   if (!outstanding.length) {
     if (settings.get("schemaVersion") < SCHEMA_VERSION) {
+      // Core draws the first canvas BEFORE `ready` and refuses a world setting until then,
+      // so on every load this write failed with a warning and the version was never stored.
+      if (g()?.ready === false) {
+        await new Promise<void>((resolve) => Hooks.once("ready", () => resolve()));
+      }
       await settings.set("schemaVersion", SCHEMA_VERSION);
     }
     return;

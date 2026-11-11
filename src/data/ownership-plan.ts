@@ -151,7 +151,17 @@ export function planGrant(
   stored: DpGrantLedger | null,
   req: { anchorUuid: string; keys: readonly string[]; level: number }
 ): OwnershipPlan {
-  const ledger = clone(stored);
+  // An edit the module never heard of — made while it was disabled, or by an import — is
+  // still the GM's edit: a held key whose value is not the one written is rebased first,
+  // exactly as the edit's own hook would have done. Without it a player made OWNER by
+  // hand in the meantime was lowered to the pin's level here, and deleted by the release.
+  const missed: Record<string, number | null> = {};
+  for (const key of req.keys) {
+    if (stored && key in stored.granted && current[key] !== stored.granted[key]) {
+      missed[key in current ? key : `${DELETE_PREFIX}${key}`] = current[key] ?? null;
+    }
+  }
+  const ledger = clone(isEmpty(missed) ? stored : planRebase(stored, missed).ledger);
   const diff: OwnershipDiff = {};
 
   for (const key of req.keys) {

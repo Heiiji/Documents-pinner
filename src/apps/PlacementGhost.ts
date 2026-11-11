@@ -365,6 +365,12 @@ export function arm(source: DpSource, mode?: DpMode): boolean {
   element.setAttribute("aria-hidden", "true");
   mount(element);
 
+  // The ghost's keys are letters. `/pin` arms it from the chat box, which keeps the focus:
+  // the next E, V, R, F or Space would be the chat's (the handler leaves a text field its
+  // letters). Arming is the GM turning to the map, so the field lets go.
+  const focused = document.activeElement as HTMLElement | null;
+  if (isTextEntry(focused)) focused?.blur();
+
   attach();
   render();
   return true;
@@ -505,10 +511,14 @@ function attach(): void {
         renderChip(state);
         return;
       }
+      // A letter typed into the chat box is the chat's — `/pin` arms the ghost with the
+      // focus still there — and Ctrl+V, Ctrl+R or Ctrl+F are the browser's. Escape alone
+      // cancels from anywhere.
+      if (event.key !== "Escape" && (isTextEntry(event.target) || event.ctrlKey || event.metaKey)) {
+        return;
+      }
       const next = stepKey(state, event.key, { shift: event.shiftKey });
       if (next === null) return;
-      // A `?` typed into the chat box is the chat's.
-      if (next === "help" && isTextEntry(event.target)) return;
       event.preventDefault();
       event.stopPropagation();
       // The sheet is over the placement, so Escape takes the sheet down first.

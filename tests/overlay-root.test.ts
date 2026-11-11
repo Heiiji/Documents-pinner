@@ -125,6 +125,32 @@ describe("the overlay on canvasReady", () => {
     expect(element.style.transform).toBe("matrix(2,0,0,2,-300,40)");
   });
 
+  // Without its own layer the browser painted every card again on every frame of a pan;
+  // left promoted, cards zoomed into would stay the bitmap of the zoom they started at.
+  it("is promoted to its own layer while the view moves, and let go once it rests", () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const world = installWorld({});
+      const element = () => document.getElementById("documents-pinner-overlay")!;
+
+      world.canvas.stage.worldTransform = { a: 1, b: 0, c: 0, d: 1, tx: -10, ty: 0 };
+      overlayRoot.syncTransform();
+      expect(element().style.willChange).toBe("transform");
+
+      // Still moving: the rest is counted from the last move, not the first.
+      vi.advanceTimersByTime(100);
+      world.canvas.stage.worldTransform = { a: 1, b: 0, c: 0, d: 1, tx: -20, ty: 0 };
+      overlayRoot.syncTransform();
+      vi.advanceTimersByTime(100);
+      expect(element().style.willChange).toBe("transform");
+
+      vi.advanceTimersByTime(100);
+      expect(element().style.willChange).toBe("");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("does nothing rather than sizing to zero when the scene has no dimensions", async () => {
     const world = installWorld({});
     world.canvas.dimensions = undefined;

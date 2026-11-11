@@ -330,6 +330,9 @@ export function definePinboard(): any {
         super._onClose?.(options);
       } finally {
         closeCheatSheet("board", false);
+        // The next opening takes the keyboard again, as the first did: without it Space
+        // on a reopened board was core's pause, and the arrows panned the map.
+        this.hasFocusedList = false;
         // A render asked for a board that is gone has nothing to draw, and must not be the
         // request every later one is handed when the board opens again (`requestRender`).
         this.#wanted = false;
@@ -658,6 +661,9 @@ export function definePinboard(): any {
         f: () => api.flash(doc),
         m: () => void api.toggleMode(doc)?.then(() => this.requestRender()),
       };
+      // A chord is somebody else's: Alt+Shift+F is the module's own "fit" binding, which
+      // falls back to this row, and Ctrl+F, Ctrl+L, Ctrl+O are the browser's.
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
       const action = actions[event.key] ?? actions[event.key.toLowerCase()];
       if (!action) return;
       consume(event);
@@ -951,6 +957,8 @@ async function deleteRows(app: any, docs: any[]) {
   if (
     !(await confirmDialog("DP.board.deleteTitle", "DP.board.deleteBody", { count: docs.length }))
   ) {
+    // The row menu that asked has closed in state; the board has to be drawn without it.
+    app.render();
     return;
   }
 

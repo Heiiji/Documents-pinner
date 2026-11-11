@@ -96,7 +96,7 @@ afterEach(() => {
 });
 
 describe("revealing a pin that shows one page", () => {
-  it("grants the page, and only lists its journal", async () => {
+  it("grants the page, and leaves its journal as it was", async () => {
     const tile = pinned({ uuid: "JournalEntry.j", pageId: "p3" });
     install(tile);
     const { syncAnchor } = await import("../src/data/ownership-sync");
@@ -104,13 +104,14 @@ describe("revealing a pin that shows one page", () => {
     await syncAnchor(tile);
 
     expect(pages.p3.ownership.ali).toBe(2);
-    // LIMITED, not OBSERVER: the journal is listed, and no page that inherits opens.
-    expect(entry.ownership.ali).toBe(1);
+    // Not even LIMITED: that showed the journal's Map Notes on the players' maps, and did
+    // not list it in their sidebar, which asks OBSERVER.
+    expect(entry.updates).toHaveLength(0);
     expect(pages.p1.ownership.ali).toBeUndefined();
     expect(pages.p9.ownership.ali).toBeUndefined();
   });
 
-  it("lists the journal for a pin placed on the page itself, which it never did", async () => {
+  it("does the same for a pin placed on the page itself", async () => {
     const tile = pinned({ uuid: pageUuid("p3") });
     install(tile);
     const { syncAnchor } = await import("../src/data/ownership-sync");
@@ -118,10 +119,10 @@ describe("revealing a pin that shows one page", () => {
     await syncAnchor(tile);
 
     expect(pages.p3.ownership.ali).toBe(2);
-    expect(entry.ownership.ali).toBe(1);
+    expect(entry.updates).toHaveLength(0);
   });
 
-  it("keeps the tease a tease: LIMITED on both", async () => {
+  it("keeps the tease a tease: LIMITED on the page", async () => {
     const tile = pinned({ uuid: "JournalEntry.j", pageId: "p3" }, 1);
     install(tile);
     const { syncAnchor } = await import("../src/data/ownership-sync");
@@ -129,7 +130,7 @@ describe("revealing a pin that shows one page", () => {
     await syncAnchor(tile);
 
     expect(pages.p3.ownership.ali).toBe(1);
-    expect(entry.ownership.ali).toBe(1);
+    expect(entry.updates).toHaveLength(0);
   });
 
   it("still shares the whole journal when the pin shows the whole journal", async () => {
@@ -197,6 +198,23 @@ describe("taking it back", () => {
   });
 });
 
+describe("the way out", () => {
+  it("gives back every access on every document, and leaves the pins alone", async () => {
+    const tile = pinned({ uuid: "JournalEntry.j", pageId: "p3" });
+    install(tile);
+    const { releaseAll, syncAnchor } = await import("../src/data/ownership-sync");
+    await syncAnchor(tile);
+    expect(pages.p3.ownership.ali).toBe(2);
+
+    expect(await releaseAll()).toBe(1);
+
+    expect(pages.p3.ownership).toEqual({ default: -1 });
+    expect(ledgerOn(pages.p3)).toBeNull();
+    expect(pinOf(tile).audience.kind).toBe("selected");
+    expect(await releaseAll()).toBe(0);
+  });
+});
+
 describe("choosing another page", () => {
   it("moves the grant with it, from the Studio's own call", async () => {
     const tile = pinned({ uuid: "JournalEntry.j", pageId: "p3" });
@@ -212,7 +230,7 @@ describe("choosing another page", () => {
     expect(pages.p9.ownership.ali).toBe(2);
     expect(pages.p3.ownership.ali).toBeUndefined();
     expect(ledgerOn(pages.p3)).toBeNull();
-    expect(entry.ownership.ali).toBe(1);
+    expect(entry.ownership.ali).toBeUndefined();
   });
 
   it("narrows a whole-journal grant to the page once one is chosen", async () => {
@@ -225,7 +243,7 @@ describe("choosing another page", () => {
 
     await api.patchAndSync(tile, { source: { pageId: "p3" } } as any);
 
-    expect(entry.ownership.ali).toBe(1);
+    expect(entry.ownership).toEqual({ default: 0 });
     expect(pages.p3.ownership.ali).toBe(2);
   });
 
@@ -248,13 +266,13 @@ describe("choosing another page", () => {
     // The old document and the new one share a family. Releasing the old family after
     // granting the new one would have taken the fresh grant straight back.
     expect(pages.p9.ownership.ali).toBe(2);
-    expect(entry.ownership.ali).toBe(1);
+    expect(entry.ownership.ali).toBeUndefined();
     expect(pages.p3.ownership.ali).toBeUndefined();
   });
 });
 
 describe("the ready sweep", () => {
-  it("does not mistake a page's grant, or its journal's listing, for an orphan", async () => {
+  it("does not mistake a page's grant for an orphan", async () => {
     const tile = pinned({ uuid: "JournalEntry.j", pageId: "p3" });
     install(tile);
     const sync = await import("../src/data/ownership-sync");
@@ -262,7 +280,30 @@ describe("the ready sweep", () => {
 
     expect(await sync.reconcile()).toBe(0);
     expect(pages.p3.ownership.ali).toBe(2);
-    expect(entry.ownership.ali).toBe(1);
+    expect(world.notifications).toEqual([]);
+  });
+
+  // What 0.4.1 wrote beside a page's grant: LIMITED on its journal, held by the same anchor.
+  // A pin whose audience is never touched again would have kept it for good.
+  it("takes back the LIMITED an earlier version put on a page pin's journal", async () => {
+    const tile = pinned({ uuid: "JournalEntry.j", pageId: "p3" });
+    install(tile);
+    const sync = await import("../src/data/ownership-sync");
+    await sync.syncAnchor(tile);
+    const legacy = planGrant({ default: 0 }, null, {
+      anchorUuid: tile.uuid,
+      keys: ["ali"],
+      level: 1,
+    });
+    entry.ownership = { default: 0, ali: 1 };
+    entry.flags = { [MODULE_ID]: { [FLAGS.GRANTS]: serialiseLedger(legacy.ledger!) } };
+
+    await sync.reconcile();
+
+    expect(entry.ownership).toEqual({ default: 0 });
+    expect(ledgerOn(entry)).toBeNull();
+    expect(pages.p3.ownership.ali).toBe(2);
+    expect(world.notifications.map((n) => n.message)).toContain("DP.notice.grantsNarrowed");
   });
 
   it("narrows a whole-journal grant an earlier version made for a page pin", async () => {
@@ -280,7 +321,7 @@ describe("the ready sweep", () => {
 
     await sync.reconcile();
 
-    expect(entry.ownership.ali).toBe(1);
+    expect(entry.ownership).toEqual({ default: 0 });
     expect(pages.p3.ownership.ali).toBe(2);
     expect(pages.p9.ownership.ali).toBeUndefined();
     expect(world.notifications.map((n) => n.message)).toContain("DP.notice.grantsNarrowed");
@@ -288,7 +329,7 @@ describe("the ready sweep", () => {
 });
 
 describe("what the Studio says a reveal shares", () => {
-  it("names the page, and the journal it only lists", async () => {
+  it("names the page, and the journal it leaves alone", async () => {
     install(pinned({ uuid: "JournalEntry.j", pageId: "p3" }));
     const api = await import("../src/api");
     expect(api.grantScope(pinOf(pinned({ uuid: "JournalEntry.j", pageId: "p3" })))).toEqual({

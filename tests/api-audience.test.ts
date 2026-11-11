@@ -151,7 +151,7 @@ describe("two chip clicks in the same tick", () => {
   it("both land, and the grants follow the audience they leave", async () => {
     await install(pinnedTile({ kind: "everyone" }));
     await sync.syncAnchor(tile);
-    expect(entry.ownership.default).toBe(1);
+    expect(pages.p1.ownership.default).toBe(2);
 
     // Neither awaited before the other: two clicks faster than a write.
     const ali = api.setUserVisible(tile, "ali", false);
@@ -160,9 +160,9 @@ describe("two chip clicks in the same tick", () => {
     await landed();
 
     expect(pinOf(tile).audience).toMatchObject({ kind: "selected", users: ["cy"] });
-    // The journal is listed — LIMITED — to the one player left, and to nobody by default.
-    expect(holdersOn(entry)).toEqual({ cy: { [ANCHOR]: 1 } });
-    expect(entry.ownership).toEqual({ default: 0, cy: 1 });
+    // The page alone, for the one player left; its journal is never touched.
+    expect(holdersOn(entry)).toBeNull();
+    expect(entry.ownership).toEqual({ default: 0 });
     expect(holdersOn(pages.p1)).toEqual({ cy: { [ANCHOR]: 2 } });
     expect(pages.p1.ownership).toEqual({ default: -1, cy: 2 });
   });
@@ -320,6 +320,26 @@ describe("deleting pins with a chip click still landing", () => {
   });
 });
 
+describe("deletePin and unpin, handed a tile that is not a pin", () => {
+  it("leaves another module's tile where it is", async () => {
+    await install(pinnedTile({ kind: "everyone" }));
+    const plain: any = {
+      id: "x",
+      uuid: "Scene.s1.Tile.x",
+      flags: {},
+      delete: vi.fn(),
+      update: vi.fn(),
+    };
+
+    await api.deletePin(plain);
+    await api.unpin(plain);
+    await api.deletePin(null);
+
+    expect(plain.delete).not.toHaveBeenCalled();
+    expect(plain.update).not.toHaveBeenCalled();
+  });
+});
+
 describe("a bulk reveal's access", () => {
   /** A second journal, and a hidden pin on each, both remembering Ali. */
   async function twoPins() {
@@ -355,11 +375,11 @@ describe("a bulk reveal's access", () => {
     );
     for (let i = 0; i < 5; i++) await new Promise((r) => setTimeout(r, 0));
 
-    expect(other.ownership.ali).toBe(1);
-    expect(entry.ownership.ali).toBeUndefined();
+    expect(other.pages.get("p1").ownership.ali).toBe(2);
+    expect(pages.p1.ownership.ali).toBeUndefined();
     release();
     await expect(revealing).resolves.toBe(2);
-    expect(entry.ownership.ali).toBe(1);
+    expect(pages.p1.ownership.ali).toBe(2);
   });
 
   it("still reaches every pin when one of them fails, and says so once", async () => {
@@ -372,7 +392,7 @@ describe("a bulk reveal's access", () => {
       api.setVisibilityMany(world.canvas.scene, world.canvas.scene.tiles.contents, true)
     ).resolves.toBe(2);
 
-    expect(entry.ownership.ali).toBe(1);
+    expect(entry.ownership.ali).toBeUndefined();
     expect(pages.p1.ownership.ali).toBe(2);
     expect(
       world.notifications.filter((n) => n.message === "DP.notice.ownershipWriteFailed")
@@ -393,7 +413,7 @@ describe("patch, as other modules call it", () => {
 
     expect(result).toBe(tile);
     expect(tile.hidden).toBe(false);
-    expect(entry.ownership.default).toBe(1);
+    expect(entry.ownership.default).toBe(0);
     expect(pages.p1.ownership.default).toBe(2);
   });
 

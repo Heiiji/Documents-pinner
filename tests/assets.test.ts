@@ -159,3 +159,16 @@ describe("CSS selectors match markup the module actually emits", () => {
     expect(props).not.toContain('[data-dp-fx="reduced"]');
   });
 });
+
+// Seen in a live 14.370 world on the dark theme: core styles every heading itself, so the
+// card's title and the page's headings were near-white on parchment, in the system's face.
+describe("a heading on a card", () => {
+  const card = decomment(readFileSync(join(ROOT, "styles", "card.css"), "utf8"));
+
+  it.each([
+    ["the title", /\.dp-card__title \{[^}]*color: inherit;[^}]*font-family: inherit;/],
+    ["a heading of the page", /& h6 \{[^}]*color: inherit;[^}]*font-family: inherit;/],
+  ])("takes the paper's ink and face, not core's: %s", (_label, rule) => {
+    expect(card).toMatch(rule);
+  });
+});

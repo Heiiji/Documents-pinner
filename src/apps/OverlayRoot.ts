@@ -43,6 +43,10 @@ let lastMatrix: Mat = { ...IDENTITY };
 let frame = 0;
 /** A timeout floor under the rAF, because rAF never fires in a hidden tab. */
 let timer = 0;
+/** The timeout that takes the overlay off its compositor layer once the view rests. */
+let settle = 0;
+/** How long after the last transform the view counts as at rest. */
+const SETTLE_MS = 150;
 /**
  * Style writes queued for the next frame, in order, per element.
  *
@@ -119,8 +123,10 @@ export function destroyOverlay(): void {
   pending.clear();
   if (frame) cancelAnimationFrame(frame);
   if (timer) window.clearTimeout(timer);
+  if (settle) window.clearTimeout(settle);
   frame = 0;
   timer = 0;
+  settle = 0;
 }
 
 /**
@@ -145,6 +151,19 @@ export function syncTransform(force = false): boolean {
 
   lastMatrix = matrix;
   element.style.transform = toCssMatrix(matrix);
+
+  // Its own compositor layer WHILE the view moves, and only then. Without one, a new
+  // matrix made the browser paint every visible card again on every frame of a pan or a
+  // zoom — filters, blend modes, generated textures and all — which is what a scene with
+  // forty props cost (measured: 20–27 ms a frame, against 16.7 with the layer). Not left
+  // on: a promoted layer is not painted again when its scale changes, so cards zoomed
+  // into would stay the blurred bitmap of the zoom they were promoted at.
+  element.style.willChange = "transform";
+  if (settle) window.clearTimeout(settle);
+  settle = window.setTimeout(() => {
+    settle = 0;
+    if (root) root.style.willChange = "";
+  }, SETTLE_MS);
   return true;
 }
 

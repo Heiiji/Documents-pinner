@@ -171,7 +171,7 @@ export type GrantScope =
   | { kind: "item"; name: string; level: number };
 
 /**
- * One page and its journal's listing, a whole journal, or a compendium document — which
+ * One page, a whole journal, or a compendium document — which
  * grants nothing, and says so — or null when there is nothing to say: an image, a
  * document that is gone.
  *
@@ -192,13 +192,15 @@ export function grantScope(pin: DpPinFlags): GrantScope | null {
     pin.source.pageId,
     pin.audience.ownershipSync.level
   );
-  const [shown, entry] = targets.map((target) => target.doc);
+  const shown = targets[0]?.doc;
   if (!shown) return null;
   if (summary.documentName === "Actor" || summary.documentName === "Item") {
     const kind = summary.documentName === "Actor" ? ("actor" as const) : ("item" as const);
     return { kind, name: shown.name ?? "", level: targets[0].level };
   }
-  if (entry) return { kind: "page", page: shown.name ?? "", entry: entry.name ?? "" };
+  if (shown.documentName === "JournalEntryPage") {
+    return { kind: "page", page: shown.name ?? "", entry: shown.parent?.name ?? "" };
+  }
   return { kind: "journal", entry: shown.name ?? "", pages: shown.pages?.contents?.length ?? 0 };
 }
 

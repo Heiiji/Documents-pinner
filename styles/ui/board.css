@@ -253,7 +253,11 @@
 }
 
 .dp-row__fx {
-  max-inline-size: 8ch;
+  /* A block, not core's flex button: centred in a flex box the name was cut at BOTH ends
+     ("ealed & W") and `text-overflow` never applied. */
+  display: block;
+  max-inline-size: 13ch;
+  text-align: start;
   padding: 0.05rem 0.4rem;
   border: 1px solid color-mix(in oklab, var(--color-border-light-1, #7a7971) 70%, transparent);
   border-radius: 0.25rem;

@@ -157,15 +157,19 @@ function journalPages(named: any): PageChoice[] {
 /**
  * Where one anchor's grant lands, and at what level.
  *
- * The document the pin SHOWS gets the level its audience asks for. When that is a page,
- * its journal gets LIMITED beside it: enough for the journal to be listed in the player's
- * sidebar and for its sheet to open on the page — which a grant on the page alone does
- * not do (DESIGN A22) — and not enough to open any page that inherits from it, because
- * at LIMITED a text page is not even listed (DESIGN §4).
+ * The document the pin SHOWS gets the level its audience asks for, and nothing else is
+ * touched: for a page, the page alone.
  *
- * It used to be the level on the journal, whatever page the pin showed. Every page with
- * `default: -1` inherits, so revealing page 3 of "Chapter 3 — GM notes" put the whole
- * chapter in every player's sidebar, and the sidebar access outlives the pin by design.
+ * It was first the level on the journal, whatever page the pin showed — every page with
+ * `default: -1` inherits, so revealing page 3 of "Chapter 3 — GM notes" shared the whole
+ * chapter. Then (A23) the page, and LIMITED on its journal beside it, for the journal to
+ * be listed in the player's sidebar. Read in core's source, that LIMITED bought nothing
+ * and cost something: the sidebar lists a journal at OBSERVER (`JournalEntry#visible`),
+ * the journal's sheet opens on a readable page whatever the journal's own level
+ * (`JournalEntrySheet`'s `viewPermission` is NONE) — and a Map Note shows on the canvas at
+ * LIMITED on `page ?? entry` (`Note#isVisible`), so every note linked to that journal, or
+ * to a page inheriting from it, appeared on the players' maps. A page is read from its
+ * pin; a journal pinned whole is the one that reaches the sidebar.
  *
  * A chosen page that no longer exists grants nothing. The card falls back to the
  * journal's first page, but a page the GM picked and then deleted is not a request to
@@ -178,12 +182,7 @@ function journalGrantTargets(named: any, pageId: string | null, level: number): 
     shown = named.pages.get(pageId);
     if (!shown) return [];
   }
-  const entry = shown.documentName === "JournalEntryPage" ? shown.parent : null;
-  if (!entry) return [{ doc: shown, level }];
-  return [
-    { doc: shown, level },
-    { doc: entry, level: Math.min(level, OWNERSHIP.LIMITED) },
-  ];
+  return [{ doc: shown, level }];
 }
 
 /**

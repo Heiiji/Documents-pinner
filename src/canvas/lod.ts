@@ -88,6 +88,19 @@ export function demote(tier: LodTier): LodTier {
   return TIER_ORDER[Math.max(0, index - 1)];
 }
 
+/**
+ * The perf guard's step down: a softer texture, never a prop that is no longer drawn.
+ *
+ * It used `demote` on every rung. One step under `L2a` is `L1`, where a PDF prop gives its
+ * page back and shows the placeholder book stretched across it, and under that `L0`, where
+ * a text prop's card is not drawn at all — so a scene made slow by anything (a browser
+ * capped at 30 fps reads as slow against core's cap of 60) lost its small props for the
+ * rest of the scene, with their hit areas still there. Detail is what the guard may take.
+ */
+export function soften(tier: LodTier): LodTier {
+  return tier === "L3" || tier === "L2b" ? demote(tier) : tier;
+}
+
 // ---------------------------------------------------------------------------
 // The performance guard
 // ---------------------------------------------------------------------------

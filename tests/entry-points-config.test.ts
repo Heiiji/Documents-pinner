@@ -257,6 +257,10 @@ describe("the Note config section", () => {
     // The world's default mode, not a hardcoded "pin". Converting a note and getting
     // another small icon gave a GM no sign that anything had happened.
     expect(pin.mode).toBe("prop");
+    // Hidden, though the world's default is "everyone": a note the players could not see
+    // must not become a pin they can, with its document shared.
+    expect(pin.audience.kind).toBe("hidden");
+    expect(created[0].hidden).toBe(true);
     // Centred on the note's own position, which is where the marker actually stood —
     // and a tile's point is its centre, so the note's point is stored as it is.
     expect(created[0].x).toBe(400);

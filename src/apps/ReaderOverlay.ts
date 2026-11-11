@@ -243,7 +243,7 @@ export async function openReader(tileDoc: any): Promise<void> {
   // Not modal: the map behind stays live, and a GM must still be able to move a token
   // while a player is reading.
   element.setAttribute("aria-modal", "false");
-  element.setAttribute("aria-label", escapeAttr(card.title || t("DP.reader.title")));
+  element.setAttribute("aria-label", card.title || t("DP.reader.title"));
   element.tabIndex = -1;
   element.innerHTML =
     card.html +

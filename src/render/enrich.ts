@@ -63,7 +63,25 @@ export const FORBIDDEN_TAGS = new Set([
   // wrong parser on the first pass — so the element is removed outright. A journal page
   // has no use for one.
   "noscript",
+  // SMIL can animate an `href` to `javascript:` after the scrub has read it. A journal
+  // page has no use for one.
+  "animate",
+  "set",
+  "animatemotion",
+  "animatetransform",
 ]);
+
+/**
+ * The custom elements a card may keep: the ones enrichment itself emits.
+ *
+ * Every other hyphenated name is removed. A custom element is CODE that runs when the
+ * markup is attached, and Foundry's own form elements are written for trusted templates:
+ * `<prose-mirror value="…">` sets its `value` attribute as `innerHTML` the moment it is
+ * connected (`HTMLProseMirrorElement#_refresh`), so the scrubbed card of a biography a
+ * player wrote ran that player's script on every client that drew it, the GM's included.
+ * An allow-list, because a deny-list would be one core release, or one game system, behind.
+ */
+const ALLOWED_CUSTOM_ELEMENTS = new Set(["document-embed", "enriched-content", "secret-block"]);
 
 /**
  * Whitespace and control characters, which are stripped before a scheme is inspected.
@@ -110,6 +128,7 @@ const VALID_TAG_NAME = /^[a-z][a-z0-9-]*$/i;
 
 export function isDangerousTag(tagName: string): boolean {
   const name = String(tagName ?? "").toLowerCase();
+  if (name.includes("-") && !ALLOWED_CUSTOM_ELEMENTS.has(name)) return true;
   return !VALID_TAG_NAME.test(name) || FORBIDDEN_TAGS.has(name);
 }
 
@@ -126,6 +145,9 @@ export function isDangerousAttr(name: string, value: string): boolean {
   if (attr === "style")
     return /expression\s*\(|javascript:|behaviou?r\s*:|-moz-binding/i.test(value);
   if (attr === "srcdoc" || attr === "srcset") return true;
+  // A card is always in the document: `form="<id of an open sheet>"` on an input made it
+  // one of that sheet's fields, submitted with it when the GM saved. `ping` is a beacon.
+  if (attr === "form" || attr.startsWith("form") || attr === "ping") return true;
   return false;
 }
 

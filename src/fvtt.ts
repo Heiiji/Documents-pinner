@@ -120,7 +120,20 @@ export function playerIds(): string[] {
 }
 
 export function notify(notice: DpNotice | string, type: "info" | "warn" | "error" = "info"): void {
-  const message = typeof notice === "string" ? notice : tn(notice);
+  // Core draws a notification as HTML. What a notice quotes — a document's name, a value
+  // out of a stranger's preset — is text.
+  const message =
+    typeof notice === "string"
+      ? notice
+      : tn({
+          ...notice,
+          data: Object.fromEntries(
+            Object.entries(notice.data ?? {}).map(([k, v]) => [
+              k,
+              typeof v === "string" ? escapeHtml(v) : v,
+            ])
+          ),
+        });
   const target = notifications();
   if (target?.[type]) target[type](message);
   else log.info(message);

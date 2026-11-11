@@ -43,8 +43,9 @@ import { ROOT, cssFiles, cssRules, decomment, readStyles } from "./helpers/style
  * the `-webkit-` prefix in 120 — later than `@starting-style` and `transition-behavior`,
  * which are what set the Firefox floor at **129**. ESR 140 clears that; ESR 128 does not.
  *
- * Neither number constrains the desktop app, which is Electron 40 / Chromium 144. They
- * are for people who open the world in a browser.
+ * Neither number constrains the desktop app (Electron 45 / Chromium 156 in 14.370), nor a
+ * browser core accepts: its own floor is Chromium 146 and Firefox 138. They are what the
+ * stylesheets are held to.
  *
  * Safari is deliberately absent. Nobody has measured it since A17, and stating a number
  * nobody has run would be exactly the over-claim that amendment is about.

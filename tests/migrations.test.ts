@@ -64,6 +64,11 @@ describe("planMigration", () => {
     expect(planMigration([tile("a", cleanPin())])).toEqual([]);
   });
 
+  it("leaves a payload from a newer version alone, fields it does not know included", () => {
+    const newer: any = { ...cleanPin(), v: 99, somethingNew: { kept: true } };
+    expect(planMigration([tile("a", newer)])).toEqual([]);
+  });
+
   it("does not rewrite for key order alone", () => {
     const shuffled = Object.fromEntries(Object.entries(cleanPin()).reverse());
     expect(planMigration([tile("a", shuffled)])).toEqual([]);
@@ -349,6 +354,31 @@ describe("the canvasReady check", () => {
     const { onCanvasReady } = await import("../src/data/migrations");
     return { world, offers, onCanvasReady };
   }
+
+  // Core draws the first canvas before `ready` and refuses a world setting until then:
+  // seen in a live 14.370 world as a warning on every load, and a version never stored.
+  it("stores the schema version only once the game is ready", async () => {
+    const other = countedScene("other", cleanPin());
+    const { world, onCanvasReady } = await worldWith(other);
+    const stored: unknown[] = [];
+    world.game.settings.set = async (_module: string, key: string, value: unknown) => {
+      if (key === "schemaVersion") stored.push(value);
+    };
+    let ready: () => void = () => {};
+    (globalThis as any).Hooks.once = (name: string, fn: () => void) => {
+      if (name === "ready") ready = fn;
+    };
+    world.game.ready = false;
+
+    const done = onCanvasReady(world.canvas.scene);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(stored).toEqual([]);
+
+    world.game.ready = true;
+    ready();
+    await done;
+    expect(stored).toEqual([SCHEMA_VERSION]);
+  });
 
   it("does not plan the other scenes of a migrated world again at the next scene change", async () => {
     const other = countedScene("other", cleanPin());

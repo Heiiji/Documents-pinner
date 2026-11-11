@@ -205,6 +205,11 @@ export interface PlaceOptions {
   alpha?: number;
   /** Texture for pin mode and for the placeholder a prop shows before it rasterises. */
   texture?: string;
+  /**
+   * The tile's own name, which core's Placeables list shows. Left out, core 14.370 makes
+   * one from the texture's file name — so every pin on a scene was listed as "Book".
+   */
+  name?: string;
 }
 
 /** The tile fields a pin owns. Everything else on the TileDocument stays core's. */
@@ -221,6 +226,7 @@ function anchorFields(pin: DpPinFlags, options: PlaceOptions): Record<string, un
     alpha: options.alpha ?? 1,
     hidden: anchorHidden(pin.audience),
     texture: { src: options.texture ?? null },
+    ...(options.name ? { name: options.name } : {}),
     [`flags.${MODULE_ID}.${FLAGS.PIN}`]: pin,
   };
 }

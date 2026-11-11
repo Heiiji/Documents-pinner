@@ -90,6 +90,16 @@ describe("openLocally for a player", () => {
     expect(world.notifications).toEqual([{ type: "info", message: "DP.notice.cannotOpenYet" }]);
   });
 
+  it("does not open a pin hidden from them, whoever calls it", async () => {
+    source.testUserPermission = vi.fn(() => true);
+    tile = pinned("pin", { kind: "hidden" });
+    world = installWorld({ isGM: false, tiles: [tile] });
+    const { openLocally } = await import("../src/api");
+    await openLocally(tile);
+
+    expect(source.sheet.render).not.toHaveBeenCalled();
+  });
+
   it("never gates the GM", async () => {
     tile = pinned("pin");
     world = installWorld({ isGM: true, tiles: [tile] });

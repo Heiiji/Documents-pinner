@@ -167,3 +167,19 @@ describe("tOr", () => {
     expect(tOr("DP.pageType.systemOwnType", "systemOwnType")).toBe("systemOwnType");
   });
 });
+
+// Core draws a notification as HTML, and a notice quotes names a player or a stranger's
+// preset chose.
+describe("a notice's quoted values", () => {
+  afterEach(() => uninstallWorld());
+
+  it("reach the notification as text, not markup", async () => {
+    const world = installWorld({ isGM: true });
+    world.game.i18n.format = (_key: string, data: Record<string, unknown> = {}) =>
+      String(data.name);
+    const { notify } = await import("../src/fvtt");
+    notify({ key: "DP.notice.revealNext", data: { name: "<img src=x onerror=alert(1)>" } }, "warn");
+
+    expect(world.notifications[0].message).toBe("&lt;img src=x onerror=alert(1)&gt;");
+  });
+});

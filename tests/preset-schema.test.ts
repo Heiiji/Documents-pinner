@@ -97,6 +97,22 @@ describe("the shipped library", () => {
 });
 
 describe("validatePreset", () => {
+  // A preset is pasted in from a stranger: a web address here was fetched by every client.
+  it("keeps a surface texture on this server and refuses a web address", () => {
+    const withTexture = (texture: string) =>
+      validatePreset({
+        ...defaultPreset(),
+        params: { ...defaultParams(), surface: { ...defaultParams().surface, texture } },
+      });
+
+    expect(withTexture("worlds/keep/paper.webp").preset!.params.surface.texture).toBe(
+      "worlds/keep/paper.webp"
+    );
+    const remote = withTexture("https://evil.example/b.png");
+    expect(remote.preset!.params.surface.texture).toBeNull();
+    expect(remote.warnings.map((w) => w.key)).toContain("DP.preset.warn.badTexture");
+  });
+
   it("rejects a non-object outright", () => {
     for (const bad of [null, undefined, 42, "x", []]) {
       const r = validatePreset(bad);

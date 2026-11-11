@@ -189,6 +189,21 @@ function uuidFromContextTarget(target: any, app?: any): string | null {
 }
 
 /**
+ * What was typed, from what the chat box sends.
+ *
+ * v14's chat box is a rich-text editor, and the hook is handed its HTML: `<p>/pin The
+ * Duke&#39;s Letter</p>`. Matched as it stood, the command was never recognised — seen in a
+ * live 14.370 world, where core then refused it as "not a valid chat message command".
+ * Read as core's own parser reads it: the text of the markup.
+ */
+function chatText(message: string): string {
+  if (!/[<&]/.test(message)) return message.trim();
+  const template = document.createElement("template");
+  template.innerHTML = message;
+  return (template.content.textContent ?? "").trim();
+}
+
+/**
  * `/pin <search>` in chat.
  *
  * The first match in the picker's order: a world journal or page, then an actor, then an
@@ -197,7 +212,7 @@ function uuidFromContextTarget(target: any, app?: any): string | null {
  */
 export function onChatMessage(_log: any, message: string): boolean | void {
   if (!isGM()) return;
-  const match = /^\/pin\b\s*(.*)$/i.exec(message.trim());
+  const match = /^\/pin\b\s*(.*)$/i.exec(chatText(message));
   if (!match) return;
 
   const query = match[1].trim();

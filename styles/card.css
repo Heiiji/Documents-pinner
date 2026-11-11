@@ -113,7 +113,16 @@
   border: 1px solid color-mix(in oklab, var(--dp-paper-edge) 70%, transparent);
 }
 
+/*
+ * A heading on the paper is written in the paper's ink and the paper's face. Core styles
+ * every `h1`…`h6` itself (`color: var(--color-text-emphatic)`, `font-family: var(--font-h1)`),
+ * and a rule on the element beats what the card's root would have handed down: in Foundry's
+ * dark theme the title and every heading of the page were near-white on parchment, and in
+ * a game system's display face whatever typeface the GM had chosen for the prop.
+ */
 .dp-card__title {
+  color: inherit;
+  font-family: inherit;
   margin: 0 0 0.4em;
   padding-block-end: 0.2em;
   border-block-end: 1px solid color-mix(in oklab, var(--dp-paper-edge) 85%, transparent);
@@ -154,6 +163,17 @@
 
   & p {
     margin: 0 0 0.6em;
+  }
+
+  & h1,
+  & h2,
+  & h3,
+  & h4,
+  & h5,
+  & h6 {
+    /* The paper's ink and face: see `.dp-card__title`. */
+    color: inherit;
+    font-family: inherit;
   }
 
   & h1,

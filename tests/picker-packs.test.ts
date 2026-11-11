@@ -218,6 +218,19 @@ describe("Import & pin", () => {
 });
 
 describe("/pin and the compendium window's menu", () => {
+  // v14's chat box is a rich-text editor: the hook is handed "<p>/pin …</p>". Matched as it
+  // stood the command was never recognised, and core refused it as an invalid command.
+  it("/pin is read through the markup the chat box sends it in", async () => {
+    install([handouts({ ownership: undefined })]);
+    const { onChatMessage } = await import("../src/ui/entry-points");
+
+    expect(onChatMessage(null, "<p>/pin ledger</p>")).toBe(false);
+    await flush();
+
+    expect(vi.mocked(armAt)).toHaveBeenCalled();
+    expect(onChatMessage(null, "<p>hello /pin</p>")).toBeUndefined();
+  });
+
   it.each([
     ["arms a match in a pack every player reads", undefined, "ledger"],
     ["opens the picker on the search when only a locked pack matches", TRUSTED_ONLY, null],

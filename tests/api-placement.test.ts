@@ -42,6 +42,20 @@ beforeEach(() => {
 afterEach(() => uninstallWorld());
 
 describe("pinAt", () => {
+  // Core 14.370 names an unnamed tile after its texture's file: every pin was "Book" in
+  // the Placeables list.
+  it("names the tile after what the pin shows", async () => {
+    (globalThis as any).fromUuidSync = (uuid: string) =>
+      uuid === "JournalEntry.j"
+        ? { uuid, name: "The Duke's Letter", documentName: "JournalEntry" }
+        : null;
+    const { pinAt } = await import("../src/api");
+    await pinAt(world.canvas.scene, source, { x: 0, y: 0, mode: "prop" });
+    delete (globalThis as any).fromUuidSync;
+
+    expect(created[0].name).toBe("The Duke's Letter");
+  });
+
   it("places a new prop at the natural size with the default type size for this grid", async () => {
     const { pinAt } = await import("../src/api");
     await pinAt(world.canvas.scene, source, { x: 0, y: 0, mode: "prop" });

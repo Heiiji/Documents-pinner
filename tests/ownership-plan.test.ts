@@ -37,6 +37,28 @@ describe("planGrant", () => {
     expect(plan.ledger!.holders.ali).toEqual({ [A]: OBSERVER });
   });
 
+  // The module was disabled, the GM made Ali an owner by hand, the module came back: no
+  // hook ever rebased the ledger. The next sync lowered her to the pin's level, and the
+  // release after it deleted her entry.
+  it("keeps a hand edit it never heard of, through the next grant and the release", () => {
+    const granted = planGrant({ default: 0 }, null, {
+      anchorUuid: A,
+      keys: ["ali"],
+      level: OBSERVER,
+    });
+    const edited: OwnershipRecord = { default: 0, ali: OWNER };
+
+    const again = planGrant(edited, granted.ledger, {
+      anchorUuid: A,
+      keys: ["ali"],
+      level: OBSERVER,
+    });
+    expect(again.ownership).toBeNull();
+
+    const released = planRelease(edited, again.ledger, A);
+    expect(apply(edited, released.ownership)).toEqual({ default: 0, ali: OWNER });
+  });
+
   it("never lowers a level that was already higher", () => {
     const current: OwnershipRecord = { default: 0, ali: OWNER };
     const plan = planGrant(current, null, { anchorUuid: A, keys: ["ali"], level: OBSERVER });

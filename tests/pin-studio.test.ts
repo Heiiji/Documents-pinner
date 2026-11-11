@@ -45,8 +45,10 @@ describe("valueOf", () => {
       value: attrs.value,
       checked: attrs.checked === "true",
       dataset: attrs.scale ? { dpScale: attrs.scale } : {},
+      // A plain object on purpose: a detached Studio's inputs are another window's, and
+      // fail `instanceof HTMLInputElement` here exactly as this does.
+      tagName: "INPUT",
     };
-    Object.setPrototypeOf(el, HTMLInputElement.prototype);
     return el as unknown as HTMLInputElement;
   };
 

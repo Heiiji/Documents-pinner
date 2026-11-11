@@ -48,7 +48,7 @@ import {
 import { enqueue } from "./PinStore";
 import { readPin } from "./PinData";
 import { describeSource } from "../sources/describe";
-import { adapterForDoc, type GrantTarget } from "../sources/index";
+import { adapterFor, adapterForDoc, type GrantTarget } from "../sources/index";
 import { isPackUuid } from "../sources/uuid";
 
 const log = logger("grants");
@@ -148,10 +148,12 @@ function writeLedger(
 
 /**
  * Where one anchor's grant lands, and at what level: the source's adapter says (for a
- * journal, the page the pin shows and LIMITED on its journal beside it — DESIGN A22).
+ * journal, the page the pin shows and nothing beside it).
  */
 function grantTargets(named: any, pageId: string | null, level: number): GrantTarget[] {
-  return adapterForDoc(named).grantTargets(named, pageId, level);
+  // A document no adapter answers for — a macro, a table, a scene — is never shared:
+  // falling back to the journal's rules granted on whatever uuid a payload named.
+  return adapterFor(named?.documentName)?.grantTargets(named, pageId, level) ?? [];
 }
 
 /**
@@ -336,8 +338,11 @@ export function onPreDeleteTile(doc: any, options: any): void {
  * until its audience next changed. Synced on the primary GM alone, since every client sees
  * the hook; the module's own creations sync themselves.
  */
-export function onCreateTile(doc: any, options: any): void {
+export function onCreateTile(doc: any, options: any, userId?: string): void {
   if (isOurs(options) || !isPrimaryGM()) return;
+  // A GM's tile. Core lets nobody else create one, but a module that proxies tile writes
+  // for players would have made this a way to ask the GM's client for ownership.
+  if (userId && !g()?.users?.get?.(userId)?.isGM) return;
   const pin = readPin(doc);
   if (!pin || doc?.hidden === true || pin.audience.kind === "hidden") return;
   void syncAnchor(doc).catch((error) => log.warn(`could not grant ${doc?.uuid}`, error));
@@ -445,10 +450,11 @@ export function ownershipChange(
  * quietly: an orphaned grant is a player still holding permission they should not.
  *
  * It also NARROWS. Until 0.3.4 a pin showing one page granted its level on the whole
- * journal; `grantTargets` now puts it on the page and LIMITED on the journal. A world
- * holds grants made the old way, and a pin whose audience is never touched again would
- * keep handing out the whole journal forever — so a holder recorded above the level its
- * anchor's target asks for is re-synced, which moves the grant where it belongs.
+ * journal, and until 0.4.2 LIMITED on the journal beside the page; `grantTargets` now puts
+ * it on the page alone. A world holds grants made the old ways, and a pin whose audience
+ * is never touched again would keep them forever — so a holder recorded above the level
+ * its anchor's target asks for, or on a document its anchor no longer targets at all, is
+ * re-synced, which moves the grant where it belongs.
  *
  * And it REVOKES (A29). It used to ask only whether a holder's anchor still pointed here,
  * never whether the anchor still wanted that key. A reload in the middle of "Hide all" —
@@ -470,7 +476,14 @@ export async function reconcile(): Promise<number> {
   // cost more than the sweep.
   const anchors = new Map<
     string,
-    { tile: any; source: string | null; levels: Map<string, number>; keys: Set<string> }
+    {
+      tile: any;
+      source: string | null;
+      /** Whether the document the pin names was found: only then is "not a target" known. */
+      resolved: boolean;
+      levels: Map<string, number>;
+      keys: Set<string>;
+    }
   >();
   for (const scene of g()?.scenes?.contents ?? []) {
     for (const tile of scene.tiles?.contents ?? []) {
@@ -487,6 +500,7 @@ export async function reconcile(): Promise<number> {
       anchors.set(tile.uuid, {
         tile,
         source: pin.source.uuid,
+        resolved: !!named,
         levels: new Map(targets.map((target) => [target.doc.uuid, target.level])),
         keys: new Set(wantedKeys(pin)),
       });
@@ -511,7 +525,7 @@ export async function reconcile(): Promise<number> {
           orphans.add(anchorUuid);
         } else if (!anchor.keys.has(key)) {
           revoke.add(anchorUuid);
-        } else if (target !== undefined && level > target) {
+        } else if (target === undefined ? anchor.resolved : level > target) {
           narrow.add(anchorUuid);
         }
       }
@@ -545,6 +559,30 @@ export async function reconcile(): Promise<number> {
     notify({ key: "DP.notice.grantsRevoked", data: { count: revoke.size } }, "warn");
   }
   return repaired;
+}
+
+/**
+ * Give back every access the module has granted, on every document: the way out.
+ *
+ * A GM disabling the module for good had no way to take its grants back but deleting
+ * every pin on every scene first; disabled, nothing reads the ledgers again and the raised
+ * ownerships stay for ever. Each holder is released under the ledger's own rules, so a
+ * baseline comes back and a permission edited by hand stands. The pins are left as they
+ * are: one whose audience is changed afterwards grants again, as it should.
+ *
+ * Returns how many documents had something to give back.
+ */
+export async function releaseAll(): Promise<number> {
+  if (!isGM()) return 0;
+  let documents = 0;
+  for (const doc of sourcesWithLedger()) {
+    const anchors = new Set(
+      Object.values(ledgerOf(doc)?.holders ?? {}).flatMap((holders) => Object.keys(holders))
+    );
+    for (const anchor of anchors) await releaseOn(doc, anchor);
+    if (anchors.size) documents++;
+  }
+  return documents;
 }
 
 /**

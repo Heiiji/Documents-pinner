@@ -319,8 +319,14 @@ function normaliseParams(raw: unknown, warnings: DpNotice[]): DpPresetParams {
       color: colour(grp("frame").color, d.frame.color, warnings, "params.frame.color"),
     },
     surface: {
-      texture:
-        typeof grp("surface").texture === "string" ? (grp("surface").texture as string) : null,
+      // A file on this server, as a sound is: a web address here was fetched by every
+      // client that drew the preset, the GM's on import.
+      texture: soundPath(
+        grp("surface").texture,
+        warnings,
+        "params.surface.texture",
+        "DP.preset.warn.badTexture"
+      ),
       blend: oneOf(
         grp("surface").blend,
         BLEND_MODES,

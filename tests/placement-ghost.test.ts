@@ -351,6 +351,36 @@ describe("placement elevation", () => {
     expect(created).toHaveLength(1);
   });
 
+  it("leaves a text field its letters and the browser its chords, and takes the focus when armed", () => {
+    const chat = document.createElement("textarea");
+    document.body.appendChild(chat);
+    chat.focus();
+    arm(source);
+    // `/pin` arms from the chat box: the ghost's letters must not be typed into it.
+    expect(document.activeElement).not.toBe(chat);
+
+    const live = () => document.querySelector<HTMLElement>(".dp-ghost:not(.dp-ghost--out)")!;
+    const mode = live().dataset.dpMode;
+    const key = (target: EventTarget, init: KeyboardEventInit) => {
+      const event = new KeyboardEvent("keydown", { bubbles: true, cancelable: true, ...init });
+      target.dispatchEvent(event);
+      return event;
+    };
+
+    // The GM clicked back into the chat: Space is a space.
+    expect(key(chat, { key: " " }).defaultPrevented).toBe(false);
+    expect(live().dataset.dpMode).toBe(mode);
+    // Ctrl+V is a paste, not the audience toggle.
+    expect(key(window, { key: "v", ctrlKey: true }).defaultPrevented).toBe(false);
+    // On the map, Space is the ghost's.
+    expect(key(window, { key: " " }).defaultPrevented).toBe(true);
+    expect(live().dataset.dpMode).not.toBe(mode);
+    // And Escape cancels from anywhere.
+    key(chat, { key: "Escape" });
+    expect(document.querySelector(".dp-ghost:not(.dp-ghost--out)")).toBeNull();
+    chat.remove();
+  });
+
   it("shows the held modifiers on the ghost and keeps stamping across a shifted press", async () => {
     arm(source);
     const live = () => document.querySelector<HTMLElement>(".dp-ghost:not(.dp-ghost--out)")!;

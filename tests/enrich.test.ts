@@ -221,6 +221,31 @@ describe("sanitise", () => {
     expect(out).toContain("document-embed");
   });
 
+  // Core's `<prose-mirror>` writes its `value` attribute as innerHTML when it is attached.
+  it("removes every other custom element, whose code would run on attach", () => {
+    const out = clean(
+      '<p>kept</p><prose-mirror value="&lt;img src=x onerror=alert(1)&gt;"></prose-mirror>' +
+        "<file-picker value=x></file-picker>"
+    );
+    expect(out).toContain("kept");
+    expect(out).not.toContain("prose-mirror");
+    expect(out).not.toContain("onerror");
+    expect(out).not.toContain("file-picker");
+  });
+
+  it("removes SMIL, a sheet's form association and a ping", () => {
+    const out = clean(
+      '<svg><a><animate attributeName="href" values="javascript:alert(1)"/><set to="x"/></a></svg>' +
+        '<input form="some-sheet" name="ownership.default" value="3">' +
+        '<a href="/x" ping="https://evil.example">x</a>'
+    );
+    expect(out).not.toContain("animate");
+    expect(out).not.toContain("<set");
+    expect(out).not.toContain("some-sheet");
+    expect(out).not.toContain("ping");
+    expect(out).toContain("ownership.default");
+  });
+
   it("settles rather than looping on markup that mutates when re-parsed", () => {
     const nasty = '<p><table><div><svg><style><a title="</style><img src=x onerror=alert(1)>">';
     const out = clean(nasty);

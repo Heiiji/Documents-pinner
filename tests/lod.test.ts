@@ -5,6 +5,7 @@ import {
   PERF_SAMPLES,
   TIER_ORDER,
   demote,
+  soften,
   initialPerf,
   lodFor,
   priorityOf,
@@ -118,6 +119,17 @@ describe("demote", () => {
 
   it("can demote every tier without leaving the ladder", () => {
     for (const tier of TIER_ORDER) expect(TIER_ORDER).toContain(demote(tier as LodTier));
+  });
+});
+
+describe("soften, the perf guard's step", () => {
+  it("takes detail, and never the prop: nothing goes under the coarsest drawn rung", () => {
+    expect(soften("L3")).toBe("L2b");
+    expect(soften("L2b")).toBe("L2a");
+    // One more step was the placeholder book for a PDF, then no card at all.
+    expect(soften("L2a")).toBe("L2a");
+    expect(soften("L1")).toBe("L1");
+    expect(soften("L0")).toBe("L0");
   });
 });
 

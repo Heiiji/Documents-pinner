@@ -43,7 +43,7 @@ import {
   type Mat,
 } from "./transform";
 import {
-  demote,
+  soften,
   initialPerf,
   lodFor,
   priorityOf,
@@ -661,7 +661,7 @@ class Manager {
 
       // The perf guard demotes uniformly: a scene where half the props are sharp and
       // half are mush looks broken, one that is uniformly softer looks deliberate.
-      for (let i = 0; i < this.#globalDemotions; i++) tier = demote(tier);
+      for (let i = 0; i < this.#globalDemotions; i++) tier = soften(tier);
 
       const dom = drawsAsDomUnder(policy, pin);
 
