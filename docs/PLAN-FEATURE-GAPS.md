@@ -21,8 +21,7 @@ files, tests, live checks, copy, docs, and what it depends on.
 
 ## 0. How to work
 
-The house rules from `FIX-PROMPT.md` and `CONTINUATION-PROMPT.md` hold, restated because
-they decide how every item is built:
+The house rules hold, restated because they decide how every item is built:
 
 - **A test that fails before and passes after**, for every behaviour change, through the
   real code path (`fakeDoc` / `installWorld`), asserting on the stored state.
