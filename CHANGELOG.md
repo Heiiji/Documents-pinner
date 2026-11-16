@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.4.3] — 2026-11-16
+
 ### Fixed
 
 - Undoing an audience change restores the matching document permissions. Undoing a
@@ -24,6 +28,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   sent by Foundry.
 - Updated development dependencies within the existing version ranges to resolve the
   reported npm security advisories.
+
+### Validation
+
+- 1,577 automated tests pass, including permission invariants across 1,200 combinations.
+  Lint, TypeScript, build, and the generated effects harness checks pass.
+- A clean dependency installation succeeds; npm reports no known vulnerabilities.
+- These changes have not yet been rechecked with a GM and player in a live Foundry world.
+  Compatibility remains Foundry V14, verified on 14.370 by the previous live session.
 
 ## [0.4.2] — 2026-11-11
 

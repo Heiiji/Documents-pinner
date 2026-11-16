@@ -2235,8 +2235,8 @@ higher one from its journal (restored exactly on release); Ctrl+Z of an audience
 the grant until the next `ready` sweep; the sweep runs at `ready` only; saving a preset
 rewrites the stored library from its validated form; the public API is not frozen before 1.0.
 
-The inherited-permission and audience-undo cases are fixed in the current unreleased
-changes, with regression tests; they have not yet been rechecked in a live world.
+The inherited-permission and audience-undo cases are fixed in 0.4.3, with regression
+tests; they have not yet been rechecked in a live world.
 
 ---
 
