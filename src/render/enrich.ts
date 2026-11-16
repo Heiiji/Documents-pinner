@@ -11,10 +11,9 @@
  *
  * 2. **`secrets` is computed from the VIEWING user, never from the GM.** It is
  *    `page.isOwner` on this client — never `game.user.isGM`, and never a value that
- *    travelled from somewhere else. A GM's unrevealed secret sections are stripped
- *    before the player's HTML exists, which is the one thing here that is genuinely
- *    *removed* rather than hidden; a section the GM revealed reaches the player, as it
- *    does on the journal's own sheet.
+ *    travelled from somewhere else. Unrevealed secrets are removed from the rendered
+ *    card, on this client; this does not protect source data Foundry has already sent
+ *    to the browser. Revealed sections appear as on the journal's own sheet.
  *
  * 3. **The result is scrubbed anyway.** Enriched HTML goes into markup we build
  *    ourselves rather than into a core sheet, so it is walked and stripped of scripts,

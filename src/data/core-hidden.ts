@@ -20,7 +20,7 @@
  */
 
 import { FLAGS, MODULE_ID } from "../const";
-import { g, isOurs } from "../fvtt";
+import { g, isGM, isOurs } from "../fvtt";
 import { logger } from "../log";
 import { revealed, toggleVisibility } from "./audience";
 import { readPin } from "./PinData";
@@ -49,6 +49,11 @@ function folded(audience: DpAudience, hidden: boolean): DpAudience | null {
  * made it.
  */
 export function onPreUpdateTile(doc: any, changed: any, options: any): void {
+  if (options?.isUndo && changed?.flags?.[MODULE_ID]?.[FLAGS.PIN]?.source && isGM()) {
+    // An undone retarget must release the source the restored payload no longer names.
+    options.documentsPinnerUndoSources ??= {};
+    options.documentsPinnerUndoSources[doc.uuid] = readPin(doc)?.source.uuid ?? null;
+  }
   if (isOurs(options) || !changed) return;
   if (isRecord(changed.texture) && readPin(doc)) {
     for (const axis of offCentre(changed.texture)) changed.texture[axis] = 0.5;
@@ -115,11 +120,16 @@ function offCentre(texture: Record<string, any> | undefined): ("anchorX" | "anch
 
 /**
  * `updateTile`: once core's change has landed, the grant follows the audience it implied —
- * released on a hide, granted again on a show — from the client that made it, the one
- * client the pre-hook ran on.
+ * released on a hide, granted again on a show or restored after an undo — from the GM
+ * who made the change, the one client the pre-hook ran on.
  */
 export function syncAfterCoreHidden(doc: any, changed: any, options: any, userId: string): void {
-  if (isOurs(options) || !changed || !("hidden" in changed)) return;
-  if (userId !== g()?.user?.id || !readPin(doc)) return;
-  void syncAnchor(doc).catch((error) => log.warn(`could not sync ${doc?.uuid}`, error));
+  const undo = options?.isUndo === true;
+  if ((!undo && isOurs(options)) || !changed) return;
+  const payload = changed.flags?.[MODULE_ID]?.[FLAGS.PIN];
+  if (!("hidden" in changed) && !(undo && (payload?.audience || payload?.source))) return;
+  if (!isGM() || userId !== g()?.user?.id || !readPin(doc)) return;
+  void syncAnchor(doc, undo ? options.documentsPinnerUndoSources?.[doc.uuid] : null).catch(
+    (error) => log.warn(`could not sync ${doc?.uuid}`, error)
+  );
 }

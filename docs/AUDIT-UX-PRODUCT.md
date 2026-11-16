@@ -56,8 +56,9 @@ The five moves, in order:
   identical in HUD, Pinboard and Studio. Learn once, use everywhere.
 - **The eye remembers.** Hiding stores the audience and un-hiding restores it. This is
   exactly right, and it is why S3 below is worth fixing: bulk paths do not honour it.
-- **Per-client secrets.** `secret` blocks never reach a player's browser. The README says
-  precisely what is and is not enforced. Keep that honesty in every new feature.
+- **Per-client secrets.** Unrevealed `secret` blocks are removed from the card and reader
+  for non-owners. This browser-side filtering does not protect source text already sent
+  by Foundry; the README must keep that distinction clear.
 - **Accessibility and focus.** Roving tabindex, real grid/tab patterns, focus that
   survives re-renders. A GM running a session one-handed is well served.
 

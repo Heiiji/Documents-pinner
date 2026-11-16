@@ -86,7 +86,7 @@ Two costs, both cheap to pay:
 | Pin hidden from all players | core `TileDocument#hidden` | client (core parity) |
 | Pin visible to a subset | our `audience.canSee` via `PinnedTile#isVisible` | client (core parity) |
 | Prop content reaching a player | each client enriches from its own copy | client |
-| GM secrets inside a page, or an actor's or item's text | `enrichHTML({ secrets: doc.isOwner })` + post-filter | **content removed** |
+| GM secrets inside a page, or an actor's or item's text | `enrichHTML({ secrets: doc.isOwner })` + post-filter | **client: removed from rendered content** |
 | Document opens for the player — and, for a journal pinned whole or an item, appears in the sidebar (A30) | ownership ledger (§4) | **server** |
 | Writing a pin's configuration | GM only; players never write | **server** |
 
@@ -95,9 +95,9 @@ core Foundry, not above it*. Core enforces `Tile#hidden` and `Note#global` on th
 client too. A determined player with a browser console can see a hidden pin's existence
 in exactly the same way they can today for any hidden tile.
 
-The one thing that is genuinely removed rather than hidden is a page's `secret`
-sections — or an actor's or an item's, in the text its card shows (A28) — because
-`enrichHTML` strips them for non-owners before the HTML exists.
+Unrevealed `secret` sections in a page, actor or item are removed from the rendered card
+for non-owners. `enrichHTML` and the post-filter run in the browser; they do not prevent
+access to source text Foundry has already sent to that client.
 
 ### 3.1 Why reveal does not require ownership
 
@@ -202,8 +202,8 @@ unlit over a dark dungeon is the single most immersion-breaking artefact this mo
 could ship, and no amount of CSS can fix it — per-light illumination is a fragment-shader
 operation over the primary group.
 
-Per-client rasterisation also means `enrichHTML({ secrets: page.isOwner })` produces
-per-user content, so GM secrets stay secret. That is impossible with a shared image.
+Per-client rasterisation means `enrichHTML({ secrets: page.isOwner })` removes unrevealed
+secrets from non-owners' rendered cards. A shared image cannot provide that per-user view.
 
 The **DOM is the focus tier only**: clicking a prop dims the mesh and fades in a live
 HTML reader with selectable text, working `@UUID` links and live inline rolls. This
@@ -2019,7 +2019,7 @@ modifier is Alt.
 | A system's rich-text fields are `instanceof foundry.data.fields.HTMLField`, and `system` values are readable by property path on a live model | no field found → the card is the portrait and the name; `readField` returns "" for anything not a string | E, E.instance |
 | `updateActor`'s change is a nested diff for a hit-point change, a rename and a biography edit; owned items fire `updateItem` with a `parent` | the filter reads nested and dotted keys and treats an operator as a whole-subtree change; a `parent` returns at once | `watchUpdates` |
 | Default artwork: `DEFAULT_ICON`, `getDefaultArtwork({type})`, the prototype token's texture | core's literal defaults as well; an override that throws on a bare type is caught | F1, F2 |
-| `isOwner` on a client is OWNER for that user, so an actor's secrets reach its owners and the GM alone | `enrichFor` strips for anyone else, and the content hash carries `isOwner` | live, step 14 |
+| `isOwner` on a client is OWNER for that user, so an actor's unrevealed secrets are shown only in owners' and the GM's cards | `enrichFor` strips them from other users' rendered cards, and the content hash carries `isOwner` | live, step 14 |
 | `enrichHTML` with the actor's roll data evaluates a biography's inline rolls as its sheet would | none needed | live, step 14 |
 | A cross-origin portrait is dropped on the canvas tier and shown on the HTML tier | limitation 19 | live, on a world with an asset host |
 
@@ -2230,10 +2230,13 @@ handler, arming the ghost, and the click that places it.
 sweep on a world that 0.4.1 actually wrote; two GMs; the canvas tier for text. The checklist
 below still stands for those, on 14.370 now.
 
-**Left open, on purpose:** a grant can lower the effective level of a page that inherits a
+**Left open at this sitting:** a grant can lower the effective level of a page that inherits a
 higher one from its journal (restored exactly on release); Ctrl+Z of an audience change leaves
 the grant until the next `ready` sweep; the sweep runs at `ready` only; saving a preset
 rewrites the stored library from its validated form; the public API is not frozen before 1.0.
+
+The inherited-permission and audience-undo cases are fixed in the current unreleased
+changes, with regression tests; they have not yet been rechecked in a live world.
 
 ---
 

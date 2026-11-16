@@ -12,6 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FLAGS, MODULE_ID } from "../src/const";
 import { defaultPin } from "../src/data/pin-schema";
 import { readPin } from "../src/data/PinData";
+import { internal } from "../src/fvtt";
 import {
   fakeJournal,
   fakeTile,
@@ -38,8 +39,7 @@ const fire = (name: string, ...args: unknown[]) => {
 };
 
 /** What core does with a change made on this client: the pre-hook, the write, the hook. */
-async function coreUpdate(doc: any, changes: Record<string, unknown>) {
-  const options = {};
+async function coreUpdate(doc: any, changes: Record<string, unknown>, options = {}) {
   fire("preUpdateTile", doc, changes, options, "gm");
   await doc.update(changes, options);
   fire("updateTile", doc, changes, options, "gm");
@@ -119,5 +119,82 @@ describe("a revealed pin core brings back", () => {
     fire("createTile", tile, {}, "gm");
 
     await vi.waitFor(() => expect(letter.ownership).toEqual({ default: 2 }));
+  });
+});
+
+describe("undoing an audience or source change", () => {
+  it.each([{}, internal()])(
+    "restores the audience's permissions without a hidden change (%j)",
+    async (originalOptions) => {
+      const tile = pin({ kind: "selected", users: ["ali"] });
+      const letter = fakeJournal({ id: "letter", name: "Letter" });
+      await boot([tile], [letter]);
+      const { syncAnchor } = await import("../src/data/ownership-sync");
+      const { setAudience } = await import("../src/api");
+      await syncAnchor(tile);
+      const before = readPin(tile)!.audience;
+      await setAudience(tile, { ...before, kind: "selected", users: ["ben"] });
+      expect(letter.ownership).toEqual({ ben: 2 });
+
+      await coreUpdate(
+        tile,
+        { flags: { [MODULE_ID]: { [FLAGS.PIN]: { audience: before } } } },
+        {
+          ...originalOptions,
+          isUndo: true,
+        }
+      );
+
+      expect(tile.hidden).toBe(false);
+      await vi.waitFor(() => expect(letter.ownership).toEqual({ ali: 2 }));
+    }
+  );
+
+  it("gives back the old source's permissions when undo changes the source", async () => {
+    const tile = pin({ kind: "selected", users: ["ali"] });
+    const letter = fakeJournal({ id: "letter", name: "Letter" });
+    const other = fakeJournal({ id: "other", name: "Other" });
+    await boot([tile], [letter, other]);
+    const { syncAnchor } = await import("../src/data/ownership-sync");
+    const { retarget } = await import("../src/api");
+    await syncAnchor(tile);
+    const before = readPin(tile)!.source;
+    await retarget(tile, { ...before, uuid: other.uuid });
+    expect(letter.ownership).toEqual({});
+    expect(other.ownership).toEqual({ ali: 2 });
+
+    await coreUpdate(
+      tile,
+      { flags: { [MODULE_ID]: { [FLAGS.PIN]: { source: before } } } },
+      {
+        ...internal(),
+        isUndo: true,
+      }
+    );
+
+    await vi.waitFor(() => {
+      expect(letter.ownership).toEqual({ ali: 2 });
+      expect(other.ownership).toEqual({});
+      expect(other.flags[MODULE_ID]?.[FLAGS.GRANTS]).toBeUndefined();
+    });
+  });
+
+  it("leaves ordinary internal writes, unrelated undo and another user's updates alone", async () => {
+    const tile = pin({ kind: "selected", users: ["ali"] });
+    const letter = fakeJournal({ id: "letter", name: "Letter" });
+    const world = await boot([tile], [letter]);
+    const sync = await import("../src/data/ownership-sync");
+    const watched = vi.spyOn(sync, "syncAnchor");
+    const changes = {
+      flags: { [MODULE_ID]: { [FLAGS.PIN]: { audience: readPin(tile)!.audience } } },
+    };
+
+    fire("updateTile", tile, { hidden: false, ...changes }, internal(), "gm");
+    fire("updateTile", tile, { x: 100 }, { isUndo: true }, "gm");
+    fire("updateTile", tile, changes, { isUndo: true }, "ali");
+    world.game.user = world.game.users.get("ali");
+    fire("updateTile", tile, changes, { isUndo: true }, "ali");
+
+    expect(watched).not.toHaveBeenCalled();
   });
 });

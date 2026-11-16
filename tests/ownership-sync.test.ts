@@ -73,6 +73,19 @@ function setAudience(anchor: any, kind: string, users: string[]) {
 }
 
 describe("retargeting one anchor's audience", () => {
+  it("does not replace an existing OWNER default with a lower individual grant", async () => {
+    const { syncAnchor, releaseAnchor } = await import("../src/data/ownership-sync");
+    journal.ownership = { default: 3 };
+
+    await syncAnchor(anchorA);
+
+    expect(journal.ownership).toEqual({ default: 3 });
+    expect(ledger().baseline.ali).toBeNull();
+    await releaseAnchor(anchorA);
+    expect(journal.ownership).toEqual({ default: 3 });
+    expect(ledger()).toBeUndefined();
+  });
+
   it("actually removes the old holder from the STORED ledger", async () => {
     const { syncAnchor } = await import("../src/data/ownership-sync");
 

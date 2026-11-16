@@ -131,6 +131,100 @@ function isEmpty(obj: Record<string, unknown>): boolean {
   return Object.keys(obj).length === 0;
 }
 
+function baselineOwnership(current: OwnershipRecord, ledger: DpGrantLedger): OwnershipRecord {
+  const baseline = { ...current };
+  for (const [key, value] of Object.entries(ledger.baseline)) {
+    if (value === null) delete baseline[key];
+    else baseline[key] = value;
+  }
+  return baseline;
+}
+
+function effectiveLevel(own: OwnershipRecord, key: string, inherited: OwnershipRecord): number {
+  const value = own[key] ?? own.default ?? OWNERSHIP.NONE;
+  return value === OWNERSHIP.INHERIT
+    ? (inherited[key] ?? inherited.default ?? OWNERSHIP.NONE)
+    : value;
+}
+
+/** Keep absence and INHERIT whenever they already supply the required access. */
+function grantValue(
+  baseline: OwnershipRecord,
+  after: OwnershipRecord,
+  key: string,
+  level: number,
+  inherited: OwnershipRecord
+): number | undefined {
+  const candidate = { ...after };
+  if (key in baseline) candidate[key] = baseline[key];
+  else delete candidate[key];
+  const wanted = Math.max(level, effectiveLevel(baseline, key, inherited));
+  if (effectiveLevel(candidate, key, inherited) >= wanted) return baseline[key];
+  if (
+    (baseline[key] ?? baseline.default) === OWNERSHIP.INHERIT &&
+    (inherited[key] ?? inherited.default ?? OWNERSHIP.NONE) >= wanted
+  ) {
+    return OWNERSHIP.INHERIT;
+  }
+  return wanted;
+}
+
+function refreshGrants(
+  current: OwnershipRecord,
+  ledger: DpGrantLedger,
+  inherited: OwnershipRecord,
+  diff: OwnershipDiff
+): void {
+  const after = { ...current };
+  for (const [key, value] of Object.entries(diff)) {
+    if (key.startsWith(DELETE_PREFIX)) delete after[key.slice(DELETE_PREFIX.length)];
+    else if (value !== null) after[key] = value;
+  }
+  const baseline = baselineOwnership(after, ledger);
+  // A user's absent entry must be evaluated against the default this update will write.
+  const keys = Object.keys(ledger.holders).sort(
+    (a, b) => Number(b === "default") - Number(a === "default")
+  );
+  for (const key of keys) {
+    if (current[key] !== ledger.granted[key]) continue;
+    const value = grantValue(baseline, after, key, maxHolderLevel(ledger.holders[key]), inherited);
+    if (value === undefined) {
+      if (key in current) diff[`${DELETE_PREFIX}${key}`] = null;
+      delete after[key];
+      delete ledger.granted[key];
+    } else {
+      if (current[key] !== value) diff[key] = value;
+      after[key] = value;
+      ledger.granted[key] = value;
+    }
+  }
+}
+
+function grantKeys(
+  current: OwnershipRecord,
+  stored: DpGrantLedger | null,
+  keys: readonly string[],
+  level: number,
+  inherited: OwnershipRecord
+): string[] {
+  const result = new Set(keys);
+  if (!result.has("default")) return [...result];
+  const baseline = baselineOwnership(current, stored ?? emptyLedger());
+  if (baseline.default !== OWNERSHIP.INHERIT) return [...result];
+  const nextDefault = grantValue(baseline, current, "default", level, inherited);
+  for (const key of Object.keys(inherited)) {
+    if (key === "default" || key in baseline) continue;
+    const after = { ...baseline, default: nextDefault ?? OWNERSHIP.NONE };
+    if (
+      effectiveLevel(after, key, inherited) <
+      Math.max(level, effectiveLevel(baseline, key, inherited))
+    ) {
+      result.add(key);
+    }
+  }
+  return [...result];
+}
+
 /** Every ownership key this anchor currently holds a grant on. */
 export function keysHeldBy(ledger: DpGrantLedger | null, anchorUuid: string): string[] {
   if (!ledger) return [];
@@ -149,34 +243,31 @@ export function keysHeldBy(ledger: DpGrantLedger | null, anchorUuid: string): st
 export function planGrant(
   current: OwnershipRecord,
   stored: DpGrantLedger | null,
-  req: { anchorUuid: string; keys: readonly string[]; level: number }
+  req: { anchorUuid: string; keys: readonly string[]; level: number },
+  inherited: OwnershipRecord = {}
 ): OwnershipPlan {
   // An edit the module never heard of — made while it was disabled, or by an import — is
   // still the GM's edit: a held key whose value is not the one written is rebased first,
   // exactly as the edit's own hook would have done. Without it a player made OWNER by
   // hand in the meantime was lowered to the pin's level here, and deleted by the release.
   const missed: Record<string, number | null> = {};
-  for (const key of req.keys) {
-    if (stored && key in stored.granted && current[key] !== stored.granted[key]) {
+  const keys = grantKeys(current, stored, req.keys, req.level, inherited);
+  for (const key of keys) {
+    if (stored && key in stored.holders && current[key] !== stored.granted[key]) {
       missed[key in current ? key : `${DELETE_PREFIX}${key}`] = current[key] ?? null;
     }
   }
   const ledger = clone(isEmpty(missed) ? stored : planRebase(stored, missed).ledger);
   const diff: OwnershipDiff = {};
 
-  for (const key of req.keys) {
+  for (const key of keys) {
     if (!(key in ledger.baseline)) {
       ledger.baseline[key] = key in current ? current[key] : null;
+      if (key in current) ledger.granted[key] = current[key];
     }
     ledger.holders[key] = { ...(ledger.holders[key] ?? {}), [req.anchorUuid]: req.level };
-
-    const base = ledger.baseline[key] ?? OWNERSHIP.NONE;
-    // Invariant 1: never lower an already-higher level.
-    const value = Math.max(base, maxHolderLevel(ledger.holders[key]));
-
-    if (current[key] !== value) diff[key] = value;
-    ledger.granted[key] = value;
   }
+  refreshGrants(current, ledger, inherited, diff);
 
   return {
     ownership: isEmpty(diff) ? null : diff,
@@ -196,7 +287,8 @@ export function planRelease(
   current: OwnershipRecord,
   stored: DpGrantLedger | null,
   anchorUuid: string,
-  keys?: readonly string[]
+  keys?: readonly string[],
+  inherited: OwnershipRecord = {}
 ): OwnershipPlan {
   if (!stored) return { ownership: null, ledger: null, notices: [] };
 
@@ -213,14 +305,9 @@ export function planRelease(
 
     // Someone else still wants this key: recompute the required level.
     if (!isEmpty(holders)) {
-      const base = ledger.baseline[key] ?? OWNERSHIP.NONE;
-      const value = Math.max(base, maxHolderLevel(holders));
       if (current[key] !== ledger.granted[key]) {
         notices.push({ key: "DP.notice.ownershipOverridden", data: { ownershipKey: key } });
         if (!ledger.overridden.includes(key)) ledger.overridden.push(key);
-      } else if (current[key] !== value) {
-        diff[key] = value;
-        ledger.granted[key] = value;
       }
       continue;
     }
@@ -233,10 +320,10 @@ export function planRelease(
     if (current[key] !== wroteValue) {
       // Invariant 2: the GM edited it under us. Their edit stands.
       notices.push({ key: "DP.notice.ownershipOverridden", data: { ownershipKey: key } });
-    } else if (base === null || base === undefined) {
+    } else if ((base === null || base === undefined) && key in current) {
       // Invariant 3: the key did not exist before us, so delete it rather than zero it.
       diff[`${DELETE_PREFIX}${key}`] = null;
-    } else if (current[key] !== base) {
+    } else if (base !== null && base !== undefined && current[key] !== base) {
       diff[key] = base;
     }
 
@@ -244,6 +331,8 @@ export function planRelease(
     delete ledger.baseline[key];
     ledger.overridden = ledger.overridden.filter((k) => k !== key);
   }
+
+  refreshGrants(current, ledger, inherited, diff);
 
   const exhausted = isEmpty(ledger.holders);
   return {
@@ -287,7 +376,7 @@ export function planRebase(
       delete ledger.granted[key];
       if (!ledger.overridden.includes(key)) ledger.overridden.push(key);
       notices.push({ key: "DP.notice.ownershipOverridden", data: { ownershipKey: key } });
-    } else if (next > granted) {
+    } else if (granted === undefined || next > granted) {
       // The GM raised it above what we asked for.
       //
       // The BASELINE moves with it, and that is the whole point. Adopting the raise into
@@ -323,11 +412,13 @@ export function planRebase(
 export function planRetarget(
   current: OwnershipRecord,
   stored: DpGrantLedger | null,
-  req: { anchorUuid: string; keys: readonly string[]; level: number }
+  req: { anchorUuid: string; keys: readonly string[]; level: number },
+  inherited: OwnershipRecord = {}
 ): OwnershipPlan {
-  const granted = planGrant(current, stored, req);
+  const keys = grantKeys(current, stored, req.keys, req.level, inherited);
+  const granted = planGrant(current, stored, { ...req, keys }, inherited);
 
-  const nowHeld = new Set(req.keys);
+  const nowHeld = new Set(keys);
   const stale = keysHeldBy(granted.ledger, req.anchorUuid).filter((k) => !nowHeld.has(k));
   if (!stale.length) return granted;
 
@@ -338,7 +429,7 @@ export function planRetarget(
     else if (v !== null) afterGrant[k] = v;
   }
 
-  const released = planRelease(afterGrant, granted.ledger, req.anchorUuid, stale);
+  const released = planRelease(afterGrant, granted.ledger, req.anchorUuid, stale, inherited);
   const ownership = { ...(granted.ownership ?? {}), ...(released.ownership ?? {}) };
 
   return {

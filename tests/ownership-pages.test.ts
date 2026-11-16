@@ -158,6 +158,78 @@ describe("revealing a pin that shows one page", () => {
 });
 
 describe("taking it back", () => {
+  it("preserves a selected player's inherited ownership without making it explicit", async () => {
+    entry.ownership = { default: 0, ali: 3 };
+    const tile = pinned({ uuid: "JournalEntry.j", pageId: "p3" });
+    install(tile);
+    const { syncAnchor, releaseAnchor } = await import("../src/data/ownership-sync");
+
+    await syncAnchor(tile);
+
+    expect(pages.p3.ownership).toEqual({ default: -1 });
+    expect(entry.ownership).toEqual({ default: 0, ali: 3 });
+    await releaseAnchor(tile);
+    expect(pages.p3.ownership).toEqual({ default: -1 });
+    expect(ledgerOn(pages.p3)).toBeNull();
+  });
+
+  it("protects a parent's owner during everyone sharing and the next ready sweep", async () => {
+    entry.ownership = { default: 0, ali: 3 };
+    const tile = pinned({ uuid: "JournalEntry.j", pageId: "p3" });
+    pinOf(tile).audience.kind = "everyone";
+    pinOf(tile).audience.users = [];
+    install(tile);
+    const { syncAnchor, reconcile, releaseAnchor } = await import("../src/data/ownership-sync");
+
+    await syncAnchor(tile);
+    expect(pages.p3.ownership).toEqual({ default: 2, ali: -1 });
+    await reconcile();
+    expect(pages.p3.ownership).toEqual({ default: 2, ali: -1 });
+    expect(entry.ownership).toEqual({ default: 0, ali: 3 });
+    await releaseAnchor(tile);
+    expect(pages.p3.ownership).toEqual({ default: -1 });
+  });
+
+  it("recalculates an inheritance exception after the parent changes", async () => {
+    entry.ownership = { default: 0, ali: 3 };
+    const tile = pinned({ uuid: "JournalEntry.j", pageId: "p3" });
+    pinOf(tile).audience.kind = "everyone";
+    install(tile);
+    const { syncAnchor, releaseAnchor } = await import("../src/data/ownership-sync");
+    await syncAnchor(tile);
+
+    entry.ownership.ali = 0;
+    await syncAnchor(tile);
+
+    expect(pages.p3.ownership).toEqual({ default: 2 });
+    await releaseAnchor(tile);
+    expect(pages.p3.ownership).toEqual({ default: -1 });
+    expect(entry.ownership).toEqual({ default: 0, ali: 0 });
+  });
+
+  it("keeps page grants independent of another pin's temporary parent grant", async () => {
+    const whole = pinned({ uuid: "JournalEntry.j" });
+    whole.id = "whole";
+    whole.uuid = "Scene.s1.Tile.whole";
+    const first = pinned({ uuid: "JournalEntry.j", pageId: "p3" });
+    const second = pinned({ uuid: "JournalEntry.j", pageId: "p3" });
+    second.id = "second";
+    second.uuid = "Scene.s1.Tile.second";
+    install(first);
+    const { syncAnchor, releaseAnchor } = await import("../src/data/ownership-sync");
+    await syncAnchor(whole);
+    await syncAnchor(first);
+    await syncAnchor(second);
+
+    await releaseAnchor(first);
+    await releaseAnchor(whole);
+
+    expect(entry.ownership).toEqual({ default: 0 });
+    expect(pages.p3.ownership).toEqual({ default: -1, ali: 2 });
+    await releaseAnchor(second);
+    expect(pages.p3.ownership).toEqual({ default: -1 });
+  });
+
   it("restores the page and the journal exactly when the pin is hidden", async () => {
     const tile = pinned({ uuid: "JournalEntry.j", pageId: "p3" });
     install(tile);

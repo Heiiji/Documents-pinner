@@ -64,7 +64,7 @@ function ledgerOf(doc: any): DpGrantLedger | null {
  * nothing will ever release, and a ledger entry without its ownership change is a
  * release that will restore a value that was never written.
  */
-async function applyPlan(doc: any, plan: OwnershipPlan): Promise<void> {
+async function applyPlan(doc: any, plan: OwnershipPlan): Promise<boolean> {
   const data: Record<string, unknown> = {};
 
   if (plan.ownership) data.ownership = ownershipWrite(doc?.ownership ?? {}, plan.ownership);
@@ -72,7 +72,20 @@ async function applyPlan(doc: any, plan: OwnershipPlan): Promise<void> {
 
   if (Object.keys(data).length) {
     try {
-      await doc.update(data, internal());
+      const updated = await doc.update(data, internal());
+      // Core returns undefined for both a refused update and a no-op.
+      if (!updated) {
+        const stored = doc?.flags?.[MODULE_ID]?.[FLAGS.GRANTS];
+        const ledgerApplied = plan.ledger
+          ? stored === serialiseLedger(plan.ledger)
+          : stored == null;
+        const ownershipApplied = Object.entries(plan.ownership ?? {}).every(([key, value]) =>
+          key.startsWith(DELETE_PREFIX)
+            ? !(key.slice(DELETE_PREFIX.length) in (doc.ownership ?? {}))
+            : doc.ownership?.[key] === value
+        );
+        if (!ledgerApplied || !ownershipApplied) throw new Error("Ownership update was refused");
+      }
       log.debug(
         `ownership on ${doc?.uuid}: ${JSON.stringify(plan.ownership ?? {})}` +
           `${plan.ledger ? "" : " (ledger cleared)"}`
@@ -83,10 +96,11 @@ async function applyPlan(doc: any, plan: OwnershipPlan): Promise<void> {
       // reaches this through `void`, so the report has to happen here.
       log.warn(`ownership write failed for ${doc?.uuid}`, error);
       notify({ key: "DP.notice.ownershipWriteFailed" }, "error");
-      return;
+      return false;
     }
   }
   for (const notice of plan.notices) notify(notice, "warn");
+  return true;
 }
 
 /**
@@ -140,7 +154,8 @@ function writeLedger(
 ): void {
   const path = `flags.${MODULE_ID}.${FLAGS.GRANTS}`;
   if (ledger) {
-    data[path] = serialiseLedger(ledger);
+    const value = serialiseLedger(ledger);
+    if (doc?.flags?.[MODULE_ID]?.[FLAGS.GRANTS] !== value) data[path] = value;
     return;
   }
   if (doc?.flags?.[MODULE_ID]?.[FLAGS.GRANTS] !== undefined) data[path] = forcedDeletion() ?? null;
@@ -178,25 +193,41 @@ function worldDocument(uuid: string | null | undefined): Promise<any> {
   return isPackUuid(uuid) ? Promise.resolve(null) : resolveUuid(uuid);
 }
 
-async function grantOn(doc: any, anchor: string, keys: string[], level: number): Promise<void> {
-  await enqueue(`grants:${doc.uuid}`, async () => {
-    const plan = planRetarget({ ...(doc.ownership ?? {}) }, ledgerOf(doc), {
-      anchorUuid: anchor,
-      keys,
-      level,
-    });
-    await applyPlan(doc, plan);
+/** A page must not depend on temporary parent grants that another pin can release. */
+function inheritedOwnership(doc: any): Record<string, number> {
+  const inherited = { ...(doc.parent?.ownership ?? {}) };
+  const parentLedger = ledgerOf(doc.parent);
+  for (const [key, value] of Object.entries(parentLedger?.baseline ?? {})) {
+    if (inherited[key] !== parentLedger?.granted[key]) continue;
+    if (value === null) delete inherited[key];
+    else inherited[key] = value;
+  }
+  return inherited;
+}
+
+async function grantOn(doc: any, anchor: string, keys: string[], level: number): Promise<boolean> {
+  return enqueue(`grants:${doc.uuid}`, async () => {
+    const plan = planRetarget(
+      { ...(doc.ownership ?? {}) },
+      ledgerOf(doc),
+      { anchorUuid: anchor, keys, level },
+      inheritedOwnership(doc)
+    );
+    return applyPlan(doc, plan);
   });
 }
 
-async function releaseOn(doc: any, anchor: string): Promise<void> {
-  if (!grantable(doc)) return;
-  await enqueue(`grants:${doc.uuid}`, async () => {
+async function releaseOn(doc: any, anchor: string): Promise<boolean> {
+  if (!grantable(doc)) return false;
+  return enqueue(`grants:${doc.uuid}`, async () => {
     // Read inside the queue, so a grant still in flight on this document is seen. Most of
     // a journal's pages hold nothing for this anchor, and asking them must cost no write.
     const stored = ledgerOf(doc);
-    if (!keysHeldBy(stored, anchor).length) return;
-    await applyPlan(doc, planRelease({ ...(doc.ownership ?? {}) }, stored, anchor));
+    if (!keysHeldBy(stored, anchor).length) return true;
+    return applyPlan(
+      doc,
+      planRelease({ ...(doc.ownership ?? {}) }, stored, anchor, undefined, inheritedOwnership(doc))
+    );
   });
 }
 
@@ -254,18 +285,19 @@ function anchorGone(anchorDoc: any): boolean {
  * landing after Ali-and-Ben's took Ben's back. A sync whose anchor was deleted before its
  * turn grants nothing and releases what the anchor held: granting on behalf of a pin that no
  * longer exists is a grant nothing will ever take back.
+ * Returns whether every ownership write succeeded.
  */
 export async function syncAnchor(
   anchorDoc: any,
   previousUuid: string | null = null
-): Promise<void> {
-  if (!isGM()) return;
+): Promise<boolean> {
+  if (!isGM()) return false;
   return enqueue(syncQueue(anchorDoc), () => syncNow(anchorDoc, previousUuid));
 }
 
-async function syncNow(anchorDoc: any, previousUuid: string | null): Promise<void> {
+async function syncNow(anchorDoc: any, previousUuid: string | null): Promise<boolean> {
   const pin = readPin(anchorDoc);
-  if (!pin) return;
+  if (!pin) return true;
 
   const anchor = anchorDoc.uuid;
   const named = pin.source.kind === "document" ? await worldDocument(pin.source.uuid) : null;
@@ -275,7 +307,10 @@ async function syncNow(anchorDoc: any, previousUuid: string | null): Promise<voi
   const targets = keys.length
     ? grantTargets(own, pin.source.pageId, pin.audience.ownershipSync.level)
     : [];
-  for (const target of targets) await grantOn(target.doc, anchor, keys, target.level);
+  let synced = true;
+  for (const target of targets) {
+    if (!(await grantOn(target.doc, anchor, keys, target.level))) synced = false;
+  }
 
   const previous =
     previousUuid && previousUuid !== pin.source.uuid ? await worldDocument(previousUuid) : null;
@@ -284,8 +319,9 @@ async function syncNow(anchorDoc: any, previousUuid: string | null): Promise<voi
   for (const doc of [...familyOf(own), ...familyOf(previous)]) {
     if (kept.has(doc.uuid) || seen.has(doc.uuid)) continue;
     seen.add(doc.uuid);
-    await releaseOn(doc, anchor);
+    if (!(await releaseOn(doc, anchor))) synced = false;
   }
+  return synced;
 }
 
 /**
@@ -293,9 +329,10 @@ async function syncNow(anchorDoc: any, previousUuid: string | null): Promise<voi
  *
  * In the anchor's sync queue, after any sync already in it: a release that overtook a sync
  * still reading its document found nothing to release, and the grant landed after it.
+ * Returns false if any release failed, so a caller can keep the pin for a retry.
  */
-export async function releaseAnchor(anchorDoc: any, sourceUuid?: string | null): Promise<void> {
-  if (!isGM()) return;
+export async function releaseAnchor(anchorDoc: any, sourceUuid?: string | null): Promise<boolean> {
+  if (!isGM()) return false;
 
   // Both of these are read SYNCHRONOUSLY, before the first await: `onPreDeleteTile` calls
   // this while the tile is about to stop existing, and the ledger is keyed by the
@@ -304,7 +341,11 @@ export async function releaseAnchor(anchorDoc: any, sourceUuid?: string | null):
   const anchor = anchorDoc?.uuid ?? "";
 
   return enqueue(syncQueue(anchorDoc), async () => {
-    for (const doc of familyOf(await worldDocument(uuid))) await releaseOn(doc, anchor);
+    let released = true;
+    for (const doc of familyOf(await worldDocument(uuid))) {
+      if (!(await releaseOn(doc, anchor))) released = false;
+    }
+    return released;
   });
 }
 
@@ -326,7 +367,7 @@ export async function releaseAnchor(anchorDoc: any, sourceUuid?: string | null):
 export function onPreDeleteTile(doc: any, options: any): void {
   if (!isGM() || isOurs(options)) return;
   if (!readPin(doc)) return;
-  void releaseAnchor(doc);
+  void releaseAnchor(doc).catch((error) => log.warn(`could not release ${doc?.uuid}`, error));
 }
 
 /**
@@ -523,7 +564,7 @@ export async function reconcile(): Promise<number> {
         const target = anchor?.levels.get(source.uuid);
         if (!anchor || (target === undefined && anchor.source !== source.uuid)) {
           orphans.add(anchorUuid);
-        } else if (!anchor.keys.has(key)) {
+        } else if (!anchor.keys.has(key) && !anchor.keys.has("default")) {
           revoke.add(anchorUuid);
         } else if (target === undefined ? anchor.resolved : level > target) {
           narrow.add(anchorUuid);
@@ -537,8 +578,7 @@ export async function reconcile(): Promise<number> {
     // at `ready` beside the edit holds' resume, whose syncs write these same ledgers, and a
     // release planned from a ledger read before one of their grants landed wrote over it.
     for (const anchorUuid of orphans) {
-      await releaseOn(source, anchorUuid);
-      repaired++;
+      if (await releaseOn(source, anchorUuid)) repaired++;
     }
   }
 
@@ -548,15 +588,20 @@ export async function reconcile(): Promise<number> {
 
   // One sync per anchor, whichever of the two brought it here: a sync grants what the pin
   // asks for, where it asks for it, and releases the rest.
+  let narrowed = 0;
+  let revoked = 0;
   for (const anchorUuid of new Set([...revoke, ...narrow])) {
     const tile = anchors.get(anchorUuid)?.tile;
-    if (tile) await syncAnchor(tile);
+    if (tile && (await syncAnchor(tile))) {
+      if (narrow.has(anchorUuid)) narrowed++;
+      if (revoke.has(anchorUuid)) revoked++;
+    }
   }
-  if (narrow.size) {
-    notify({ key: "DP.notice.grantsNarrowed", data: { count: narrow.size } }, "info");
+  if (narrowed) {
+    notify({ key: "DP.notice.grantsNarrowed", data: { count: narrowed } }, "info");
   }
-  if (revoke.size) {
-    notify({ key: "DP.notice.grantsRevoked", data: { count: revoke.size } }, "warn");
+  if (revoked) {
+    notify({ key: "DP.notice.grantsRevoked", data: { count: revoked } }, "warn");
   }
   return repaired;
 }
@@ -570,17 +615,31 @@ export async function reconcile(): Promise<number> {
  * baseline comes back and a permission edited by hand stands. The pins are left as they
  * are: one whose audience is changed afterwards grants again, as it should.
  *
- * Returns how many documents had something to give back.
+ * Returns the number cleaned; a failure rejects only after every release was attempted.
  */
 export async function releaseAll(): Promise<number> {
   if (!isGM()) return 0;
   let documents = 0;
+  let failed = 0;
   for (const doc of sourcesWithLedger()) {
     const anchors = new Set(
       Object.values(ledgerOf(doc)?.holders ?? {}).flatMap((holders) => Object.keys(holders))
     );
-    for (const anchor of anchors) await releaseOn(doc, anchor);
-    if (anchors.size) documents++;
+    let released = true;
+    for (const anchor of anchors) {
+      try {
+        if (!(await releaseOn(doc, anchor))) released = false;
+      } catch (error) {
+        log.warn(`could not release ${doc?.uuid}`, error);
+        released = false;
+      }
+    }
+    if (!released) failed++;
+    else if (anchors.size) documents++;
+  }
+  if (failed) {
+    notify({ key: "DP.notice.accessReleaseFailed", data: { count: documents, failed } }, "error");
+    throw new Error(`Could not release document access on ${failed} document(s)`);
   }
   return documents;
 }

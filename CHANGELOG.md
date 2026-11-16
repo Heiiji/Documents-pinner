@@ -7,7 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Nothing yet.
+### Fixed
+
+- Undoing an audience change restores the matching document permissions. Undoing a
+  change of source also releases access to the document the pin no longer shows.
+- Permission cleanup reports failures instead of announcing that all access was removed.
+  Other documents are still attempted, and the module's delete and unpin actions keep a
+  pin if its access cannot be released.
+- Sharing a pin preserves higher permissions inherited from a document's default or a
+  journal parent, while restoring the original ownership entries when the pin is hidden.
+
+### Changed
+
+- The English and French privacy documentation now states that secret sections are
+  filtered from rendered content in the browser, without protecting source text already
+  sent by Foundry.
+- Updated development dependencies within the existing version ranges to resolve the
+  reported npm security advisories.
 
 ## [0.4.2] — 2026-11-11
 

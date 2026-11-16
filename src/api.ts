@@ -328,7 +328,11 @@ function reportAccessFailures(docs: any[], outcomes: PromiseSettledResult<unknow
 export async function deletePins(scene: any, docs: any[]): Promise<void> {
   if (!isGM() || !docs.length) return;
   await store.removeMany(scene, docs, async () => {
-    reportAccessFailures(docs, await Promise.allSettled(docs.map((doc) => releaseAnchor(doc))));
+    const outcomes = await Promise.allSettled(docs.map((doc) => releaseAnchor(doc)));
+    reportAccessFailures(docs, outcomes);
+    if (outcomes.some((outcome) => outcome.status === "rejected" || outcome.value === false)) {
+      throw new Error("Pins were kept because document access could not be released");
+    }
   });
 }
 
@@ -890,7 +894,11 @@ export async function deletePin(anchorDoc: any): Promise<void> {
   // In the pin's own write queue, after every write already in it, as the bulk delete is
   // (A29): released first, outside it, a chip click still landing was written after the
   // release, and its sync granted on behalf of a pin about to be deleted.
-  await store.remove(anchorDoc, () => releaseAnchor(anchorDoc));
+  await store.remove(anchorDoc, async () => {
+    if ((await releaseAnchor(anchorDoc)) === false) {
+      throw new Error("Pin was kept because document access could not be released");
+    }
+  });
 }
 
 /**
@@ -908,7 +916,9 @@ export async function releaseAllAccess(): Promise<number> {
 /** Turn an anchor back into an ordinary tile, keeping the tile itself. */
 export async function unpin(anchorDoc: any): Promise<void> {
   if (!isGM() || !readPin(anchorDoc)) return;
-  await releaseAnchor(anchorDoc);
+  if ((await releaseAnchor(anchorDoc)) === false) {
+    throw new Error("Pin was kept because document access could not be released");
+  }
   await store.unpin(anchorDoc);
 }
 
@@ -928,10 +938,8 @@ export async function unpin(anchorDoc: any): Promise<void> {
  * is the shape to copy — a plain async function whose callees queue themselves.
  *
  * The order is the payload, then the grant on the new source, then the release of the
- * old — the same order `setAudience` uses, and for the same reason. It also fails in the
- * safe direction: a half-done retarget leaves a player over-granted on a document they
- * already had access to, where release-first would revoke access to the document the pin
- * is still showing them.
+ * old. A refused grant still attempts the old release: a later retry no longer knows
+ * the previous source. The return value reports the source change, not its access sync.
  *
  * A source given in part is completed from a blank one (`completeSource`), never from the
  * old: the page, the PDF page and the text field named places in the document it leaves.

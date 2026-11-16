@@ -123,7 +123,7 @@ refused on import.
 an actor's portrait, else its token's — its name, and one of its texts: Pin Studio's *Text
 shown* lists every rich-text field your game system gives that kind of actor or item, and
 *Automatic* picks public text first, then a biography or a description, never a field named
-for the GM. Its secret sections reach only its owners and you, until you reveal one.
+for the GM. Its secret sections are shown only to its owners and you, until you reveal one.
 Revealing an actor shares it at Limited at most, and a new actor pin — or a pin pointed at
 an actor from Pin Studio — starts with *Grant document access* off: the poster reads in
 place without it. An actor is pinned from its context menu, its sheet, *Pin a document* or
@@ -170,10 +170,10 @@ Pin visibility is enforced **at parity with core Foundry, not above it**. Core e
 `Tile#hidden` on the client too; a determined player with a browser console can detect a
 hidden pin exactly as they can detect any hidden tile today.
 
-The one thing genuinely *removed* rather than hidden is a page's unrevealed `secret`
-sections. Each client renders its own copy and they are stripped for anyone who is not an
-owner, so they never reach a player's browser; a section you reveal reaches them, as it
-does in the journal itself.
+Each client removes a page's unrevealed `secret` sections from the rendered card and reader
+for anyone who is not an owner. This filtering happens in the browser: it does not prevent
+access to the source text that Foundry has already sent to that client. A section you reveal
+is shown as it is in the journal itself.
 
 If you need real secrecy, keep the document out of the world until you want it seen.
 
@@ -257,7 +257,8 @@ map for any visible pin, as its label says.
 **Before you disable the module for good**, give back the access it granted: run
 `game.modules.get("documents-pinner").api.releaseAllAccess()` from a macro or the console —
 it says how many documents it gave back — or delete the pins (Pinboard, select all, delete,
-on each scene), which does the same pin by pin. Then hide or delete the pins themselves:
+on each scene), which does the same pin by pin. If cleanup reports an error, fix it and
+retry before disabling the module. Then hide or delete the pins themselves:
 disabled, they stay as plain tiles, and a pin shown to some players only becomes visible to
 everyone, since Foundry itself only knows hidden or not.
 
@@ -288,7 +289,7 @@ verbs do nothing, or Foundry refuses them.
 | `patch(tile, changes)` | a partial update of the pin data, validated |
 | `openLocally(tile)` · `showToAudience(tile)` | open it here · on its audience's screens |
 | `unpin(tile)` · `deletePin(tile)` | back to a plain tile · delete it; both give back the access it granted |
-| `releaseAllAccess()` | give back every access the module granted, in the whole world; resolves to how many documents |
+| `releaseAllAccess()` | give back every access the module granted, in the whole world; resolves to how many documents, or rejects after attempting all documents if any cleanup failed |
 
 Hooks: `documents-pinner.ready (api)`, `documents-pinner.readerOpened (tile)`,
 `documents-pinner.readerClosed ()`. Anything else on the object or under that prefix is the
@@ -445,7 +446,7 @@ image — le portrait d'un acteur, sinon celui de son jeton —, son nom, et l'u
 : *Texte affiché*, dans le Studio, liste chaque champ de texte enrichi que votre système de
 jeu donne à ce type d'acteur ou d'objet, et *Automatique* choisit d'abord un texte public,
 puis une biographie ou une description, jamais un champ que son nom réserve au MJ. Ses
-sections secrètes n'atteignent que ses propriétaires et vous, jusqu'à ce que vous en
+sections secrètes ne sont affichées qu'à ses propriétaires et vous, jusqu'à ce que vous en
 révéliez une. Révéler un acteur le partage en accès Limité au plus, et une nouvelle épingle
 d'acteur — ou une épingle dirigée vers un acteur depuis le Studio — commence avec *Accorder
 l'accès au document* désactivé : l'avis se lit sur place sans lui. Un acteur s'épingle
@@ -496,10 +497,10 @@ au-dessus**. Foundry applique `Tile#hidden` côté client également : un joueur
 une console peut détecter une épingle masquée exactement comme n'importe quelle tuile
 masquée aujourd'hui.
 
-La seule chose réellement *retirée* plutôt que masquée, ce sont les sections `secret` non
-révélées d'une page. Chaque client fabrique sa propre copie et elles sont retirées pour
-quiconque n'est pas propriétaire : elles n'atteignent jamais le navigateur du joueur ; une
-section que vous révélez lui parvient, comme dans le journal lui-même.
+Chaque client retire les sections `secret` non révélées d'une page de l'accessoire affiché
+et du lecteur pour quiconque n'est pas propriétaire. Ce filtrage se fait dans le navigateur :
+il n'empêche pas l'accès au texte source que Foundry a déjà transmis à ce client. Une section
+que vous révélez est affichée comme dans le journal lui-même.
 
 Si vous avez besoin d'un vrai secret, gardez le document hors du monde jusqu'au moment
 voulu.
@@ -600,6 +601,7 @@ joueur pour toute épingle visible, comme son libellé l'indique.
 `game.modules.get("documents-pinner").api.releaseAllAccess()` depuis une macro ou la console
 — il dit combien de documents il a rendus — ou supprimez les épingles (tableau de bord, tout
 sélectionner, supprimer, sur chaque scène), ce qui fait la même chose épingle par épingle.
+Si le nettoyage signale une erreur, corrigez-la et recommencez avant de désactiver le module.
 Masquez ou supprimez ensuite les épingles elles-mêmes : désactivé, elles restent de simples
 tuiles, et une épingle montrée à quelques joueurs seulement devient visible de tous, Foundry
 ne connaissant que masqué ou non.

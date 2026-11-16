@@ -93,6 +93,139 @@ describe("planGrant", () => {
 });
 
 describe("grant -> release round trip", () => {
+  it("keeps an absent user inheriting a higher default across multiple holders", () => {
+    const before = { default: OWNER };
+    const first = planGrant(before, null, { anchorUuid: A, keys: ["ali"], level: OBSERVER });
+    const second = planGrant(before, first.ledger, { anchorUuid: B, keys: ["ali"], level: 1 });
+    expect(first.ownership).toBeNull();
+    expect(second.ownership).toBeNull();
+    expect(second.ledger!.baseline.ali).toBeNull();
+    const oneLeft = planRelease(before, second.ledger, A);
+    expect(oneLeft.ownership).toBeNull();
+    const noneLeft = planRelease(before, oneLeft.ledger, B);
+    expect(apply(before, noneLeft.ownership)).toEqual(before);
+    expect(noneLeft.ledger).toBeNull();
+  });
+
+  it("keeps parent inheritance, including after the parent's level changes", () => {
+    const before = { default: -1, ali: -1 };
+    const first = planGrant(
+      before,
+      null,
+      { anchorUuid: A, keys: ["ali"], level: OBSERVER },
+      { default: OWNER }
+    );
+    expect(first.ownership).toBeNull();
+    const lowered = planGrant(
+      before,
+      first.ledger,
+      { anchorUuid: A, keys: ["ali"], level: OBSERVER },
+      { default: 0 }
+    );
+    expect(lowered.ownership).toEqual({ ali: OBSERVER });
+    const state = apply(before, lowered.ownership);
+    const released = planRelease(state, lowered.ledger, A, undefined, { default: 0 });
+    expect(apply(state, released.ownership)).toEqual(before);
+  });
+
+  it("shares an inherited page with everyone while preserving one parent's owner", () => {
+    const before = { default: -1 };
+    const parent = { default: 0, ali: OWNER };
+    const first = planRetarget(
+      before,
+      null,
+      { anchorUuid: A, keys: ["default"], level: OBSERVER },
+      parent
+    );
+    const state = apply(before, first.ownership);
+    expect(state).toEqual({ default: OBSERVER, ali: -1 });
+    expect(first.ledger!.baseline).toEqual({ default: -1, ali: null });
+    const released = planRelease(state, first.ledger, A, undefined, parent);
+    expect(apply(state, released.ownership)).toEqual(before);
+  });
+
+  it("does not let a second pin's release drop an inherited owner", () => {
+    const before = { default: -1 };
+    const parent = { default: 0, ali: OWNER };
+    const first = planRetarget(
+      before,
+      null,
+      { anchorUuid: A, keys: ["default"], level: OBSERVER },
+      parent
+    );
+    let state = apply(before, first.ownership);
+    const second = planRetarget(
+      state,
+      first.ledger,
+      { anchorUuid: B, keys: ["default"], level: 1 },
+      parent
+    );
+    state = apply(state, second.ownership);
+    const released = planRelease(state, second.ledger, A, undefined, parent);
+    state = apply(state, released.ownership);
+    expect(state).toEqual({ default: 1, ali: -1 });
+    expect(
+      apply(state, planRelease(state, released.ledger, B, undefined, parent).ownership)
+    ).toEqual(before);
+  });
+
+  it("preserves a high inherited default without sharing OWNER with a restricted player", () => {
+    const before = { default: -1 };
+    const parent = { default: OWNER, ali: 0 };
+    const granted = planRetarget(
+      before,
+      null,
+      { anchorUuid: A, keys: ["default"], level: OBSERVER },
+      parent
+    );
+    expect(apply(before, granted.ownership)).toEqual({ default: -1, ali: OBSERVER });
+  });
+
+  it("honours an explicit lower permission instead of borrowing the parent's OWNER", () => {
+    const before = { default: -1, ali: 1 };
+    const parent = { default: OWNER };
+    const granted = planGrant(
+      before,
+      null,
+      { anchorUuid: A, keys: ["ali"], level: OBSERVER },
+      parent
+    );
+    const state = apply(before, granted.ownership);
+    expect(state).toEqual({ default: -1, ali: OBSERVER });
+    expect(
+      apply(state, planRelease(state, granted.ledger, A, undefined, parent).ownership)
+    ).toEqual(before);
+  });
+
+  it("reinstates a selected user's grant when an everyone grant no longer supplies it", () => {
+    const before = { default: 0 };
+    const first = planGrant(before, null, { anchorUuid: A, keys: ["default"], level: OBSERVER });
+    let state = apply(before, first.ownership);
+    const second = planGrant(state, first.ledger, {
+      anchorUuid: B,
+      keys: ["ali"],
+      level: OBSERVER,
+    });
+    state = apply(state, second.ownership);
+    expect(state).toEqual({ default: OBSERVER });
+    const released = planRelease(state, second.ledger, A);
+    expect(apply(state, released.ownership)).toEqual({ default: 0, ali: OBSERVER });
+  });
+
+  it("keeps a manual entry added while a grant preserved absence", () => {
+    const before = { default: OWNER };
+    const first = planGrant(before, null, { anchorUuid: A, keys: ["ali"], level: OBSERVER });
+    const edited = { ...before, ali: 0 };
+    const again = planGrant(edited, first.ledger, {
+      anchorUuid: A,
+      keys: ["ali"],
+      level: OBSERVER,
+    });
+    const state = apply(edited, again.ownership);
+    expect(state.ali).toBe(OBSERVER);
+    expect(apply(state, planRelease(state, again.ledger, A).ownership)).toEqual(edited);
+  });
+
   it("restores the exact prior state, deleting a key that did not exist before", () => {
     const before: OwnershipRecord = { default: 0, ben: 1 };
 
